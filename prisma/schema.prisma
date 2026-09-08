@@ -1,0 +1,517 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── AUTH ───────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── USER ───────────────────────────────────────────────────────────────────
+
+model User {
+  cardTemplateLikes CardTemplateLike[]
+  id                  String    @id @default(cuid())
+  name                String?
+  email               String?   @unique
+  emailVerified       DateTime?
+  image               String?
+
+  username            String?   @unique
+  profileImage        String?
+  usernameLastChanged DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  portfolioCards  PortfolioCard[]
+  ripSessions     RipSession[]
+  unverifiedHits  UnverifiedHit[]
+  // ✅ NEW: needed for Chain of Custody — tracks cards transferred to this user
+  receivedTransfers CardTransfer[] @relation("TransferReceiver")
+  // ✅ NEW: needed for Chain of Custody — tracks cards transferred from this user
+  sentTransfers     CardTransfer[] @relation("TransferSender")
+}
+
+// ─── TAXONOMY ───────────────────────────────────────────────────────────────
+
+enum Category {
+  SPORTS
+  TCG
+  ENTERTAINMENT
+}
+
+enum SportSubCategory {
+  SOCCER
+  BASKETBALL
+  BASEBALL
+  FOOTBALL
+  TENNIS
+  RACING
+  HOCKEY
+  GOLF
+  UFC_MMA
+  OTHER
+}
+
+enum TcgSubCategory {
+  POKEMON
+  ONE_PIECE
+  MAGIC_THE_GATHERING
+  YU_GI_OH
+  LORCANA
+  RIFTBOUND
+  OTHER
+}
+
+enum EntertainmentSubCategory {
+  DISNEY
+  MARVEL
+  STAR_WARS
+  DC
+  HARRY_POTTER
+  FORTNITE
+  OTHER
+}
+
+// ✅ NEW ENUM: tracks whether a card was pulled from a pack or bought
+enum AcquisitionMethod {
+  PULLED
+  BOUGHT
+}
+
+// ─── CARD SET ───────────────────────────────────────────────────────────────
+
+model CardSet {
+  id          String    @id @default(cuid())
+  name        String
+  year        Int
+  brand       String
+  category    Category
+  subCategory String
+
+  totalCardsInSet      Int @default(0)
+  totalHitsInSet       Int @default(0)
+  // ✅ NEW: required for "Chase Cards" bubble on Sports/Entertainment sets
+  totalChaseCardsInSet Int @default(0)
+
+  imageUrl    String?
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cards          CardTemplate[]
+  checklistCards   ChecklistCard[]
+  portfolioCards PortfolioCard[]
+  ripSessions    RipSession[]
+}
+
+// ─── CARD TEMPLATE ───────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CardCategory — What type of card this is
+//
+// Sports & Entertainment:
+//   BASE, PARALLEL, INSERT, AUTO, RELIC, AUTO_RELIC, PATCH_AUTO,
+//   FACSIMILE_AUTO, DUAL_AUTO, TRIPLE_AUTO, QUAD_AUTO, BOOKLET,
+//   ON_CARD_AUTO, IMAGE_VARIATION, SKETCH_ART, SHORT_PRINT,
+//   SUPER_SHORT_PRINT, CASE_HIT, PROMO
+//
+// TCG:
+//   REGULAR, HOLO, REVERSE_HOLO, SHADOWLESS, COLD_FOIL, HOLO_FOIL,
+//   FULL_ART, ALT_ART, OTHER_FOIL, TCG_PROMO
+// ─────────────────────────────────────────────────────────────────────────────
+enum CardCategory {
+  // ── Sports & Entertainment ──────────────────────────────────────────────
+  BASE
+  PARALLEL
+  INSERT
+  AUTO
+  RELIC
+  AUTO_RELIC
+  PATCH_AUTO
+  FACSIMILE_AUTO
+  DUAL_AUTO
+  TRIPLE_AUTO
+  QUAD_AUTO
+  BOOKLET
+  ON_CARD_AUTO
+  IMAGE_VARIATION
+  SKETCH_ART
+  SHORT_PRINT
+  SUPER_SHORT_PRINT
+  CASE_HIT
+  PROMO
+
+  // ── TCG ─────────────────────────────────────────────────────────────────
+  REGULAR
+  HOLO
+  REVERSE_HOLO
+  SHADOWLESS
+  COLD_FOIL
+  HOLO_FOIL
+  FULL_ART
+  ALT_ART
+  OTHER_FOIL
+  TCG_PROMO
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CardTier — The rarity / print run tier of the card
+//
+// Universal tiers (Sports, Entertainment & TCG):
+//   UNLIMITED, LIMITED, NUMBERED, ONE_OF_ONE, SP, SSP, CASE_HIT
+//
+// TCG rarity tiers:
+//   COMMON, UNCOMMON, RARE, RR, SR, AR, SAR, UR, MUR, ACE, SHR, SSR,
+//   SUPER_RARE, LEGENDARY, EPIC, ENCHANTED, ICONIC, ALT_ART,
+//   OVER, OVER_SIGN, MYTHIC,
+//   C_ALT, UC_ALT, R_ALT, SR_ALT, SR_MANGA,
+//   SEC, SEC_ALT, LEADER, L_ALT,
+//   SPECIAL_RARE, MANGA, GOLD_MANGA, TR, DON, GOLD_DON,
+//   ULTIMATE_RARE, GHOST_RARE, PROMO
+// ─────────────────────────────────────────────────────────────────────────────
+enum CardTier {
+  // ── Universal ───────────────────────────────────────────────────────────
+  UNLIMITED
+  LIMITED
+  NUMBERED
+  ONE_OF_ONE
+  SP           // Short Print
+  SSP          // Super Short Print
+  CASE_HIT
+
+  // ── TCG Rarity Tiers ────────────────────────────────────────────────────
+  COMMON
+  UNCOMMON
+  RARE
+  RR           // Double Rare
+  SR           // Ultra Rare
+  AR           // Illustration Rare
+  SAR          // Special Illustration Rare
+  UR           // Hyper Rare
+  MUR          // Mega Hyper Rare
+  ACE          // ACE Spec Rare
+  SHR          // Shiny Rare
+  SSR          // Shiny Ultra Rare
+  SUPER_RARE
+  LEGENDARY
+  EPIC
+  ENCHANTED
+  ICONIC
+  ALT_ART
+  OVER         // Overnumbered
+  OVER_SIGN    // Overnumbered Signature
+  MYTHIC
+  C_ALT        // Common Alt Art
+  UC_ALT       // Uncommon Alt Art
+  R_ALT        // Rare Alt Art
+  SR_ALT       // Super Rare Alt Art
+  SR_MANGA     // Super Rare Manga
+  SEC          // Secret Rare
+  SEC_ALT      // Secret Rare Alt Art
+  LEADER
+  L_ALT        // Leader Alt Art
+  SPECIAL_RARE
+  MANGA
+  GOLD_MANGA   // Golden Manga Rare
+  TR           // Treasure Rare
+  DON
+  GOLD_DON     // Golden DON
+  ULTIMATE_RARE
+  GHOST_RARE
+  PROMO
+}
+
+model CardTemplate {
+  likes CardTemplateLike[]
+  id           String   @id @default(cuid())
+  cardSetId    String
+  cardNumber   String
+  playerName   String
+  parallelType String?
+  cardCategory  CardCategory
+  cardTier      CardTier
+  printRun     Int?
+  imageUrl     String?
+  // ✅ NEW: required for the "Team" filter in the checklist
+  team         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cardSet        CardSet         @relation(fields: [cardSetId], references: [id])
+  portfolioCards PortfolioCard[]
+  unverifiedHits UnverifiedHit[]
+  // ✅ NEW: relation to chain of custody transfers
+  transfers      CardTransfer[]
+
+  @@unique([cardSetId, cardNumber, parallelType])
+}
+
+// ─── PRODUCT TYPES ──────────────────────────────────────────────────────────
+
+enum ProductType {
+  HOBBY_BOX
+  BLASTER_BOX
+  HANGER_BOX
+  BOOSTER_PACK
+  CASE
+  ETB
+  BOOSTER_BUNDLE
+  UPC
+  SPC
+  BOOSTER_BOX
+  OTHER
+}
+
+enum PurchaseChannel {
+  OFFICIAL_WEBSITE
+  EBAY
+  LOCAL_STORE
+  BREAKERS
+  OTHER
+}
+
+enum LocalStore {
+  WALMART
+  TARGET
+  COSTCO
+  BESTBUY
+  OTHER
+}
+
+enum BreakerPlatform {
+  WHATNOT
+  FANATICS
+  EBAY_LIVE
+  OTHER
+}
+
+// ─── PORTFOLIO CARD ──────────────────────────────────────────────────────────
+
+model PortfolioCard {
+  id             String   @id @default(cuid())
+  userId         String
+  cardTemplateId String
+  cardSetId      String
+  ripSessionId   String?
+
+  isHit     Boolean @default(false)
+  isInHand  Boolean @default(true)
+
+  // ✅ NEW: Pulled or Bought — required by "Your Card" modal path
+  acquisitionMethod AcquisitionMethod?
+
+  // Hit context
+  hitCountry  String?
+  hitCity     String?
+  hitMonth    Int?
+  hitYear     Int?
+
+  // ✅ NEW: Seller field — required by "Your Card" modal path
+  seller String? @db.VarChar(255)
+
+  // Product info
+  productType           ProductType?
+  productTypeOther      String?      @db.VarChar(150)
+  totalCardsInProduct   Int?
+  productQuantityOpened Int?
+
+  // Purchase channel
+  purchaseChannel      PurchaseChannel?
+  localStore           LocalStore?
+  localStoreOther      String?          @db.VarChar(150)
+  breakerPlatform      BreakerPlatform?
+  breakerOther         String?          @db.VarChar(150)
+  purchaseChannelOther String?          @db.VarChar(150)
+
+  // Serial number
+  serialNumber Int?
+
+  // ✅ UPDATED: split into front and back images (was single cardImageUrl)
+  cardFrontImageUrl String?
+  cardBackImageUrl  String?
+
+  notes       String?  @db.Text
+
+  isDuplicate Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardTemplate CardTemplate @relation(fields: [cardTemplateId], references: [id])
+  cardSet      CardSet      @relation(fields: [cardSetId], references: [id])
+  ripSession   RipSession?  @relation(fields: [ripSessionId], references: [id])
+  // ✅ NEW: chain of custody transfers originating from this portfolio entry
+  transfers    CardTransfer[]
+}
+
+// ─── RIP SESSION ────────────────────────────────────────────────────────────
+
+model RipSession {
+  id        String   @id @default(cuid())
+  userId    String
+  cardSetId String?
+
+  productType      ProductType
+  productTypeOther String?     @db.VarChar(150)
+  quantity         Int         @default(1)
+
+  totalCardsFromSession Int @default(0)
+  totalHitsFromSession  Int @default(0)
+
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardSet        CardSet?        @relation(fields: [cardSetId], references: [id])
+  portfolioCards PortfolioCard[]
+}
+
+// ─── UNVERIFIED HIT ──────────────────────────────────────────────────────────
+
+model UnverifiedHit {
+  id             String @id @default(cuid())
+  cardTemplateId String
+  submittedById  String
+
+  // ✅ UPDATED: notes and sightings are now REQUIRED (not optional)
+  notes    String  @db.Text
+  sightings String @db.Text
+
+  // ✅ NEW: optional provenance fields for "Not Your Card" path
+  reportedUsername  String?
+  sourceUrl         String?
+  acquisitionMethod AcquisitionMethod?
+  seller            String?   @db.VarChar(255)
+  hitCountry        String?
+  hitCity           String?
+  hitMonth          Int?
+  hitYear           Int?
+  productType       ProductType?
+
+  // ✅ NEW: optional front/back images for "Not Your Card" path
+  cardFrontImageUrl String?
+  cardBackImageUrl  String?
+
+  createdAt DateTime @default(now())
+
+  cardTemplate CardTemplate @relation(fields: [cardTemplateId], references: [id])
+  submittedBy  User         @relation(fields: [submittedById], references: [id])
+}
+
+// ─── CARD TRANSFER (Chain of Custody) ────────────────────────────────────────
+// ✅ NEW MODEL: tracks the full movement history of a physical card
+
+model CardTransfer {
+  id               String @id @default(cuid())
+  cardTemplateId   String
+  portfolioCardId  String
+
+  // Who sent and who received
+  fromUserId String?  // null = external/unknown origin
+  toUserId   String?  // null = sold outside the platform
+
+  // Transfer context
+  transferDate    DateTime?
+  transferMethod  String?   @db.VarChar(100) // e.g. "Sold", "Traded", "Gifted"
+  salePrice       Float?
+  notes           String?   @db.Text
+
+  createdAt DateTime @default(now())
+
+  cardTemplate  CardTemplate  @relation(fields: [cardTemplateId], references: [id])
+  portfolioCard PortfolioCard @relation(fields: [portfolioCardId], references: [id])
+  fromUser      User?         @relation("TransferSender",   fields: [fromUserId], references: [id])
+  toUser        User?         @relation("TransferReceiver", fields: [toUserId],   references: [id])
+}
+
+// ─── CARD TEMPLATE LIKE ──────────────────────────────────────────────────────
+
+model CardTemplateLike {
+  id             String   @id @default(cuid())
+  userId         String
+  cardTemplateId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardTemplate CardTemplate @relation(fields: [cardTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardTemplateId])
+}
+
+// ─── CHECKLIST CARD ──────────────────────────────────────────────────────────
+// Represents a single card entry in an official set checklist.
+// This is the "master list" of every card that exists in a given CardSet.
+
+model ChecklistCard {
+  id          String  @id @default(cuid())
+  cardSetId   String
+
+  cardNumber    String
+  playerName    String    // For TCG: card name e.g. "Charizard ex"
+  team          String?   // Sports/Entertainment only — null for TCG
+
+  // ── The 3-Layer Identity ─────────────────────────────────────────────────
+  cardCategory  CardCategory  // What family: AUTO, PARALLEL, HYPER_RARE, etc.
+  cardTier      CardTier      // How scarce: NUMBERED, ONE_OF_ONE, SSP, etc.
+
+  // ── Card-Specific Attributes ─────────────────────────────────────────────
+  parallel String?   // e.g. "Black", "Gold", "Red", "Orange" — null for base
+  printRun      Int?      // e.g. 10, 5, 25, 99 — null if unlimited/unspecified
+  variationName String?   // e.g. "Planetary Pursuit Sun", "Trophy Supercollector"
+
+  // ── Quick-Access Flags ───────────────────────────────────────────────────
+  isHit         Boolean @default(false)  // AUTO, RELIC, AUTO_RELIC, etc.
+  isChase       Boolean @default(false)  // SSP, CASE_HIT, ONE_OF_ONE, etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cardSet CardSet @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+
+  @@unique([cardSetId, cardNumber, parallel])
+}

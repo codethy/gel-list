@@ -1,0 +1,62 @@
+"use client";
+
+import { useSession, signOut, signIn } from "next-auth/react";
+import Link from "next/link";
+
+export default function Navbar() {
+  const { data: session, status } = useSession();
+  const loading = status === "loading";
+
+  return (
+    <nav className="w-full h-16 bg-[#111111] border-b border-[#222222] flex items-center px-6 gap-4 sticky top-0 z-50">
+
+      {/* Logo */}
+      <Link href="/" className="flex items-center gap-2 shrink-0">
+        <span className="text-xl font-black tracking-tight text-white">
+          Gel List
+        </span>
+      </Link>
+
+      {/* Search Bar */}
+      <div className="flex-1 max-w-xl mx-auto">
+        <input
+          type="text"
+          placeholder="Search sets, players, series..."
+          className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
+        />
+      </div>
+
+      {/* Right side */}
+      <div className="ml-auto flex items-center gap-3 shrink-0">
+        {loading ? (
+          <div className="w-24 h-6 rounded bg-zinc-700 animate-pulse" />
+        ) : session?.user ? (
+          <div className="flex items-center gap-3">
+            {/* Username only — no profile picture */}
+            <Link
+              href="/profile"
+              className="text-sm text-zinc-300 hover:text-white transition-colors font-medium"
+            >
+              {session.user.name}
+            </Link>
+
+            <button
+              onClick={() => signOut()}
+              className="text-xs text-zinc-500 hover:text-white transition-colors px-3 py-1.5 border border-zinc-700 rounded-lg hover:border-zinc-500"
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => signIn()}
+            className="text-sm bg-white text-black font-semibold px-4 py-2 rounded-lg hover:bg-zinc-200 transition-colors"
+          >
+            Sign in
+          </button>
+        )}
+      </div>
+
+    </nav>
+  );
+}

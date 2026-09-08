@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Excel import files — keep the folder but ignore the files
+prisma/imports/*.xlsx
+prisma/imports/*.xls
+prisma/imports/*.csv
