@@ -11,6 +11,11 @@ export interface CardHistoryEvent {
   eventType:
     | "PULLED"
     | "BOUGHT"
+    | "BREAKER"
+    | "EBAY"
+    | "FRIEND"
+    | "SOCIAL_MEDIA"
+    | "OTHER"
     | "TRANSFERRED_OUT"
     | "TRANSFERRED_IN"
     | "CURRENTLY_OWNS";
@@ -22,21 +27,40 @@ export interface CardHistoryEvent {
 
 export type CardStatus = "Available" | "Owned" | "Surfaced";
 
+// A single physical gel logged against a checklist card, with its own full
+// chain-of-custody history. A checklist card can have more than one of
+// these (e.g. two different users each logging their own numbered copy).
+export interface LoggedGel {
+  id: string;
+  serialNumber: number | null;
+  loggedAt: string;
+  cardFrontImageUrl: string | null;
+  cardBackImageUrl: string | null;
+  isVerified: boolean;
+  username: string;
+  displayName: string | null;
+  cardHistory: CardHistoryEvent[];
+}
+
 export interface ChecklistRow {
   id: string;
   cardNumber: string | null;
   imageUrl?: string | null;
+  cardBackImageUrl?: string | null;
   playerName: string;
   team?: string | null;
   cardType: string;
   parallelType?: string | null;
   printRun?: number | null;
+  variationName?: string | null;
   status: CardStatus;
   ownedGelId?: string | null;
   likeCount: number;
   isLikedByUser: boolean;
+  gelsPulled: number;
   notes?: string | null;
   cardHistory: CardHistoryEvent[];
+  loggedGels: LoggedGel[];
 }
 
 export interface ChecklistMeta {
@@ -50,7 +74,10 @@ interface ChecklistTableProps {
   rows: ChecklistRow[];
   meta: ChecklistMeta;
   setId: string;
-  onAddGelClick: (templateId: string, playerName: string) => void;
+  // "SPORTS" | "ENTERTAINMENT" | "TCG" — drives the Player/Character column
+  // header label.
+  category: string;
+  onAddGelClick: (checklistCardId: string, playerName: string) => void;
   onFilterChange: (filters: {
     search?: string;
     filterType?: string | null;
@@ -59,49 +86,51 @@ interface ChecklistTableProps {
   }) => void;
   isLoading?: boolean;
   availableTeams: string[];
+  availableCategories: string[];
 }
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────────
-// Values MUST match CardCategory enum values exactly (case-sensitive).
-// Sports & Entertainment categories are shown first, TCG at the bottom.
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-const CARD_TYPES = [
-  // ── Universal ──────────────────────────────────────────────────────
-  { label: "All Types",          value: ""                },
+// Turns a CardCategory enum value (e.g. "AUTO_RELIC") into a readable label
+// (e.g. "Auto Relic") — used to build the Type filter from whatever
+// categories actually exist in this set, instead of a hardcoded full list.
+function formatCategoryLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
-  // ── Sports & Entertainment ─────────────────────────────────────────
-  { label: "Base",               value: "BASE"            },
-  { label: "Parallel",           value: "PARALLEL"        },
-  { label: "Insert",             value: "INSERT"          },
-  { label: "Auto",               value: "AUTO"            },
-  { label: "Relic",              value: "RELIC"           },
-  { label: "Auto Relic",         value: "AUTO_RELIC"      },
-  { label: "Patch Auto",         value: "PATCH_AUTO"      },
-  { label: "Facsimile Auto",     value: "FACSIMILE_AUTO"  },
-  { label: "Dual Auto",          value: "DUAL_AUTO"       },
-  { label: "Triple Auto",        value: "TRIPLE_AUTO"     },
-  { label: "Quad Auto",          value: "QUAD_AUTO"       },
-  { label: "Booklet",            value: "BOOKLET"         },
-  { label: "On Card Auto",       value: "ON_CARD_AUTO"    },
-  { label: "Image Variation",    value: "IMAGE_VARIATION" },
-  { label: "Sketch Art",         value: "SKETCH_ART"      },
-  { label: "Short Print",        value: "SHORT_PRINT"     },
-  { label: "Super Short Print",  value: "SUPER_SHORT_PRINT"},
-  { label: "Case Hit",           value: "CASE_HIT"        },
-  { label: "Promo",              value: "PROMO"           },
+// Narrowed to just the fields the subtitle needs, rather than the full
+// ChecklistRow, so this is reusable anywhere a card's identity is shown
+// (e.g. AddGelModal's card picker) without requiring a full checklist row.
+export interface PlayerSubtitleSource {
+  parallelType?: string | null;
+  printRun?: number | null;
+  variationName?: string | null;
+}
 
-  // ── TCG ────────────────────────────────────────────────────────────
-  { label: "Regular",            value: "REGULAR"         },
-  { label: "Holo",               value: "HOLO"            },
-  { label: "Reverse Holo",       value: "REVERSE_HOLO"    },
-  { label: "Shadowless",         value: "SHADOWLESS"      },
-  { label: "Cold Foil",          value: "COLD_FOIL"       },
-  { label: "Holo Foil",          value: "HOLO_FOIL"       },
-  { label: "Full Art",           value: "FULL_ART"        },
-  { label: "Alt Art",            value: "ALT_ART"         },
-  { label: "Other Foil",         value: "OTHER_FOIL"      },
-  { label: "TCG Promo",          value: "TCG_PROMO"       },
-];
+// The small line under the player's name:
+//   - variation name + parallel + print run, e.g. "Graphite Relics White /10"
+//   - just the parallel (+ print run) when there's no variation name, e.g. "Purple /99"
+//   - variation name (+ print run) when there's no parallel, e.g. "Clay Court Masters /25",
+//     or just "Mirrored" for a Case Hit with no print run
+//   - nothing when the card has neither
+export function playerSubtitle(row: PlayerSubtitleSource): string | null {
+  const printRunSuffix = row.printRun ? ` /${row.printRun}` : "";
+
+  if (row.variationName && row.parallelType) {
+    return `${row.variationName} ${row.parallelType}${printRunSuffix}`;
+  }
+  if (row.parallelType) {
+    return `${row.parallelType}${printRunSuffix}`;
+  }
+  if (row.variationName) {
+    return `${row.variationName}${printRunSuffix}`;
+  }
+  return null;
+}
 
 const EVENT_META: Record<
   CardHistoryEvent["eventType"],
@@ -109,41 +138,48 @@ const EVENT_META: Record<
 > = {
   PULLED:          { label: "Pulled",               color: "text-blue-300",    dotColor: "bg-blue-500"    },
   BOUGHT:          { label: "Purchased",             color: "text-violet-300",  dotColor: "bg-violet-500"  },
+  // "Someone else's gel" sources — reported sightings, not owned copies.
+  BREAKER:         { label: "Seen from a breaker",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
+  EBAY:            { label: "Seen on eBay",            color: "text-orange-300",  dotColor: "bg-orange-500"  },
+  FRIEND:          { label: "Seen via a friend",       color: "text-orange-300",  dotColor: "bg-orange-500"  },
+  SOCIAL_MEDIA:    { label: "Seen on social media",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
+  OTHER:           { label: "Seen elsewhere",          color: "text-orange-300",  dotColor: "bg-orange-500"  },
   TRANSFERRED_OUT: { label: "Transferred out",       color: "text-amber-300",   dotColor: "bg-amber-500"   },
   TRANSFERRED_IN:  { label: "Received via transfer", color: "text-teal-300",    dotColor: "bg-teal-500"    },
   CURRENTLY_OWNS:  { label: "Currently owns",        color: "text-emerald-300", dotColor: "bg-emerald-500" },
 };
 
-// ─── STATUS BADGE ─────────────────────────────────────────────────────────────
+// ─── GELS CELL ────────────────────────────────────────────────────────────────
+// Shows how many gels have been logged against a card, alongside its print
+// run when it has one (e.g. "2/99"). For unlimited/unspecified-print-run
+// cards, just the count — left blank entirely when nothing's been logged.
+//
+// Color signals how many are left, for numbered cards:
+//   green  — none logged yet (all still available)
+//   yellow — some logged, some still available
+//   red    — logged count has reached (or passed) the print run — sold out
+// A card with no print run has no "sold out" ceiling to compare against, so
+// any logged count there is shown as yellow (some logged, no upper bound).
 
-function StatusBadge({ status }: { status: CardStatus }) {
-  if (status === "Owned") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/20 text-emerald-300 border-emerald-500/30 whitespace-nowrap">
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
-        Owned
-      </span>
-    );
-  }
-  if (status === "Surfaced") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-amber-500/20 text-amber-300 border-amber-500/30 whitespace-nowrap">
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" />
-        </svg>
-        Surfaced
-      </span>
-    );
-  }
+function GelsCell({ gelsPulled, printRun }: { gelsPulled: number; printRun?: number | null }) {
+  const text = printRun
+    ? `${gelsPulled}/${printRun}`
+    : gelsPulled > 0
+    ? String(gelsPulled)
+    : "";
+
+  if (!text) return null;
+
+  const colorClasses =
+    printRun && gelsPulled >= printRun
+      ? "bg-red-500/20 text-red-400 border-red-500/30"
+      : printRun && gelsPulled === 0
+      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+      : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30";
+
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-red-500/20 text-red-400 border-red-500/30 whitespace-nowrap">
-      <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="5" />
-      </svg>
-      Available
+    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-xs font-semibold tabular-nums border ${colorClasses}`}>
+      {text}
     </span>
   );
 }
@@ -164,6 +200,22 @@ function CardTypeBadge({ type }: { type: string }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${classes}`}>
       {type.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+// ─── VERIFICATION BADGE ───────────────────────────────────────────────────────
+// Every logged gel is reviewed by the developer at /admin/gels before it's
+// trusted — this reflects that review state wherever a logged gel is shown.
+
+export function VerificationBadge({ isVerified }: { isVerified: boolean }) {
+  return isVerified ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/15 text-emerald-300 border-emerald-500/30 whitespace-nowrap">
+      Verified
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-amber-500/15 text-amber-300 border-amber-500/30 whitespace-nowrap">
+      Not Verified
     </span>
   );
 }
@@ -252,6 +304,275 @@ function CardHistoryDrawer({ history }: { history: CardHistoryEvent[] }) {
   );
 }
 
+// ─── LOGGED GELS MODAL ────────────────────────────────────────────────────────
+// Opened by clicking a checklist row that has at least one logged gel. Lists
+// every physical copy logged against that card (not just one), sorted
+// serialized-first (ascending by serial number), then unserialized ones by
+// when they were logged. Clicking one reveals its own full Card History via
+// the same CardHistoryDrawer used elsewhere.
+//
+// What each list item actually displays here is intentionally minimal for
+// now — a later step will flesh that out further.
+
+function LoggedGelsModal({
+  row,
+  onClose,
+  onOpenImage,
+}: {
+  row: ChecklistRow | null;
+  onClose: () => void;
+  onOpenImage: (target: CardImageTarget) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <AnimatePresence>
+      {row && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            aria-hidden="true"
+          />
+
+          {/* Panel */}
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.97 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 w-full sm:max-w-lg max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Logged gels for ${row.playerName}`}
+          >
+            <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-violet-500 to-purple-600 rounded-t-2xl" />
+
+            <div className="p-5 space-y-4">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-white truncate">{row.playerName}</h2>
+                  {playerSubtitle(row) && (
+                    <p className="text-xs text-slate-400 mt-0.5 truncate">{playerSubtitle(row)}</p>
+                  )}
+                  <p className="text-xs text-slate-500 mt-1">
+                    {row.loggedGels.length} logged gel{row.loggedGels.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
+                  aria-label="Close"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Logged gels list */}
+              <div className="space-y-2">
+                {row.loggedGels.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic">No gels logged for this card yet.</p>
+                ) : (
+                  row.loggedGels.map((gel) => {
+                    const isExpanded = expandedId === gel.id;
+                    const label =
+                      gel.serialNumber != null
+                        ? `#${gel.serialNumber}${row.printRun ? ` / ${row.printRun}` : ""}`
+                        : `Logged ${new Date(gel.loggedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+
+                    const hasGelImage = Boolean(gel.cardFrontImageUrl || gel.cardBackImageUrl);
+
+                    return (
+                      <div key={gel.id} className="rounded-xl border border-slate-700/50 overflow-hidden">
+                        {/*
+                          A plain div (not <button>) — the image below is its
+                          own <button>, and buttons can't nest inside buttons.
+                        */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setExpandedId(isExpanded ? null : gel.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setExpandedId(isExpanded ? null : gel.id);
+                            }
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 bg-slate-800/60 hover:bg-slate-800 transition-colors duration-150 text-left cursor-pointer"
+                        >
+                          {/* Image */}
+                          <div className="shrink-0">
+                            {hasGelImage ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenImage({
+                                    title: row.playerName,
+                                    subtitle: label,
+                                    imageUrl: gel.cardFrontImageUrl,
+                                    cardBackImageUrl: gel.cardBackImageUrl,
+                                  });
+                                }}
+                                aria-label={`View card image for ${label}`}
+                                title="View image"
+                                className="cursor-zoom-in"
+                              >
+                                <img
+                                  src={gel.cardFrontImageUrl ?? gel.cardBackImageUrl!}
+                                  alt=""
+                                  className="w-8 h-11 object-cover rounded-sm border border-slate-700/50 shadow-sm hover:opacity-80 hover:border-slate-500 transition-all duration-150"
+                                />
+                              </button>
+                            ) : (
+                              <div className="w-8 h-11 rounded-sm border border-slate-700/40 bg-slate-900/60 flex items-center justify-center">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600">
+                                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                  <circle cx="8.5" cy="8.5" r="1.5" />
+                                  <polyline points="21 15 16 10 5 21" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Label + logged-by username */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-200 truncate">{label}</p>
+                            <p className="text-xs text-slate-500 truncate">{gel.displayName ?? gel.username}</p>
+                          </div>
+
+                          <VerificationBadge isVerified={gel.isVerified} />
+
+                          <motion.span
+                            animate={{ rotate: isExpanded ? 180 : 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="text-slate-500 shrink-0"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M6 9l6 6 6-6" />
+                            </svg>
+                          </motion.span>
+                        </div>
+                        <AnimatePresence>
+                          {isExpanded && <CardHistoryDrawer key="history" history={gel.cardHistory} />}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ─── CARD IMAGE MODAL ─────────────────────────────────────────────────────────
+// Opened by clicking the checklist row's thumbnail (the first-logged gel's
+// front image). Shows that same gel's front and back images at full size.
+
+// Generic enough to show any single physical card's images — the checklist
+// row's own thumbnail (the first-logged gel) or one specific logged gel from
+// the popup below. `subtitle` carries whatever distinguishes the two (the
+// row's parallel/print-run for the former, that gel's serial/logged-date
+// label for the latter).
+export interface CardImageTarget {
+  title: string;
+  subtitle?: string | null;
+  imageUrl: string | null;
+  cardBackImageUrl: string | null;
+}
+
+export function CardImageModal({
+  target,
+  onClose,
+}: {
+  target: CardImageTarget | null;
+  onClose: () => void;
+}) {
+  const hasImage = Boolean(target?.imageUrl || target?.cardBackImageUrl);
+
+  return (
+    <AnimatePresence>
+      {target && hasImage && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
+            aria-hidden="true"
+          />
+
+          {/* Panel */}
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.97 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-[60] w-full sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Card image for ${target.title}`}
+          >
+            <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-violet-500 to-purple-600 rounded-t-2xl" />
+
+            <div className="p-5 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-white truncate">{target.title}</h2>
+                  {target.subtitle && (
+                    <p className="text-xs text-slate-400 mt-0.5 truncate">{target.subtitle}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
+                  aria-label="Close"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {target.imageUrl && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Front</p>
+                    <img src={target.imageUrl} alt={`${target.title} card front`} className="w-full rounded-lg border border-slate-700/50" />
+                  </div>
+                )}
+                {target.cardBackImageUrl && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Back</p>
+                    <img src={target.cardBackImageUrl} alt={`${target.title} card back`} className="w-full rounded-lg border border-slate-700/50" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ─── SEARCH BAR ───────────────────────────────────────────────────────────────
 
 function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -322,18 +643,32 @@ function Pagination({ meta, onPageChange }: { meta: ChecklistMeta; onPageChange:
 
 // ─── ROW ──────────────────────────────────────────────────────────────────────
 
+// The md+ grid template for both the header and each row — must stay
+// IDENTICAL between the two (see the module-level alignment note above) and
+// must switch in lockstep with whether the Team column is shown at all.
+// When Team is hidden (no checklist card in this set has a team — e.g.
+// Entertainment/TCG sets), its 1.3fr share folds into Player instead of
+// leaving a gap.
+function gridColsClass(showTeam: boolean): string {
+  return showTeam
+    ? "grid-cols-[30px_36px_90px_4fr_1fr_96px_40px] md:grid-cols-[30px_36px_90px_1.2fr_1.3fr_0.75fr_96px_40px_100px]"
+    : "grid-cols-[30px_36px_90px_4fr_1fr_96px_40px] md:grid-cols-[30px_36px_90px_1.8fr_0.75fr_96px_40px_100px]";
+}
+
 function ChecklistRowItem({
-  row, setId, index, onAddGelClick,
+  row, setId, index, showTeam, onAddGelClick, onOpenHistory, onOpenImage,
 }: {
   row: ChecklistRow;
   setId: string;
   index: number;
-  onAddGelClick: (templateId: string, playerName: string) => void;
+  showTeam: boolean;
+  onAddGelClick: (checklistCardId: string, playerName: string) => void;
+  onOpenHistory: (row: ChecklistRow) => void;
+  onOpenImage: (row: ChecklistRow) => void;
 }) {
   const [liked, setLiked]             = useState(row.isLikedByUser);
   const [likeCount, setLikeCount]     = useState(row.likeCount);
   const [likeLoading, setLikeLoading] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   async function handleLikeToggle(e: React.MouseEvent) {
     e.stopPropagation();
@@ -356,10 +691,6 @@ function ChecklistRowItem({
     }
   }
 
-  function handleRowClick() {
-    setHistoryOpen((prev) => !prev);
-  }
-
   function handleAddGelClick(e: React.MouseEvent) {
     e.stopPropagation();
     onAddGelClick(row.id, row.playerName);
@@ -367,6 +698,8 @@ function ChecklistRowItem({
 
   const isOwned    = row.status === "Owned";
   const isSurfaced = row.status === "Surfaced";
+  const subtitle   = playerSubtitle(row);
+  const hasGels    = row.gelsPulled > 0;
 
   return (
     <motion.div
@@ -376,20 +709,22 @@ function ChecklistRowItem({
       className={isOwned ? "bg-emerald-950/20" : isSurfaced ? "bg-amber-950/10" : ""}
     >
       {/*
-        Grid layout for ChecklistRowItem:
-        Mobile (up to sm): Likes (30px) | Image (36px) | No. (50px) | Player (4fr) | Type (1fr) | Status (auto) | Add a Gel (40px)
-        Medium+ (md+): Likes (30px) | Image (36px) | No. (50px) | Player (2fr) | Team (1.5fr) | Type (1fr) | Status (auto) | Add a Gel (40px) | Notes (1.5fr)
+        Grid layout for ChecklistRowItem — see gridColsClass() above.
+        No. is 90px (not narrower) so longer card numbers like "AHP-IBL-01" display in full.
+        Mobile (up to sm): Likes (30px) | Image (36px) | No. (90px) | Player (4fr) | Type (1fr) | Status (96px) | Add a Gel (40px)
+        Medium+ (md+), showTeam: Likes (30px) | Image (36px) | No. (90px) | Player (1.2fr) | Team (1.3fr) | Type (0.75fr) | Status (96px) | Add a Gel (40px) | Notes (100px)
+        Medium+ (md+), !showTeam: Team's track is dropped; Player (1.8fr) | Type (0.75fr) instead
       */}
       <div
-        onClick={handleRowClick}
+        onClick={hasGels ? () => onOpenHistory(row) : undefined}
         className={`
           grid items-center gap-x-2 px-4 py-3
-          grid-cols-[30px_36px_50px_4fr_1fr_auto_40px]
-          md:grid-cols-[30px_36px_50px_2fr_1.5fr_1fr_auto_40px_1.5fr]
-          transition-colors duration-150 cursor-pointer select-none
+          ${gridColsClass(showTeam)}
+          transition-colors duration-150 select-none
+          ${hasGels ? "cursor-pointer" : "cursor-default"}
           ${isOwned    ? "hover:bg-emerald-950/40" : ""}
           ${isSurfaced ? "hover:bg-amber-950/20"   : ""}
-          ${!isOwned && !isSurfaced ? "hover:bg-slate-800/60" : ""}
+          ${!isOwned && !isSurfaced && hasGels ? "hover:bg-slate-800/60" : ""}
         `}
       >
         {/* Likes */}
@@ -400,7 +735,22 @@ function ChecklistRowItem({
         {/* Image */}
         <div className="flex items-center">
           {row.imageUrl ? (
-            <img src={row.imageUrl} alt={row.playerName} className="w-7 h-9 object-cover rounded-sm border border-slate-700/50 shadow-sm" />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenImage(row);
+              }}
+              aria-label={`View card image for ${row.playerName}`}
+              title="View image"
+              className="cursor-zoom-in"
+            >
+              <img
+                src={row.imageUrl}
+                alt={row.playerName}
+                className="w-7 h-9 object-cover rounded-sm border border-slate-700/50 shadow-sm hover:opacity-80 hover:border-slate-500 transition-all duration-150"
+              />
+            </button>
           ) : (
             <div className="w-7 h-9 rounded-sm border border-slate-700/40 bg-slate-800/60 flex items-center justify-center">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600">
@@ -419,39 +769,37 @@ function ChecklistRowItem({
           </p>
         </div>
 
-        {/* Player + Parallel */}
-        <div className="min-w-0">
+        {/* Player + Parallel — left padding shifts this column right, independent of the Player/Type track widths */}
+        <div className="min-w-0 pl-[54px]">
           <p className="text-sm font-semibold text-slate-200 truncate leading-tight">
             {row.playerName}
           </p>
-          {row.parallelType && (
-            <p className="text-[10px] text-slate-500 italic truncate">{row.parallelType}</p>
+          {subtitle && (
+            <p className="text-[10px] text-slate-500 italic truncate">{subtitle}</p>
           )}
         </div>
 
-        {/* Team — hidden below md */}
-        <div className="min-w-0 hidden md:block">
-          <p className="text-xs text-slate-400 truncate">{row.team ?? "—"}</p>
-        </div>
+        {/* Team — hidden below md, and entirely omitted when no card in this set has one */}
+        {showTeam && (
+          <div className="min-w-0 hidden md:block">
+            <p className="text-xs text-slate-400 truncate">{row.team ?? "—"}</p>
+          </div>
+        )}
 
         {/* Type */}
-        <div className="flex items-center">
+        <div className="flex items-center justify-start">
           <CardTypeBadge type={row.cardType} />
         </div>
 
-        {/* Status + chevron */}
-        <div className="flex items-center gap-1.5">
-          <StatusBadge status={row.status} />
-          {row.cardHistory.length > 0 && (
-            <motion.div
-              animate={{ rotate: historyOpen ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="text-slate-600 shrink-0"
-            >
+        {/* Gels pulled / print run + "view details" hint */}
+        <div className="flex items-center justify-start gap-1.5">
+          <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+          {hasGels && (
+            <span className="text-slate-600 shrink-0" aria-hidden="true">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M6 9l6 6 6-6" />
               </svg>
-            </motion.div>
+            </span>
           )}
         </div>
 
@@ -470,18 +818,13 @@ function ChecklistRowItem({
           </button>
         </div>
 
-        {/* Notes — hidden below md */}
-        <div className="min-w-0 hidden md:block">
+        {/* Notes — hidden below md; extra left padding widens the gap from Add a Gel */}
+        <div className="min-w-0 hidden md:block pl-3">
           <p className="text-[10px] text-slate-500 italic truncate" title={row.notes ?? ""}>
             {row.notes ? row.notes : "—"}
           </p>
         </div>
       </div>
-
-      {/* History Drawer */}
-      <AnimatePresence>
-        {historyOpen && <CardHistoryDrawer key="history" history={row.cardHistory} />}
-      </AnimatePresence>
     </motion.div>
   );
 }
@@ -489,12 +832,23 @@ function ChecklistRowItem({
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function ChecklistTable({
-  rows, meta, setId, onAddGelClick, onFilterChange, isLoading = false, availableTeams,
+  rows, meta, setId, category, onAddGelClick, onFilterChange, isLoading = false, availableTeams, availableCategories,
 }: ChecklistTableProps) {
-  const [search, setSearch]         = useState("");
-  const [filterType, setFilterType] = useState("");
-  const [filterTeam, setFilterTeam] = useState("");
-  const [, startTransition]         = useTransition();
+  const [search, setSearch]             = useState("");
+  const [filterType, setFilterType]     = useState("");
+  const [filterTeam, setFilterTeam]     = useState("");
+  const [historyRow, setHistoryRow]     = useState<ChecklistRow | null>(null);
+  const [imageTarget, setImageTarget]   = useState<CardImageTarget | null>(null);
+  const [, startTransition]             = useTransition();
+
+  // No checklist card in this set has a team at all (Entertainment/TCG sets
+  // typically don't import one) — hide the whole column rather than show a
+  // column of nothing but "—".
+  const showTeam = availableTeams.length > 0;
+
+  // Sports sets feature athletes ("Player"); Entertainment and TCG sets
+  // feature characters ("Character") — e.g. Harry Potter, Pokémon.
+  const playerColumnLabel = category === "SPORTS" ? "Player" : "Character";
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -528,6 +882,11 @@ export default function ChecklistTable({
     ...availableTeams.map((t) => ({ label: t, value: t })),
   ];
 
+  const typeOptions = [
+    { label: "All Types", value: "" },
+    ...availableCategories.map((c) => ({ label: formatCategoryLabel(c), value: c })),
+  ];
+
   return (
     <section className="space-y-4">
       {/* Section Header */}
@@ -541,7 +900,7 @@ export default function ChecklistTable({
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <SearchBar value={search} onChange={handleSearchChange} />
-        <FilterSelect value={filterType} onChange={handleTypeChange} options={CARD_TYPES} placeholder="Filter by type" />
+        <FilterSelect value={filterType} onChange={handleTypeChange} options={typeOptions} placeholder="Filter by type" />
         {availableTeams.length > 0 && (
           <FilterSelect value={filterTeam} onChange={handleTeamChange} options={teamOptions} placeholder="Filter by team" />
         )}
@@ -563,32 +922,47 @@ export default function ChecklistTable({
             Table header — must use IDENTICAL grid template as ChecklistRowItem
             min-w-[1000px] ensures it doesn't collapse on wider screens, forcing scroll on narrow ones.
           */}
-          <div className="
+          <div className={`
             grid items-center gap-x-2 px-4 py-2.5
             bg-slate-800/80 border-b border-slate-700/50
             min-w-[1000px]
-            grid-cols-[30px_36px_50px_4fr_1fr_auto_40px]
-            md:grid-cols-[30px_36px_50px_2fr_1.5fr_1fr_auto_40px_1.5fr]
-          ">
+            ${gridColsClass(showTeam)}
+          `}>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Likes</div> {/* Changed from "Like" to "Likes" */}
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider"></div> {/* Blank heading for Image */}
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">No.</div>
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Player</div>
-            {/* Team header — hidden below md, matching the row */}
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block">Team</div>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pl-[54px]">{playerColumnLabel}</div>
+            {/* Team header — hidden below md, matching the row; omitted entirely when no card has a team */}
+            {showTeam && (
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block">Team</div>
+            )}
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Type</div>
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Status</div>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Gels</div>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center">Add a Gel</div> {/* Changed from "Gel" to "Add a Gel" */}
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block">Notes</div> {/* Reintroduced Notes heading */}
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block pl-3">Notes</div> {/* Reintroduced Notes heading */}
           </div>
 
           {/* Rows */}
-          <div className="divide-y divide-slate-700/30 min-w-[1000px]"> {/* min-w also on rows container */}
+          <div className="divide-y divide-slate-700/30 min-w-[1000px]"> {/* min-w also on rows container — must match the header's min-w */}
             {rows.length === 0 ? (
               <div className="py-12 text-center text-slate-500 text-sm">No cards match your filters.</div>
             ) : (
               rows.map((row, i) => (
-                <ChecklistRowItem key={row.id} row={row} setId={setId} index={i} onAddGelClick={onAddGelClick} />
+                <ChecklistRowItem
+                  key={row.id}
+                  row={row}
+                  setId={setId}
+                  index={i}
+                  showTeam={showTeam}
+                  onAddGelClick={onAddGelClick}
+                  onOpenHistory={setHistoryRow}
+                  onOpenImage={(row) => setImageTarget({
+                    title: row.playerName,
+                    subtitle: playerSubtitle(row),
+                    imageUrl: row.imageUrl ?? null,
+                    cardBackImageUrl: row.cardBackImageUrl ?? null,
+                  })}
+                />
               ))
             )}
           </div>
@@ -596,6 +970,17 @@ export default function ChecklistTable({
       </div>
 
       <Pagination meta={meta} onPageChange={handlePageChange} />
+
+      <LoggedGelsModal
+        row={historyRow}
+        onClose={() => setHistoryRow(null)}
+        onOpenImage={setImageTarget}
+      />
+
+      <CardImageModal
+        target={imageTarget}
+        onClose={() => setImageTarget(null)}
+      />
     </section>
   );
 }

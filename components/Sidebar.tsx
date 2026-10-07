@@ -1,58 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { TAXONOMY } from "@/lib/taxonomy";
 
-// ─── Taxonomy ───────────────────────────────────────────────────────────────
-// IMPORTANT: child `id` values are the exact enum strings stored in your DB.
-// Parent `enumValue` maps to the Category enum.
-
-export const TAXONOMY = [
-  {
-    id:         "Sports",
-    label:      "Sports",
-    enumValue:  "SPORTS",
-    children: [
-      { id: "SOCCER",      label: "Soccer"      },
-      { id: "BASKETBALL",  label: "Basketball"  },
-      { id: "BASEBALL",    label: "Baseball"    },
-      { id: "FOOTBALL",    label: "Football"    },
-      { id: "TENNIS",      label: "Tennis"      },
-      { id: "HOCKEY",      label: "Hockey"      },
-      { id: "RACING",      label: "Racing"      },
-      { id: "GOLF",        label: "Golf"        },
-      { id: "UFC_MMA",     label: "UFC / MMA"   },
-      { id: "OTHER",       label: "Others"      },
-    ],
-  },
-  {
-    id:         "Entertainment",
-    label:      "Entertainment",
-    enumValue:  "ENTERTAINMENT",
-    children: [
-      { id: "DISNEY",       label: "Disney"       },
-      { id: "MARVEL",       label: "Marvel"       },
-      { id: "STAR_WARS",    label: "Star Wars"    },
-      { id: "DC",           label: "DC"           },
-      { id: "HARRY_POTTER", label: "Harry Potter" },
-      { id: "FORTNITE",     label: "Fortnite"     },
-      { id: "OTHER",        label: "Others"       },
-    ],
-  },
-  {
-    id:         "TradingCardGames",
-    label:      "Trading Card Games",
-    enumValue:  "TCG",
-    children: [
-      { id: "POKEMON",             label: "Pokemon"              },
-      { id: "ONE_PIECE",           label: "One Piece"            },
-      { id: "MAGIC_THE_GATHERING", label: "Magic: The Gathering" },
-      { id: "YU_GI_OH",            label: "Yu-Gi-Oh"             },
-      { id: "LORCANA",             label: "Disney Lorcana"       },
-      { id: "RIFTBOUND",           label: "Riftbound"            },
-      { id: "OTHER",               label: "Others"               },
-    ],
-  },
-] as const;
+export { TAXONOMY };
 
 // Year range: 2026 → 2014
 const YEARS = Array.from({ length: 13 }, (_, i) => 2026 - i);

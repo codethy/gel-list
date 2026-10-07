@@ -9,17 +9,29 @@ import { prisma } from "@/lib/prisma";
 // Creates a new PortfolioCard (gel) for the current user.
 //
 // Body fields:
-//   cardTemplateId     — required
-//   acquisitionMethod  — optional enum string ("PULLED" | "BOUGHT")
+//   cardTemplateId     — required. Despite the name, this is the id of a
+//                        ChecklistCard row — ChecklistCard is the only real
+//                        card catalog table now (see prisma/schema.prisma).
+//                        The field is still called "cardTemplateId" on the
+//                        wire so the existing AddGelModal request/response
+//                        shape doesn't need to change in this step.
+//   loggedFor          — "SELF" (default) or "OTHER". "SELF" means the
+//                        logging user actually has this card in hand;
+//                        "OTHER" means they're just reporting a card they
+//                        saw someone else pull/sell online. Drives isInHand.
+//   acquisitionMethod  — optional enum string. For loggedFor "SELF":
+//                        "PULLED" | "BOUGHT". For "OTHER": "BREAKER" |
+//                        "EBAY" | "FRIEND" | "SOCIAL_MEDIA" | "OTHER".
 //   serialNumber       — optional number
 //   hitYear            — optional number
 //   hitMonth           — optional number
 //   hitCity            — optional string
 //   hitCountry         — optional string
-//   cardFrontImageUrl  — optional string
+//   cardFrontImageUrl  — required (every logged gel needs a front image)
 //   cardBackImageUrl   — optional string
 //   seller             — optional string
-//   notes              — optional string
+//   notes              — optional for "SELF", required for "OTHER" (it's
+//                        where the user records where/who they saw pull it)
 
 export async function POST(
   req: NextRequest,
@@ -51,7 +63,8 @@ export async function POST(
   }
 
   const {
-    cardTemplateId,
+    cardTemplateId: checklistCardId,
+    loggedFor,
     acquisitionMethod,
     serialNumber,
     hitYear,
@@ -64,27 +77,55 @@ export async function POST(
     notes,
   } = body;
 
+  // isInHand is derived server-side from loggedFor, rather than trusting a
+  // client-sent boolean directly, so there's one unambiguous place deciding
+  // what counts as "this user's own gel" vs. "a reported sighting."
+  const isInHand = loggedFor !== "OTHER";
+
   // ── 3. Validate required fields ──────────────────────────────────────────────
-  if (!cardTemplateId || typeof cardTemplateId !== "string") {
+  if (!checklistCardId || typeof checklistCardId !== "string") {
     return NextResponse.json(
       { error: "cardTemplateId is required" },
       { status: 400 }
     );
   }
 
-  // ── 4. Confirm the card template belongs to this set ─────────────────────────
+  if (typeof cardFrontImageUrl !== "string" || !cardFrontImageUrl) {
+    return NextResponse.json(
+      { error: "A card front image is required" },
+      { status: 400 }
+    );
+  }
+
+  if (!isInHand && (typeof notes !== "string" || !notes.trim())) {
+    return NextResponse.json(
+      { error: "Please add a note describing where you saw this card pulled" },
+      { status: 400 }
+    );
+  }
+
+  // ── 4. Confirm the checklist card belongs to this set ─────────────────────────
   // Security check — prevents attaching a card from a different set.
-  const template = await prisma.cardTemplate.findFirst({
-    where: { id: cardTemplateId, cardSetId: setId },
+  const checklistCard = await prisma.checklistCard.findFirst({
+    where: { id: checklistCardId, cardSetId: setId },
     select: { id: true },
   });
 
-  if (!template) {
+  if (!checklistCard) {
     return NextResponse.json(
-      { error: "Card template not found in this set" },
+      { error: "Card not found in this set" },
       { status: 404 }
     );
   }
+
+  // Trusted users (5+ gels already verified by the developer) skip the
+  // review queue entirely — see app/api/admin/gels/[gelId]/verify/route.ts
+  // for where that trust is granted.
+  const loggingUser = await prisma.user.findUnique({
+    where:  { id: userId },
+    select: { isVerifiedUser: true },
+  });
+  const isVerified = loggingUser?.isVerifiedUser ?? false;
 
   // ── 5. Create the PortfolioCard ──────────────────────────────────────────────
   const portfolioCard = await prisma.portfolioCard.create({
@@ -99,11 +140,12 @@ export async function POST(
       cardSet: {
         connect: { id: setId },
       },
-      cardTemplate: {
-        connect: { id: cardTemplateId },
+      checklistCard: {
+        connect: { id: checklistCardId },
       },
-      isInHand: true,
-      isHit:    true,
+      isInHand:   isInHand,
+      isHit:      true,
+      isVerified: isVerified,
       acquisitionMethod:
         typeof acquisitionMethod === "string"
           ? (acquisitionMethod as never)
@@ -131,7 +173,9 @@ export async function POST(
     // ── Return only the fields the frontend GelEntry type needs ──────────────
     select: {
       id:                true,
-      cardTemplateId:    true,
+      checklistCardId:   true,
+      isInHand:          true,
+      isVerified:        true,
       acquisitionMethod: true,
       serialNumber:      true,
       hitYear:           true,
@@ -142,22 +186,28 @@ export async function POST(
       cardBackImageUrl:  true,
       seller:            true,
       notes:             true,
-      cardTemplate: {
+      checklistCard: {
         select: {
-          playerName:   true,
-          cardType:     true,
-          parallelType: true,
-          printRun:     true,
-          team:         true,
+          playerName:    true,
+          cardCategory:  true,
+          parallel:      true,
+          printRun:      true,
+          variationName: true,
+          team:          true,
         },
       },
     },
   });
 
   // ── 6. Shape the response to match the GelEntry type ─────────────────────────
+  // Field names here (cardTemplateId, cardTemplate.cardType/parallelType) are
+  // kept as-is even though the data now comes from ChecklistCard, so the
+  // frontend (YourGels.tsx, SetDetailClient.tsx) doesn't need to change yet.
   const gel = {
     id:                portfolioCard.id,
-    cardTemplateId:    portfolioCard.cardTemplateId,
+    cardTemplateId:    portfolioCard.checklistCardId,
+    isInHand:          portfolioCard.isInHand,
+    isVerified:        portfolioCard.isVerified,
     acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
     serialNumber:      portfolioCard.serialNumber      ?? null,
     hitYear:           portfolioCard.hitYear           ?? null,
@@ -169,11 +219,12 @@ export async function POST(
     seller:            portfolioCard.seller            ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {
-      playerName:   portfolioCard.cardTemplate.playerName,
-      cardType:     portfolioCard.cardTemplate.cardType,
-      parallelType: portfolioCard.cardTemplate.parallelType ?? null,
-      printRun:     portfolioCard.cardTemplate.printRun     ?? null,
-      team:         portfolioCard.cardTemplate.team         ?? null,
+      playerName:    portfolioCard.checklistCard.playerName,
+      cardType:      String(portfolioCard.checklistCard.cardCategory),
+      parallelType:  portfolioCard.checklistCard.parallel ?? null,
+      printRun:      portfolioCard.checklistCard.printRun ?? null,
+      variationName: portfolioCard.checklistCard.variationName ?? null,
+      team:          portfolioCard.checklistCard.team     ?? null,
     },
   };
 

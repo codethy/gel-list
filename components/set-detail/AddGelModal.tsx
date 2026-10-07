@@ -3,33 +3,50 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import heic2any from "heic2any";
 import type { GelEntry } from "./YourGels";
+import { playerSubtitle } from "./ChecklistTable";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-export interface CardTemplateOption {
+export interface ChecklistCardOption {
   id: string;
   playerName: string;
   cardType: string;
   parallelType?: string | null;
   printRun?: number | null;
+  variationName?: string | null;
   team?: string | null;
 }
 
 interface AddGelModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (newGel: GelEntry) => void;
+  onSuccess: (gel: GelEntry) => void;
   setId: string;
-  templates: CardTemplateOption[];
-  preselectedTemplateId?: string | null;
+  templates: ChecklistCardOption[];
+  preselectedChecklistCardId?: string | null;
   preselectedPlayerName?: string | null;
+  // When set, the modal edits this existing gel instead of creating a new
+  // one: the form prefills from it, the card selection is locked (you can't
+  // reassign a logged gel to a different card), and submitting PATCHes
+  // instead of POSTing.
+  editingGel?: GelEntry | null;
 }
+
+// ─── LOGGED FOR ───────────────────────────────────────────────────────────────
+// "SELF": the logging user actually has this card — the original "Log a
+// Gel" flow, backed by PortfolioCard.isInHand: true.
+// "OTHER": the user is just reporting a card they saw someone else pull or
+// sell online — PortfolioCard.isInHand: false. Drives the checklist row's
+// "Surfaced" status (amber) instead of "Owned" (green), and keeps the entry
+// out of the reporting user's own "Your Gels" list.
+type LoggedFor = "SELF" | "OTHER";
 
 // ─── FORM STATE ───────────────────────────────────────────────────────────────
 
 interface FormState {
-  cardTemplateId: string;
+  checklistCardId: string;
   acquisitionMethod: string;
   serialNumber: string;
   hitYear: string;
@@ -44,7 +61,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  cardTemplateId:    "",
+  checklistCardId:   "",
   acquisitionMethod: "",
   serialNumber:      "",
   hitYear:           "",
@@ -57,7 +74,7 @@ const EMPTY_FORM: FormState = {
   notes:             "",
 };
 
-const MONTHS = [
+export const MONTHS = [
   "January","February","March","April",
   "May","June","July","August",
   "September","October","November","December",
@@ -65,9 +82,9 @@ const MONTHS = [
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-// Reads a File and resolves with a base64 data URL string.
+// Reads a File/Blob and resolves with a base64 data URL string.
 // This is used for the card image upload — no server upload endpoint needed.
-function readFileAsDataURL(file: File): Promise<string> {
+function readFileAsDataURL(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload  = () => resolve(reader.result as string);
@@ -76,9 +93,31 @@ function readFileAsDataURL(file: File): Promise<string> {
   });
 }
 
+// iPhones save photos as HEIC by default. It's a valid "image/*" file (so it
+// passes the file-type check and iOS lets you pick it), but browsers other
+// than Safari can't decode HEIC in an <img> tag — it just renders broken.
+// file.type is usually "image/heic"/"image/heif", but some browsers leave it
+// blank for HEIC files, so the extension is checked too as a fallback.
+function isHeicFile(file: File): boolean {
+  return (
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    /\.(heic|heif)$/i.test(file.name)
+  );
+}
+
+// Converts a HEIC file to a JPEG Blob so it can actually be displayed.
+// heic2any returns an array only for multi-image HEIC containers (e.g. Live
+// Photos) — a card photo is always a single image, so the first result is
+// the one we want.
+async function convertHeicToJpeg(file: File): Promise<Blob> {
+  const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+  return Array.isArray(result) ? result[0] : result;
+}
+
 // ─── FORM FIELD COMPONENTS ────────────────────────────────────────────────────
 
-function Label({ children }: { children: React.ReactNode }) {
+export function Label({ children }: { children: React.ReactNode }) {
   return (
     <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
       {children}
@@ -86,7 +125,7 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Input({
+export function Input({
   value,
   onChange,
   placeholder,
@@ -105,7 +144,7 @@ function Input({
   );
 }
 
-function Textarea({
+export function Textarea({
   value,
   onChange,
   placeholder,
@@ -122,7 +161,7 @@ function Textarea({
   );
 }
 
-function Select({
+export function Select({
   value,
   onChange,
   children,
@@ -145,7 +184,7 @@ function Select({
 //   • A small preview of the chosen image once picked
 //   • A "Remove" link to clear the selection
 
-function ImageUploadField({
+export function ImageUploadField({
   label,
   value,
   onChange,
@@ -155,27 +194,45 @@ function ImageUploadField({
   onChange: (dataUrl: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading]     = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Only allow image files
-    if (!file.type.startsWith("image/")) {
+    // Only allow image files — HEIC sometimes reports a blank file.type, so
+    // the extension is also accepted here (isHeicFile checks both).
+    if (!file.type.startsWith("image/") && !isHeicFile(file)) {
       alert("Please select an image file (JPG, PNG, WEBP, etc.)");
-      return;
-    }
-
-    // 5 MB size guard — base64 images larger than this will make the JSON body huge
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Please choose an image smaller than 5 MB.");
       return;
     }
 
     setIsLoading(true);
     try {
-      const dataUrl = await readFileAsDataURL(file);
+      let blobToStore: Blob = file;
+
+      if (isHeicFile(file)) {
+        setIsConverting(true);
+        try {
+          blobToStore = await convertHeicToJpeg(file);
+        } catch {
+          alert("Could not convert this HEIC photo. Please try a different image.");
+          return;
+        } finally {
+          setIsConverting(false);
+        }
+      }
+
+      // 5 MB size guard, checked against what's actually about to be
+      // encoded — a converted JPEG can end up a different size than the
+      // original file.
+      if (blobToStore.size > 5 * 1024 * 1024) {
+        alert("Please choose an image smaller than 5 MB.");
+        return;
+      }
+
+      const dataUrl = await readFileAsDataURL(blobToStore);
       onChange(dataUrl);
     } catch {
       alert("Could not read the file. Please try again.");
@@ -254,7 +311,7 @@ function ImageUploadField({
             </svg>
           )}
           <span className="text-sm font-medium">
-            {isLoading ? "Reading file..." : "Upload Image"}
+            {isConverting ? "Converting photo..." : isLoading ? "Reading file..." : "Upload Image"}
           </span>
           <span className="text-xs text-slate-600">JPG, PNG, WEBP — max 5 MB</span>
         </button>
@@ -263,15 +320,50 @@ function ImageUploadField({
   );
 }
 
-// ─── TEMPLATE SEARCH ──────────────────────────────────────────────────────────
+// Strips diacritics so a plain "Joao" matches "João" — mirrors the
+// unaccent() SQL used by the checklist table's own search (see
+// app/api/sets/[id]/checklist/route.ts) so both search boxes behave the
+// same way.
+function foldDiacritics(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
 
-function TemplateSearch({
+// Matches player name, parallel, variation name, and team — plus print run
+// when the query is a bare number or "/99"-style, mirroring the checklist
+// table's own search (app/api/sets/[id]/checklist/route.ts) so both search
+// boxes behave the same way.
+// Splits the query on whitespace into keywords — every keyword must match
+// *somewhere* (different keywords can each match a different field), so
+// "Coco Gauff Tour" finds every parallel of her "Tour Relic Autographs"
+// insert, and "Coco Gauff /50" finds just her /50 copies.
+function matchesKeyword(t: ChecklistCardOption, keyword: string): boolean {
+  const q = foldDiacritics(keyword.toLowerCase());
+
+  if (foldDiacritics(t.playerName.toLowerCase()).includes(q)) return true;
+  if (t.parallelType && foldDiacritics(t.parallelType.toLowerCase()).includes(q)) return true;
+  if (t.variationName && foldDiacritics(t.variationName.toLowerCase()).includes(q)) return true;
+  if (t.team && foldDiacritics(t.team.toLowerCase()).includes(q)) return true;
+
+  const qNumeric = q.replace(/^\//, "");
+  if (t.printRun != null && /^\d+$/.test(qNumeric) && String(t.printRun) === qNumeric) return true;
+
+  return false;
+}
+
+function matchesSearchQuery(t: ChecklistCardOption, rawQuery: string): boolean {
+  const keywords = rawQuery.trim().split(/\s+/).filter(Boolean);
+  return keywords.every((keyword) => matchesKeyword(t, keyword));
+}
+
+// ─── CHECKLIST CARD SEARCH ────────────────────────────────────────────────────
+
+function ChecklistCardSearch({
   templates,
   selectedId,
   onSelect,
   isLocked,
 }: {
-  templates: CardTemplateOption[];
+  templates: ChecklistCardOption[];
   selectedId: string;
   onSelect: (id: string) => void;
   isLocked: boolean;
@@ -283,9 +375,7 @@ function TemplateSearch({
   const selected = templates.find((t) => t.id === selectedId);
 
   const filtered = query.trim()
-    ? templates.filter((t) =>
-        t.playerName.toLowerCase().includes(query.toLowerCase())
-      ).slice(0, 20)
+    ? templates.filter((t) => matchesSearchQuery(t, query)).slice(0, 20)
     : templates.slice(0, 20);
 
   useEffect(() => {
@@ -302,8 +392,8 @@ function TemplateSearch({
     return (
       <div className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200">
         <span className="font-semibold">{selected.playerName}</span>
-        {selected.parallelType && (
-          <span className="text-slate-400 ml-2">— {selected.parallelType}</span>
+        {playerSubtitle(selected) && (
+          <span className="text-slate-400 ml-2">— {playerSubtitle(selected)}</span>
         )}
       </div>
     );
@@ -313,7 +403,11 @@ function TemplateSearch({
     <div ref={containerRef} className="relative">
       <input
         type="text"
-        value={selected ? selected.playerName : query}
+        value={
+          selected
+            ? [selected.playerName, playerSubtitle(selected)].filter(Boolean).join(" ")
+            : query
+        }
         onChange={(e) => {
           setQuery(e.target.value);
           onSelect("");
@@ -344,11 +438,9 @@ function TemplateSearch({
                 className="w-full px-3 py-2.5 text-left hover:bg-slate-800/80 transition-colors duration-100 border-b border-slate-800/60 last:border-0"
               >
                 <p className="text-sm text-slate-200 font-medium">{t.playerName}</p>
-                <p className="text-xs text-slate-500">
-                  {t.cardType.replace(/_/g, " ")}
-                  {t.parallelType ? ` — ${t.parallelType}` : ""}
-                  {t.printRun ? ` (/${t.printRun})` : ""}
-                </p>
+                {playerSubtitle(t) && (
+                  <p className="text-xs text-slate-500">{playerSubtitle(t)}</p>
+                )}
               </button>
             ))}
           </motion.div>
@@ -366,20 +458,53 @@ export default function AddGelModal({
   onSuccess,
   setId,
   templates,
-  preselectedTemplateId,
+  preselectedChecklistCardId,
+  editingGel,
 }: AddGelModalProps) {
   const [form, setForm]           = useState<FormState>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const modalRef                  = useRef<HTMLDivElement>(null);
 
-  // ── Pre-fill when triggered from checklist row ────────────────────────────
+  // "choice": the "are you logging your own gel or someone else's?" screen —
+  // shown first for every fresh (non-edit) open. "form": the actual log
+  // form, in either its SELF or OTHER variant depending on loggedFor.
+  const [step, setStep]           = useState<"choice" | "form">("choice");
+  const [loggedFor, setLoggedFor] = useState<LoggedFor>("SELF");
+
+  const isEditing = Boolean(editingGel);
+  const isOther   = loggedFor === "OTHER";
+
+  // ── Pre-fill when opened — from an existing gel (edit) or a checklist
+  // row (create, with the card pre-picked) ──────────────────────────────────
   useEffect(() => {
-    if (isOpen) {
-      setForm({ ...EMPTY_FORM, cardTemplateId: preselectedTemplateId ?? "" });
-      setError(null);
+    if (!isOpen) return;
+
+    if (editingGel) {
+      // Editing always resumes directly into the form the gel was
+      // originally logged under — there's no reassigning SELF ↔ OTHER.
+      setStep("form");
+      setLoggedFor(editingGel.isInHand === false ? "OTHER" : "SELF");
+      setForm({
+        checklistCardId:   editingGel.cardTemplateId,
+        acquisitionMethod: editingGel.acquisitionMethod ?? "",
+        serialNumber:      editingGel.serialNumber      != null ? String(editingGel.serialNumber) : "",
+        hitYear:           editingGel.hitYear            != null ? String(editingGel.hitYear)      : "",
+        hitMonth:          editingGel.hitMonth            != null ? String(editingGel.hitMonth)     : "",
+        hitCity:           editingGel.hitCity            ?? "",
+        hitCountry:        editingGel.hitCountry         ?? "",
+        cardFrontImageUrl: editingGel.cardFrontImageUrl  ?? "",
+        cardBackImageUrl:  editingGel.cardBackImageUrl   ?? "",
+        seller:            editingGel.seller             ?? "",
+        notes:             editingGel.notes               ?? "",
+      });
+    } else {
+      setStep("choice");
+      setLoggedFor("SELF");
+      setForm({ ...EMPTY_FORM, checklistCardId: preselectedChecklistCardId ?? "" });
     }
-  }, [isOpen, preselectedTemplateId]);
+    setError(null);
+  }, [isOpen, editingGel, preselectedChecklistCardId]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -413,19 +538,39 @@ export default function AddGelModal({
     e.preventDefault();
     setError(null);
 
-    if (!form.cardTemplateId) {
+    if (!form.checklistCardId) {
       setError("Please select a card from the list.");
+      return;
+    }
+
+    if (!form.cardFrontImageUrl) {
+      setError("Please upload a card front image.");
+      return;
+    }
+
+    if (isOther && !form.notes.trim()) {
+      setError("Please add a note describing where you saw this card pulled.");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`/api/sets/${setId}/gels`, {
-        method: "POST",
+      const url = isEditing
+        ? `/api/sets/${setId}/gels/${editingGel!.id}`
+        : `/api/sets/${setId}/gels`;
+
+      const res = await fetch(url, {
+        method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cardTemplateId:    form.cardTemplateId,
+          // Wire field name stays "cardTemplateId" to match what
+          // app/api/sets/[id]/gels/route.ts expects — that field name is a
+          // leftover from the removed CardTemplate model, kept there
+          // intentionally rather than renamed everywhere. Ignored by the
+          // PATCH route — editing a gel never reassigns its card.
+          cardTemplateId:    form.checklistCardId,
+          loggedFor:         loggedFor,
           acquisitionMethod: form.acquisitionMethod || null,
           serialNumber:      form.serialNumber ? parseInt(form.serialNumber) : null,
           hitYear:           form.hitYear   ? parseInt(form.hitYear)   : null,
@@ -481,18 +626,102 @@ export default function AddGelModal({
             className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 w-full sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
             role="dialog"
             aria-modal="true"
-            aria-label="Log a new gel"
+            aria-label={isEditing ? "Edit gel" : "Log a new gel"}
           >
             {/* Top accent bar */}
             <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-violet-500 to-purple-600 rounded-t-2xl" />
 
+            {step === "choice" ? (
+              <div className="p-6 space-y-5">
+                {/* ── Header ─────────────────────────────────────────────── */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Log a Gel</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Is this a card you have, or one you saw someone else pull?
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
+                    aria-label="Close modal"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* ── Choice buttons ───────────────────────────────────────── */}
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoggedFor("SELF");
+                      setForm((prev) => ({ ...prev, acquisitionMethod: "", seller: "" }));
+                      setStep("form");
+                    }}
+                    className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-blue-500/60 hover:bg-slate-800 text-left transition-all duration-150"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">My Own Gel</p>
+                      <p className="text-xs text-slate-400 mt-0.5">You pulled or bought this card yourself.</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoggedFor("OTHER");
+                      setForm((prev) => ({ ...prev, acquisitionMethod: "", seller: "" }));
+                      setStep("form");
+                    }}
+                    className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-orange-500/60 hover:bg-slate-800 text-left transition-all duration-150"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="M21 21l-4.3-4.3" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Someone Else&apos;s Gel</p>
+                      <p className="text-xs text-slate-400 mt-0.5">You saw this card pulled or sold online.</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* ── Header ───────────────────────────────────────────────── */}
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold text-white">Log a Gel</h2>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => setStep("choice")}
+                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 font-medium mb-1 transition-colors"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 18l-6-6 6-6" />
+                      </svg>
+                      Back
+                    </button>
+                  )}
+                  <h2 className="text-lg font-bold text-white">{isEditing ? "Edit Gel" : "Log a Gel"}</h2>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Record a card you pulled or purchased from this set.
+                    {isEditing
+                      ? "Update the details for this logged gel."
+                      : isOther
+                        ? "Record a card you saw someone else pull or sell."
+                        : "Record a card you pulled or purchased from this set."}
                   </p>
                 </div>
                 <button
@@ -510,27 +739,41 @@ export default function AddGelModal({
               {/* ── Card Selection ───────────────────────────────────────── */}
               <div>
                 <Label>Card *</Label>
-                <TemplateSearch
+                <ChecklistCardSearch
                   templates={templates}
-                  selectedId={form.cardTemplateId}
-                  onSelect={(id) => setForm((prev) => ({ ...prev, cardTemplateId: id }))}
-                  isLocked={Boolean(preselectedTemplateId)}
+                  selectedId={form.checklistCardId}
+                  onSelect={(id) => setForm((prev) => ({ ...prev, checklistCardId: id }))}
+                  isLocked={Boolean(preselectedChecklistCardId) || isEditing}
                 />
               </div>
 
               {/* ── Acquisition Method ───────────────────────────────────── */}
               <div>
-                <Label>How did you get it?</Label>
+                <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
                 <Select value={form.acquisitionMethod} onChange={setField("acquisitionMethod")}>
-                  <option value="" className="bg-slate-900">Select method...</option>
-                  <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
-                  <option value="BOUGHT" className="bg-slate-900">Bought</option>
+                  {isOther ? (
+                    <>
+                      <option value="" className="bg-slate-900">Select source...</option>
+                      <option value="BREAKER" className="bg-slate-900">Breaker</option>
+                      <option value="EBAY" className="bg-slate-900">eBay</option>
+                      <option value="FRIEND" className="bg-slate-900">Friend</option>
+                      <option value="SOCIAL_MEDIA" className="bg-slate-900">Social Media</option>
+                      <option value="OTHER" className="bg-slate-900">Others</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="" className="bg-slate-900">Select method...</option>
+                      <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
+                      <option value="BOUGHT" className="bg-slate-900">Bought</option>
+                    </>
+                  )}
                 </Select>
               </div>
 
-              {/* ── Seller (conditional on BOUGHT) ───────────────────────── */}
+              {/* ── Seller (conditional on BOUGHT, "my own gel" flow only —
+                  the "someone else's gel" flow captures this in Notes instead) ── */}
               <AnimatePresence>
-                {form.acquisitionMethod === "BOUGHT" && (
+                {!isOther && form.acquisitionMethod === "BOUGHT" && (
                   <motion.div
                     key="seller"
                     initial={{ opacity: 0, height: 0 }}
@@ -607,7 +850,7 @@ export default function AddGelModal({
 
               {/* ── Card Images — Upload buttons (replaces URL text inputs) ── */}
               <ImageUploadField
-                label="Card Front Image"
+                label="Card Front Image *"
                 value={form.cardFrontImageUrl}
                 onChange={setImageField("cardFrontImageUrl")}
               />
@@ -619,11 +862,11 @@ export default function AddGelModal({
 
               {/* ── Notes ────────────────────────────────────────────────── */}
               <div>
-                <Label>Notes</Label>
+                <Label>{isOther ? "Notes (e.g. breaker name, eBay seller name etc.) *" : "Notes"}</Label>
                 <Textarea
                   value={form.notes}
                   onChange={setField("notes")}
-                  placeholder="Any extra details about this card..."
+                  placeholder={isOther ? "e.g. Hobby Shop Breaks, @username on Instagram..." : "Any extra details about this card..."}
                 />
               </div>
 
@@ -653,13 +896,19 @@ export default function AddGelModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !form.cardTemplateId}
+                  disabled={
+                    isSubmitting ||
+                    !form.checklistCardId ||
+                    !form.cardFrontImageUrl ||
+                    (isOther && !form.notes.trim())
+                  }
                   className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"
                 >
-                  {isSubmitting ? "Saving..." : "Log Gel"}
+                  {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Log Gel"}
                 </button>
               </div>
             </form>
+            )}
           </motion.div>
         </>
       )}

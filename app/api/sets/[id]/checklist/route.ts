@@ -5,6 +5,7 @@ import { getServerSession }          from "next-auth";
 import { authOptions }               from "@/app/api/auth/[...nextauth]/route";
 import { prisma }                    from "@/lib/prisma";
 import { Prisma, CardCategory }      from "@prisma/client";
+import { getChecklistRowExtras }     from "@/lib/data/checklistRowExtras";
 // ✅ FIX: import CardCategory (not CardType — that enum doesn't exist)
 
 export async function GET(
@@ -22,8 +23,6 @@ export async function GET(
     });
     userId = user?.id ?? null;
   }
-
-  void userId; // will be used once ChecklistCard gains user relations
 
   // ── 2. Await params (required in Next.js 15) ──────────────────────────────
   const { id: setId } = await params;
@@ -45,11 +44,52 @@ export async function GET(
       ? (filterType as CardCategory)
       : undefined;
 
+  // Search splits on whitespace into keywords — every keyword must match
+  // *somewhere* (player name, parallel, variation name, team, or print run),
+  // but different keywords can each match a different field. This lets
+  // "Coco Gauff Tour" find every parallel of Coco Gauff's "Tour Relic
+  // Autographs" insert, and "Coco Gauff /50" find just her /50 copies.
+  // Print run matches when a keyword is a bare number or "/99"-style, since
+  // that's how print runs are shown throughout the UI (e.g. "Purple /99").
+  //
+  // Matching goes through raw SQL (rather than Prisma's `contains` filter)
+  // so it can wrap both sides of the comparison in Postgres's `unaccent()`
+  // — that's what lets a plain "Joao" match a checklist row named "João".
+  function keywordSqlCondition(keyword: string): Prisma.Sql {
+    const numeric   = keyword.replace(/^\//, "");
+    const printRun  = /^\d+$/.test(numeric) ? parseInt(numeric, 10) : null;
+    const pattern   = `%${keyword}%`;
+    return Prisma.sql`(
+      unaccent("playerName") ILIKE unaccent(${pattern})
+      OR unaccent(COALESCE("parallel", '')) ILIKE unaccent(${pattern})
+      OR unaccent(COALESCE("variationName", '')) ILIKE unaccent(${pattern})
+      OR unaccent(COALESCE("team", '')) ILIKE unaccent(${pattern})
+      ${printRun !== null ? Prisma.sql`OR "printRun" = ${printRun}` : Prisma.empty}
+    )`;
+  }
+
+  const searchKeywords = search.split(/\s+/).filter(Boolean);
+
+  // `null` means "no search typed" (don't filter by id at all); an array
+  // (possibly empty, meaning no matches) filters the rest of the query down
+  // to just those rows.
+  const searchMatchedIds = searchKeywords.length > 0
+    ? (
+        await prisma.$queryRaw<{ id: string }[]>(
+          Prisma.sql`
+            SELECT "id" FROM "ChecklistCard"
+            WHERE "cardSetId" = ${setId}
+              AND ${Prisma.join(searchKeywords.map(keywordSqlCondition), " AND ")}
+          `
+        )
+      ).map((r) => r.id)
+    : null;
+
   // ── 4. Build where clause ─────────────────────────────────────────────────
   const where: Prisma.ChecklistCardWhereInput = {
     cardSetId: setId,
-    ...(search ? {
-      playerName: { contains: search, mode: Prisma.QueryMode.insensitive },
+    ...(searchMatchedIds !== null ? {
+      id: { in: searchMatchedIds },
     } : {}),
     // ✅ FIX: filter on cardCategory (the actual field) not cardType
     ...(validatedCategory ? {
@@ -67,7 +107,7 @@ export async function GET(
       where,
       skip,
       take:    pageSize,
-      orderBy: [{ playerName: "asc" }, { cardCategory: "asc" }],
+      orderBy: { sortOrder: "asc" }, // matches the source checklist file's row order
       select: {
         id:            true,
         cardNumber:    true,
@@ -79,30 +119,40 @@ export async function GET(
         printRun:      true,
         variationName: true,
         isHit:         true,
-        isChase:       true,
       },
     }),
   ]);
 
-  // ── 6. Shape rows ─────────────────────────────────────────────────────────
-  const rows = cards.map((c) => ({
-    id:            c.id,
-    cardNumber:    c.cardNumber  ?? null,
-    imageUrl:      null,
-    playerName:    c.playerName,
-    team:          c.team        ?? null,
-    cardType:      String(c.cardCategory),  // cardCategory → cardType for UI
-    parallelType:  c.parallel    ?? null,   // parallel → parallelType for UI
-    printRun:      c.printRun    ?? null,
-    status:        "Available" as const,
-    ownedGelId:    null,
-    likeCount:     0,
-    isLikedByUser: false,
-    notes:         null,
-    cardHistory:   [],
-  }));
+  // ── 6. Fetch real likes + ownership history for this page of rows ────────
+  const cardIds       = cards.map((c) => c.id);
+  const extrasByCard  = await getChecklistRowExtras(cardIds, userId);
 
-  // ── 7. Return response ────────────────────────────────────────────────────
+  // ── 7. Shape rows ─────────────────────────────────────────────────────────
+  const rows = cards.map((c) => {
+    const extras = extrasByCard.get(c.id)!;
+    return {
+      id:                c.id,
+      cardNumber:        c.cardNumber  ?? null,
+      imageUrl:          extras.imageUrl,
+      cardBackImageUrl:  extras.cardBackImageUrl,
+      playerName:        c.playerName,
+      team:          c.team        ?? null,
+      cardType:      String(c.cardCategory),  // cardCategory → cardType for UI
+      parallelType:  c.parallel    ?? null,   // parallel → parallelType for UI
+      printRun:      c.printRun    ?? null,
+      variationName: c.variationName ?? null,
+      status:        extras.status,
+      ownedGelId:    extras.ownedGelId,
+      likeCount:     extras.likeCount,
+      isLikedByUser: extras.isLikedByUser,
+      gelsPulled:    extras.gelsPulled,
+      notes:         extras.notes,
+      cardHistory:   extras.cardHistory,
+      loggedGels:    extras.loggedGels,
+    };
+  });
+
+  // ── 8. Return response ────────────────────────────────────────────────────
   return NextResponse.json({
     rows,
     meta: {

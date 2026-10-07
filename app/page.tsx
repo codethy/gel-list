@@ -11,10 +11,9 @@ interface SetItem {
   category:        string;
   subCategory:     string;
   year:            number;
-  imageUrl:        string | null;
-  totalCardsInSet: number;
-  totalHitsInSet:  number;
-  _count:          { cards: number };
+  imageUrl:           string | null;
+  totalPrintRunInSet: number;
+  totalHitsInSet:     number;
 }
 
 // ─── Category display config ─────────────────────────────────────────────────
@@ -89,7 +88,7 @@ function SetCard({ set }: { set: SetItem }) {
       {/* Stats */}
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#1e1e1e]">
         <span className="text-[11px] text-zinc-500">
-          {set.totalCardsInSet} cards
+          {set.totalPrintRunInSet.toLocaleString()} chase cards
         </span>
         {set.totalHitsInSet > 0 && (
           <span className="text-[11px] text-yellow-500/80 font-medium">

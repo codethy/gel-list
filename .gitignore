@@ -40,7 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Excel import files — keep the folder but ignore the files
-prisma/imports/*.xlsx
-prisma/imports/*.xls
-prisma/imports/*.csv
+# Excel import files — keep each set's folder (and its set.json config) but
+# ignore the raw spreadsheet, wherever it sits under prisma/imports/<slug>/
+prisma/imports/**/*.xlsx
+prisma/imports/**/*.xls
+prisma/imports/**/*.csv

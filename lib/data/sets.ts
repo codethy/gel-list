@@ -1,23 +1,33 @@
 // lib/data/sets.ts
 
 import { prisma } from "@/lib/prisma";
-import type { CardHistoryEvent } from "@/components/set-detail/ChecklistTable";
+import type { CardHistoryEvent, LoggedGel } from "@/components/set-detail/ChecklistTable";
+import { getChecklistRowExtras } from "@/lib/data/checklistRowExtras";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
 export interface SetDetailData {
   setId:                string;
   setName:              string;
+  category:             string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
   subCategory:          string;
   year:                 number;
   brand:                string;
   totalCardsInSet:      number;
+  totalPrintRunInSet:   number;
+  // Every confirmed-real pulled copy of this set, across ALL users — an
+  // in-hand gel always counts; a "someone else's gel" sighting only counts
+  // once the developer has verified it (see /admin/gels). Distinct from
+  // userGels.length, which is just the current viewer's own collection.
+  chasesPulledInSet:    number;
   totalChaseCardsInSet: number | null;
   imageUrl:             string | null;
 
   userGels: {
     id:                string;
     cardTemplateId:    string;
+    isInHand:          boolean;
+    isVerified:        boolean;
     acquisitionMethod: string | null;
     serialNumber:      number | null;
     hitYear:           number | null;
@@ -27,13 +37,14 @@ export interface SetDetailData {
     cardFrontImageUrl: string | null;
     cardBackImageUrl:  string | null;
     seller:            string | null;
-    notes:             null;
+    notes:             string | null;
     cardTemplate: {
-      playerName:   string;
-      cardType:     string;
-      parallelType: string | null;
-      printRun:     number | null;
-      team:         string | null;
+      playerName:    string;
+      cardType:      string;
+      parallelType:  string | null;
+      printRun:      number | null;
+      variationName: string | null;
+      team:          string | null;
     };
   }[];
 
@@ -45,20 +56,17 @@ export interface SetDetailData {
     cardType:      string;
     parallelType:  string | null;
     printRun:      number | null;
+    variationName: string | null;
     imageUrl:      string | null;
+    cardBackImageUrl: string | null;
     status:        "Available" | "Owned" | "Surfaced";
     ownedGelId:    string | null;
     notes:         string | null;
     likeCount:     number;
     isLikedByUser: boolean;
-    cardHistory: {
-      id:          string;
-      eventType:   CardHistoryEvent["eventType"];
-      username:    string;
-      displayName: string | null;
-      occurredAt:  string | null;
-      note:        string | null;
-    }[];
+    gelsPulled:    number;
+    cardHistory:   CardHistoryEvent[];
+    loggedGels:    LoggedGel[];
   }[];
 
   checklistMeta: {
@@ -69,12 +77,13 @@ export interface SetDetailData {
   };
 
   allTemplates: {
-    id:           string;
-    playerName:   string;
-    cardType:     string;
-    parallelType: string | null;
-    printRun:     number | null;
-    team:         string | null;
+    id:            string;
+    playerName:    string;
+    cardType:      string;
+    parallelType:  string | null;
+    printRun:      number | null;
+    variationName: string | null;
+    team:          string | null;
   }[];
 
   availableTeams: string[];
@@ -94,6 +103,7 @@ export async function getSetDetail(
     select: {
       id:                   true,
       name:                 true,
+      category:             true,
       subCategory:          true,
       year:                 true,
       brand:                true,
@@ -115,6 +125,9 @@ export async function getSetDetail(
     allChecklistCards,
     teamsRaw,
     categoriesRaw,          // ✅ NEW
+    printRunSum,            // ✅ NEW — see step 5c below
+    unlimitedPrintRunCount, // ✅ NEW
+    chasesPulledInSet,      // ✅ NEW — see step 5d below
   ] = await Promise.all([
 
     // ── 2a. Total count ──────────────────────────────────────────────────
@@ -127,7 +140,7 @@ export async function getSetDetail(
       where:   { cardSetId: setId },
       skip:    0,
       take:    PAGE_SIZE,
-      orderBy: [{ playerName: "asc" }, { cardCategory: "asc" }],
+      orderBy: { sortOrder: "asc" }, // matches the source checklist file's row order
       select: {
         id:            true,
         cardNumber:    true,
@@ -139,51 +152,74 @@ export async function getSetDetail(
         printRun:      true,
         variationName: true,
         isHit:         true,
-        isChase:       true,
       },
     }),
 
     // ── 2c. User's portfolio cards ───────────────────────────────────────
-    userId
-      ? prisma.portfolioCard.findMany({
-          where:   { userId, cardSetId: setId },
-          orderBy: { createdAt: "desc" },
+    // PortfolioCard now relates to ChecklistCard (not the removed
+    // CardTemplate model) — see prisma/schema.prisma.
+    //
+    // Always run this query with the same shape (rather than branching
+    // between this call and `Promise.resolve([])` based on `userId`) — a
+    // ternary here made TypeScript union the query's payload type with an
+    // untyped empty array, which collapsed the nested `checklistCard`
+    // relation to `never`. userId is a real cuid when signed in, so "" can
+    // never match a real row — that's what makes the signed-out case a
+    // no-op instead.
+    // "Your Gels" only shows cards the user actually has in hand — a
+    // "someone else's gel" sighting they reported (isInHand: false) still
+    // counts toward that checklist row's gelsPulled/Surfaced status, but
+    // doesn't belong in this user's own collection list.
+    prisma.portfolioCard.findMany({
+      where:   { userId: userId ?? "", cardSetId: setId, isInHand: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id:                true,
+        isInHand:          true,
+        isVerified:        true,
+        acquisitionMethod: true,
+        serialNumber:      true,
+        hitYear:           true,
+        hitMonth:          true,
+        hitCity:           true,
+        hitCountry:        true,
+        cardFrontImageUrl: true,
+        cardBackImageUrl:  true,
+        seller:            true,
+        notes:             true,
+        checklistCard: {
           select: {
-            id:                true,
-            acquisitionMethod: true,
-            serialNumber:      true,
-            hitYear:           true,
-            hitMonth:          true,
-            hitCity:           true,
-            hitCountry:        true,
-            cardFrontImageUrl: true,
-            cardBackImageUrl:  true,
-            seller:            true,
-            cardTemplate: {
-              select: {
-                id:           true,
-                playerName:   true,
-                cardCategory: true,
-                parallelType: true,
-                printRun:     true,
-                team:         true,
-              },
-            },
+            id:            true,
+            playerName:    true,
+            cardCategory:  true,
+            parallel:      true,
+            printRun:      true,
+            variationName: true,
+            team:          true,
           },
-        })
-      : Promise.resolve([]),
+        },
+      },
+    }),
 
     // ── 2d. All checklist cards for Add Gel modal ────────────────────────
+    // ⚠️ Scaling note: this fetches every checklist row for the set,
+    // unpaginated. Fine for this set's ~3.6k rows, but a set with a much
+    // larger, heavily-paralleled checklist would make this slower on every
+    // page load. The proper fix is to have the Add Gel modal search against
+    // the paginated /api/sets/[id]/checklist endpoint instead of receiving
+    // the full list as a prop — that also requires updating AddGelModal.tsx,
+    // so it's left as-is here and deferred to that step.
     prisma.checklistCard.findMany({
       where:   { cardSetId: setId },
       orderBy: [{ playerName: "asc" }],
       select: {
-        id:           true,
-        playerName:   true,
-        cardCategory: true,
-        parallel:     true,
-        printRun:     true,
-        team:         true,
+        id:            true,
+        playerName:    true,
+        cardCategory:  true,
+        parallel:      true,
+        printRun:      true,
+        variationName: true,
+        team:          true,
       },
     }),
 
@@ -204,12 +240,44 @@ export async function getSetDetail(
       distinct: ["cardCategory"],
       orderBy:  { cardCategory: "asc" },
     }),
+
+    // ── 2g. Sum of printRun across cards that have one specified ────── ✅ NEW
+    // Cards with no printRun (unlimited/unspecified — e.g. base autos or
+    // case hits) are counted separately below and defaulted to 10 each,
+    // rather than being included in this SQL-side SUM.
+    prisma.checklistCard.aggregate({
+      where: { cardSetId: setId, printRun: { not: null } },
+      _sum:  { printRun: true },
+    }),
+
+    // ── 2h. Count of cards with no printRun specified ───────────────── ✅ NEW
+    prisma.checklistCard.count({
+      where: { cardSetId: setId, printRun: null },
+    }),
+
+    // ── 2i. "Chases Pulled" — every confirmed-real pulled copy of this ── ✅ NEW
+    // set, across ALL users: an in-hand gel always counts; a reported
+    // sighting of someone else's gel only counts once verified.
+    prisma.portfolioCard.count({
+      where: {
+        cardSetId: setId,
+        OR: [
+          { isInHand: true },
+          { isInHand: false, isVerified: true },
+        ],
+      },
+    }),
   ]);
 
   // ── 3. Shape user gels ──────────────────────────────────────────────────
+  // Output field names (cardTemplateId, cardTemplate.cardType/parallelType)
+  // are kept as-is even though the data now comes from ChecklistCard, so the
+  // frontend (YourGels.tsx, SetDetailClient.tsx) doesn't need to change yet.
   const userGels = userPortfolioCards.map((pc) => ({
     id:                pc.id,
-    cardTemplateId:    pc.cardTemplate.id,
+    cardTemplateId:    pc.checklistCard.id,
+    isInHand:          pc.isInHand,
+    isVerified:        pc.isVerified,
     acquisitionMethod: pc.acquisitionMethod != null
                          ? String(pc.acquisitionMethod)
                          : null,
@@ -221,40 +289,50 @@ export async function getSetDetail(
     cardFrontImageUrl: pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
-    notes:             null as null,
+    notes:             pc.notes             ?? null,
     cardTemplate: {
-      playerName:   pc.cardTemplate.playerName,
-      cardType:     String(pc.cardTemplate.cardCategory),
-      parallelType: pc.cardTemplate.parallelType ?? null,
-      printRun:     pc.cardTemplate.printRun     ?? null,
-      team:         pc.cardTemplate.team         ?? null,
+      playerName:    pc.checklistCard.playerName,
+      cardType:      String(pc.checklistCard.cardCategory),
+      parallelType:  pc.checklistCard.parallel ?? null,
+      printRun:      pc.checklistCard.printRun ?? null,
+      variationName: pc.checklistCard.variationName ?? null,
+      team:          pc.checklistCard.team     ?? null,
     },
   }));
 
   // ── 4. Shape checklist rows ─────────────────────────────────────────────
-  // ChecklistCard has no user-relation data yet, so:
-  //   - status is always "Available"
-  //   - likeCount is always 0
-  //   - isLikedByUser is always false
-  //   - cardHistory is always []
-  //   - imageUrl is always null (field doesn't exist on ChecklistCard)
+  // Real likeCount/isLikedByUser/status/ownedGelId/cardHistory, via the same
+  // helper app/api/sets/[id]/checklist/route.ts uses for later pages — this
+  // keeps the server-rendered first page consistent with what filtering/
+  // paginating fetches afterward.
+  //   - imageUrl is still always null (field doesn't exist on ChecklistCard)
   //   - parallelType maps from `parallel` field
-  const checklistRows = firstPageCards.map((c) => ({
-    id:            c.id,
-    cardNumber:    c.cardNumber   ?? null,
-    playerName:    c.playerName,
-    team:          c.team         ?? null,
-    cardType:      String(c.cardCategory),   // output as cardType for UI compatibility
-    parallelType:  c.parallel     ?? null,   // ChecklistCard.parallel → parallelType
-    printRun:      c.printRun     ?? null,
-    imageUrl:      null,                     // ChecklistCard has no imageUrl yet
-    status:        "Available" as const,     // No user relations on ChecklistCard yet
-    ownedGelId:    null,
-    notes:         null,
-    likeCount:     0,
-    isLikedByUser: false,
-    cardHistory:   [] as SetDetailData["checklistRows"][number]["cardHistory"],
-  }));
+  const firstPageCardIds = firstPageCards.map((c) => c.id);
+  const extrasByCard     = await getChecklistRowExtras(firstPageCardIds, userId);
+
+  const checklistRows = firstPageCards.map((c) => {
+    const extras = extrasByCard.get(c.id)!;
+    return {
+      id:            c.id,
+      cardNumber:    c.cardNumber   ?? null,
+      playerName:    c.playerName,
+      team:          c.team         ?? null,
+      cardType:      String(c.cardCategory),   // output as cardType for UI compatibility
+      parallelType:  c.parallel     ?? null,   // ChecklistCard.parallel → parallelType
+      printRun:      c.printRun     ?? null,
+      variationName: c.variationName ?? null,
+      imageUrl:          extras.imageUrl,         // first-logged gel's front image, if any
+      cardBackImageUrl:  extras.cardBackImageUrl,
+      status:        extras.status,
+      ownedGelId:    extras.ownedGelId,
+      notes:         extras.notes,
+      likeCount:     extras.likeCount,
+      isLikedByUser: extras.isLikedByUser,
+      gelsPulled:    extras.gelsPulled,
+      cardHistory:   extras.cardHistory,
+      loggedGels:    extras.loggedGels,
+    };
+  });
 
     // ── 5. Teams list ───────────────────────────────────────────────────────
   const availableTeams = teamsRaw
@@ -264,14 +342,27 @@ export async function getSetDetail(
   // ── 5b. Categories list ─────────────────────────────────────────────── ✅ NEW
   const availableCategories = categoriesRaw.map((c) => String(c.cardCategory));
 
+  // ── 5c. Total print run in set ────────────────────────────────────── ✅ NEW
+  // "Cards in Set" on the set detail banner counts every physical copy the
+  // set could ever produce — e.g. a "/10" parallel counts as 10 — rather
+  // than the number of distinct checklist rows. Cards with no printRun
+  // specified (unlimited base cards, case hits, etc.) default to 10 each,
+  // per the same convention used for numbered cards.
+  const DEFAULT_PRINT_RUN = 10;
+  const totalPrintRunInSet =
+    (printRunSum._sum.printRun ?? 0) + unlimitedPrintRunCount * DEFAULT_PRINT_RUN;
+
   // ── 6. Return full payload ──────────────────────────────────────────────
   return {
     setId:                cardSet.id,
     setName:              cardSet.name,
+    category:             String(cardSet.category),
     subCategory:          cardSet.subCategory,
     year:                 cardSet.year,
     brand:                cardSet.brand,
     totalCardsInSet:      cardSet.totalCardsInSet,
+    totalPrintRunInSet,
+    chasesPulledInSet,
     totalChaseCardsInSet: cardSet.totalChaseCardsInSet ?? null,
     imageUrl:             cardSet.imageUrl             ?? null,
     userGels,
@@ -283,13 +374,15 @@ export async function getSetDetail(
       totalPages: Math.ceil(totalCards / PAGE_SIZE),
     },
     allTemplates: allChecklistCards.map((c) => ({
-      id:           c.id,
-      playerName:   c.playerName,
-      cardType:     String(c.cardCategory),
-      parallelType: c.parallel ?? null,
-      printRun:     c.printRun ?? null,
-      team:         c.team     ?? null,
+      id:            c.id,
+      playerName:    c.playerName,
+      cardType:      String(c.cardCategory),
+      parallelType:  c.parallel ?? null,
+      printRun:      c.printRun ?? null,
+      variationName: c.variationName ?? null,
+      team:          c.team     ?? null,
     })),
     availableTeams,
     availableCategories,   // ✅ NEW
   };
+}

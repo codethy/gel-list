@@ -2,9 +2,6 @@
   "name": "gel-list",
   "version": "0.1.0",
   "private": true,
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -26,6 +23,7 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "framer-motion": "^12.38.0",
+    "heic2any": "^0.0.4",
     "lucide-react": "^1.7.0",
     "next": "16.2.1",
     "next-auth": "^4.24.13",

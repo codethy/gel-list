@@ -47,29 +47,38 @@ model VerificationToken {
 // ─── USER ───────────────────────────────────────────────────────────────────
 
 model User {
-  cardTemplateLikes CardTemplateLike[]
-  id                  String    @id @default(cuid())
-  name                String?
-  email               String?   @unique
-  emailVerified       DateTime?
-  image               String?
+  checklistCardLikes ChecklistCardLike[]
+  id                 String              @id @default(cuid())
+  name               String?
+  email              String?             @unique
+  emailVerified      DateTime?
+  image              String?
 
   username            String?   @unique
   profileImage        String?
   usernameLastChanged DateTime?
 
+  // Developer-only access to /admin/gels — set by hand via prisma/make-admin.ts,
+  // there is no in-app way to grant this.
+  isAdmin Boolean @default(false)
+
+  // Once a user has had 5 of their logged gels verified by the developer,
+  // every gel they log afterward is auto-verified instead of entering the
+  // review queue — see app/api/sets/[id]/gels/route.ts.
+  isVerifiedUser Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  portfolioCards  PortfolioCard[]
-  ripSessions     RipSession[]
-  unverifiedHits  UnverifiedHit[]
+  accounts          Account[]
+  sessions          Session[]
+  portfolioCards    PortfolioCard[]
+  ripSessions       RipSession[]
+  unverifiedHits    UnverifiedHit[]
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred to this user
-  receivedTransfers CardTransfer[] @relation("TransferReceiver")
+  receivedTransfers CardTransfer[]  @relation("TransferReceiver")
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred from this user
-  sentTransfers     CardTransfer[] @relation("TransferSender")
+  sentTransfers     CardTransfer[]  @relation("TransferSender")
 }
 
 // ─── TAXONOMY ───────────────────────────────────────────────────────────────
@@ -113,16 +122,24 @@ enum EntertainmentSubCategory {
   OTHER
 }
 
-// ✅ NEW ENUM: tracks whether a card was pulled from a pack or bought
+// Tracks how a logged gel came to be known about.
+// PULLED/BOUGHT: the logging user's own gel — how they personally got it.
+// BREAKER/EBAY/FRIEND/SOCIAL_MEDIA/OTHER: someone else's gel — where the
+// logging user saw it surface (PortfolioCard.isInHand is false for these).
 enum AcquisitionMethod {
   PULLED
   BOUGHT
+  BREAKER
+  EBAY
+  FRIEND
+  SOCIAL_MEDIA
+  OTHER
 }
 
 // ─── CARD SET ───────────────────────────────────────────────────────────────
 
 model CardSet {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   year        Int
   brand       String
@@ -140,13 +157,15 @@ model CardSet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cards          CardTemplate[]
-  checklistCards   ChecklistCard[]
+  checklistCards ChecklistCard[]
   portfolioCards PortfolioCard[]
   ripSessions    RipSession[]
 }
 
-// ─── CARD TEMPLATE ───────────────────────────────────────────────────────────
+// ─── CARD TAXONOMY (CardCategory / CardTier) ─────────────────────────────────
+// ChecklistCard (below) is the single canonical "card catalog" table for a
+// set. The CardTemplate model that used to sit alongside it has been removed
+// so there is only one place that represents "a card that exists in a set."
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CardCategory — What type of card this is
@@ -217,76 +236,50 @@ enum CardTier {
   LIMITED
   NUMBERED
   ONE_OF_ONE
-  SP           // Short Print
-  SSP          // Super Short Print
+  SP // Short Print
+  SSP // Super Short Print
   CASE_HIT
 
   // ── TCG Rarity Tiers ────────────────────────────────────────────────────
   COMMON
   UNCOMMON
   RARE
-  RR           // Double Rare
-  SR           // Ultra Rare
-  AR           // Illustration Rare
-  SAR          // Special Illustration Rare
-  UR           // Hyper Rare
-  MUR          // Mega Hyper Rare
-  ACE          // ACE Spec Rare
-  SHR          // Shiny Rare
-  SSR          // Shiny Ultra Rare
+  RR // Double Rare
+  SR // Ultra Rare
+  AR // Illustration Rare
+  SAR // Special Illustration Rare
+  UR // Hyper Rare
+  MUR // Mega Hyper Rare
+  ACE // ACE Spec Rare
+  SHR // Shiny Rare
+  SSR // Shiny Ultra Rare
   SUPER_RARE
   LEGENDARY
   EPIC
   ENCHANTED
   ICONIC
   ALT_ART
-  OVER         // Overnumbered
-  OVER_SIGN    // Overnumbered Signature
+  OVER // Overnumbered
+  OVER_SIGN // Overnumbered Signature
   MYTHIC
-  C_ALT        // Common Alt Art
-  UC_ALT       // Uncommon Alt Art
-  R_ALT        // Rare Alt Art
-  SR_ALT       // Super Rare Alt Art
-  SR_MANGA     // Super Rare Manga
-  SEC          // Secret Rare
-  SEC_ALT      // Secret Rare Alt Art
+  C_ALT // Common Alt Art
+  UC_ALT // Uncommon Alt Art
+  R_ALT // Rare Alt Art
+  SR_ALT // Super Rare Alt Art
+  SR_MANGA // Super Rare Manga
+  SEC // Secret Rare
+  SEC_ALT // Secret Rare Alt Art
   LEADER
-  L_ALT        // Leader Alt Art
+  L_ALT // Leader Alt Art
   SPECIAL_RARE
   MANGA
-  GOLD_MANGA   // Golden Manga Rare
-  TR           // Treasure Rare
+  GOLD_MANGA // Golden Manga Rare
+  TR // Treasure Rare
   DON
-  GOLD_DON     // Golden DON
+  GOLD_DON // Golden DON
   ULTIMATE_RARE
   GHOST_RARE
   PROMO
-}
-
-model CardTemplate {
-  likes CardTemplateLike[]
-  id           String   @id @default(cuid())
-  cardSetId    String
-  cardNumber   String
-  playerName   String
-  parallelType String?
-  cardCategory  CardCategory
-  cardTier      CardTier
-  printRun     Int?
-  imageUrl     String?
-  // ✅ NEW: required for the "Team" filter in the checklist
-  team         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cardSet        CardSet         @relation(fields: [cardSetId], references: [id])
-  portfolioCards PortfolioCard[]
-  unverifiedHits UnverifiedHit[]
-  // ✅ NEW: relation to chain of custody transfers
-  transfers      CardTransfer[]
-
-  @@unique([cardSetId, cardNumber, parallelType])
 }
 
 // ─── PRODUCT TYPES ──────────────────────────────────────────────────────────
@@ -331,23 +324,23 @@ enum BreakerPlatform {
 // ─── PORTFOLIO CARD ──────────────────────────────────────────────────────────
 
 model PortfolioCard {
-  id             String   @id @default(cuid())
-  userId         String
-  cardTemplateId String
-  cardSetId      String
-  ripSessionId   String?
+  id              String  @id @default(cuid())
+  userId          String
+  checklistCardId String
+  cardSetId       String
+  ripSessionId    String?
 
-  isHit     Boolean @default(false)
-  isInHand  Boolean @default(true)
+  isHit    Boolean @default(false)
+  isInHand Boolean @default(true)
 
   // ✅ NEW: Pulled or Bought — required by "Your Card" modal path
   acquisitionMethod AcquisitionMethod?
 
   // Hit context
-  hitCountry  String?
-  hitCity     String?
-  hitMonth    Int?
-  hitYear     Int?
+  hitCountry String?
+  hitCity    String?
+  hitMonth   Int?
+  hitYear    Int?
 
   // ✅ NEW: Seller field — required by "Your Card" modal path
   seller String? @db.VarChar(255)
@@ -373,25 +366,31 @@ model PortfolioCard {
   cardFrontImageUrl String?
   cardBackImageUrl  String?
 
-  notes       String?  @db.Text
+  notes String? @db.Text
 
   isDuplicate Boolean @default(false)
+
+  // Every logged gel starts unverified and sits in the developer's /admin/gels
+  // review queue — see app/api/admin/gels/[gelId]/verify/route.ts — unless the
+  // logging user has already crossed the 5-verified-gels threshold
+  // (User.isVerifiedUser), in which case it's auto-verified at creation time.
+  isVerified Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cardTemplate CardTemplate @relation(fields: [cardTemplateId], references: [id])
-  cardSet      CardSet      @relation(fields: [cardSetId], references: [id])
-  ripSession   RipSession?  @relation(fields: [ripSessionId], references: [id])
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checklistCard ChecklistCard  @relation(fields: [checklistCardId], references: [id])
+  cardSet       CardSet        @relation(fields: [cardSetId], references: [id])
+  ripSession    RipSession?    @relation(fields: [ripSessionId], references: [id])
   // ✅ NEW: chain of custody transfers originating from this portfolio entry
-  transfers    CardTransfer[]
+  transfers     CardTransfer[]
 }
 
 // ─── RIP SESSION ────────────────────────────────────────────────────────────
 
 model RipSession {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String
   cardSetId String?
 
@@ -414,19 +413,19 @@ model RipSession {
 // ─── UNVERIFIED HIT ──────────────────────────────────────────────────────────
 
 model UnverifiedHit {
-  id             String @id @default(cuid())
-  cardTemplateId String
-  submittedById  String
+  id              String @id @default(cuid())
+  checklistCardId String
+  submittedById   String
 
   // ✅ UPDATED: notes and sightings are now REQUIRED (not optional)
-  notes    String  @db.Text
+  notes     String @db.Text
   sightings String @db.Text
 
   // ✅ NEW: optional provenance fields for "Not Your Card" path
   reportedUsername  String?
   sourceUrl         String?
   acquisitionMethod AcquisitionMethod?
-  seller            String?   @db.VarChar(255)
+  seller            String?            @db.VarChar(255)
   hitCountry        String?
   hitCity           String?
   hitMonth          Int?
@@ -439,48 +438,48 @@ model UnverifiedHit {
 
   createdAt DateTime @default(now())
 
-  cardTemplate CardTemplate @relation(fields: [cardTemplateId], references: [id])
-  submittedBy  User         @relation(fields: [submittedById], references: [id])
+  checklistCard ChecklistCard @relation(fields: [checklistCardId], references: [id])
+  submittedBy   User          @relation(fields: [submittedById], references: [id])
 }
 
 // ─── CARD TRANSFER (Chain of Custody) ────────────────────────────────────────
 // ✅ NEW MODEL: tracks the full movement history of a physical card
 
 model CardTransfer {
-  id               String @id @default(cuid())
-  cardTemplateId   String
-  portfolioCardId  String
+  id              String @id @default(cuid())
+  checklistCardId String
+  portfolioCardId String
 
   // Who sent and who received
-  fromUserId String?  // null = external/unknown origin
-  toUserId   String?  // null = sold outside the platform
+  fromUserId String? // null = external/unknown origin
+  toUserId   String? // null = sold outside the platform
 
   // Transfer context
-  transferDate    DateTime?
-  transferMethod  String?   @db.VarChar(100) // e.g. "Sold", "Traded", "Gifted"
-  salePrice       Float?
-  notes           String?   @db.Text
+  transferDate   DateTime?
+  transferMethod String?   @db.VarChar(100) // e.g. "Sold", "Traded", "Gifted"
+  salePrice      Float?
+  notes          String?   @db.Text
 
   createdAt DateTime @default(now())
 
-  cardTemplate  CardTemplate  @relation(fields: [cardTemplateId], references: [id])
+  checklistCard ChecklistCard @relation(fields: [checklistCardId], references: [id])
   portfolioCard PortfolioCard @relation(fields: [portfolioCardId], references: [id])
-  fromUser      User?         @relation("TransferSender",   fields: [fromUserId], references: [id])
-  toUser        User?         @relation("TransferReceiver", fields: [toUserId],   references: [id])
+  fromUser      User?         @relation("TransferSender", fields: [fromUserId], references: [id])
+  toUser        User?         @relation("TransferReceiver", fields: [toUserId], references: [id])
 }
 
-// ─── CARD TEMPLATE LIKE ──────────────────────────────────────────────────────
+// ─── CHECKLIST CARD LIKE ─────────────────────────────────────────────────────
 
-model CardTemplateLike {
-  id             String   @id @default(cuid())
-  userId         String
-  cardTemplateId String
-  createdAt      DateTime @default(now())
+model ChecklistCardLike {
+  id              String   @id @default(cuid())
+  userId          String
+  checklistCardId String
+  createdAt       DateTime @default(now())
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cardTemplate CardTemplate @relation(fields: [cardTemplateId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checklistCard ChecklistCard @relation(fields: [checklistCardId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, cardTemplateId])
+  @@unique([userId, checklistCardId])
 }
 
 // ─── CHECKLIST CARD ──────────────────────────────────────────────────────────
@@ -488,30 +487,44 @@ model CardTemplateLike {
 // This is the "master list" of every card that exists in a given CardSet.
 
 model ChecklistCard {
-  id          String  @id @default(cuid())
-  cardSetId   String
+  id        String @id @default(cuid())
+  cardSetId String
 
-  cardNumber    String
-  playerName    String    // For TCG: card name e.g. "Charizard ex"
-  team          String?   // Sports/Entertainment only — null for TCG
+  cardNumber String
+  playerName String // For TCG: card name e.g. "Charizard ex"
+  team       String? // Sports/Entertainment only — null for TCG
 
   // ── The 3-Layer Identity ─────────────────────────────────────────────────
-  cardCategory  CardCategory  // What family: AUTO, PARALLEL, HYPER_RARE, etc.
-  cardTier      CardTier      // How scarce: NUMBERED, ONE_OF_ONE, SSP, etc.
+  cardCategory CardCategory // What family: AUTO, PARALLEL, HYPER_RARE, etc.
+  cardTier     CardTier // How scarce: NUMBERED, ONE_OF_ONE, SSP, etc.
 
   // ── Card-Specific Attributes ─────────────────────────────────────────────
-  parallel String?   // e.g. "Black", "Gold", "Red", "Orange" — null for base
-  printRun      Int?      // e.g. 10, 5, 25, 99 — null if unlimited/unspecified
-  variationName String?   // e.g. "Planetary Pursuit Sun", "Trophy Supercollector"
+  parallel      String? // e.g. "Black", "Gold", "Red", "Orange" — null for base
+  printRun      Int? // e.g. 10, 5, 25, 99 — null if unlimited/unspecified
+  variationName String? // e.g. "Planetary Pursuit Sun", "Trophy Supercollector"
 
   // ── Quick-Access Flags ───────────────────────────────────────────────────
-  isHit         Boolean @default(false)  // AUTO, RELIC, AUTO_RELIC, etc.
-  isChase       Boolean @default(false)  // SSP, CASE_HIT, ONE_OF_ONE, etc.
+  // isChase was removed: every checklist row imported onto this platform is
+  // intentionally a chase card already (base cards are excluded from the
+  // source checklist before import), so the flag carried no information.
+  isHit Boolean @default(false) // AUTO, RELIC, AUTO_RELIC, etc.
+
+  // Position of this card in the original checklist file (0 = first row).
+  // The checklist page always displays cards ordered by this field, so it
+  // matches the sequence the set's source file was published in, rather
+  // than an alphabetical re-sort. Set at import time — see
+  // prisma/import-checklist.ts.
+  sortOrder Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cardSet CardSet @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  cardSet        CardSet             @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  portfolioCards PortfolioCard[]
+  likes          ChecklistCardLike[]
+  transfers      CardTransfer[]
+  unverifiedHits UnverifiedHit[]
 
   @@unique([cardSetId, cardNumber, parallel])
+  @@index([cardSetId, sortOrder])
 }

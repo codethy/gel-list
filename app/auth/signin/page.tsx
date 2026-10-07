@@ -10,7 +10,7 @@ function SignInContent() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-black text-white">
-      <div className="w-full max-w-md px-8 py-12 flex flex-col items-center gap-8">
+      <div className="w-full max-w-md px-8 py-12 flex flex-col items-center gap-8 rounded-2xl border border-white">
 
         {/* Logo / App Name */}
         <div className="flex flex-col items-center gap-2">
@@ -18,7 +18,7 @@ function SignInContent() {
             Gel List
           </h1>
           <p className="text-zinc-400 text-sm tracking-widest uppercase">
-            Your card collection tracker
+            Know Every Hit In Every Set
           </p>
         </div>
 
@@ -28,7 +28,7 @@ function SignInContent() {
         {/* Sign In Card */}
         <div className="w-full flex flex-col gap-4">
           <p className="text-center text-zinc-300 text-sm">
-            Sign in to manage your collection
+            Sign in to track your hits
           </p>
 
           {/* Google Sign In Button */}
@@ -46,11 +46,6 @@ function SignInContent() {
             Continue with Google
           </button>
         </div>
-
-        {/* Footer note */}
-        <p className="text-zinc-600 text-xs text-center">
-          By signing in, you agree to our terms of service.
-        </p>
 
       </div>
     </main>

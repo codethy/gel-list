@@ -9,7 +9,7 @@ import ChecklistTable, {
   type ChecklistRow,
   type ChecklistMeta,
 } from "./ChecklistTable";
-import AddGelModal, { type CardTemplateOption } from "./AddGelModal";
+import AddGelModal, { type ChecklistCardOption } from "./AddGelModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -17,10 +17,12 @@ interface SetDetailClientProps {
   // Set metadata
   setId:                 string;
   setName:               string;
+  category:              string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
   subCategory:           string;
   year:                  number;
   brand:                 string;
-  totalCardsInSet:       number;
+  totalPrintRunInSet:    number;
+  chasesPulledInSet:     number;
   totalChaseCardsInSet?: number | null;
   imageUrl?:             string | null;
 
@@ -34,7 +36,7 @@ interface SetDetailClientProps {
   availableCategories: string[];   // ✅ NEW
 
   // All card templates for the Add Gel modal search
-  allTemplates: CardTemplateOption[];
+  allTemplates: ChecklistCardOption[];
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -42,10 +44,12 @@ interface SetDetailClientProps {
 export default function SetDetailClient({
   setId,
   setName,
+  category,
   subCategory,
   year,
   brand,
-  totalCardsInSet,
+  totalPrintRunInSet,
+  chasesPulledInSet,
   totalChaseCardsInSet,
   imageUrl,
   initialGels,
@@ -58,6 +62,12 @@ export default function SetDetailClient({
 
   // ── Gel state ──────────────────────────────────────────────────────────────
   const [gels, setGels] = useState<GelEntry[]>(initialGels);
+  // Set-wide "Chases Pulled" total (see lib/data/sets.ts) — distinct from
+  // gels.length, which is just this viewer's own collection. Bumped
+  // optimistically only when the viewer logs their OWN gel for the first
+  // time (it counts immediately); a "someone else's gel" report doesn't
+  // count until the developer verifies it, which happens outside this page.
+  const [chasesPulled, setChasesPulled] = useState(chasesPulledInSet);
 
   // ── Checklist state ────────────────────────────────────────────────────────
   const [rows, setRows]                         = useState<ChecklistRow[]>(initialRows);
@@ -66,44 +76,92 @@ export default function SetDetailClient({
   const [, startTransition]                     = useTransition();
 
   // ── Modal state ────────────────────────────────────────────────────────────
-  const [modalOpen, setModalOpen]                         = useState(false);
-  const [preselectedTemplateId, setPreselectedTemplateId] = useState<string | null>(null);
-  const [preselectedPlayerName, setPreselectedPlayerName] = useState<string | null>(null);
+  const [modalOpen, setModalOpen]                                     = useState(false);
+  const [preselectedChecklistCardId, setPreselectedChecklistCardId]   = useState<string | null>(null);
+  const [preselectedPlayerName, setPreselectedPlayerName]             = useState<string | null>(null);
+  const [editingGel, setEditingGel]                                   = useState<GelEntry | null>(null);
 
-  // ── Open modal ─────────────────────────────────────────────────────────────
+  // ── Open modal (create) ─────────────────────────────────────────────────────
   const handleAddGelClick = useCallback(
-    (templateId?: string, playerName?: string) => {
-      setPreselectedTemplateId(templateId ?? null);
+    (checklistCardId?: string, playerName?: string) => {
+      setEditingGel(null);
+      setPreselectedChecklistCardId(checklistCardId ?? null);
       setPreselectedPlayerName(playerName ?? null);
       setModalOpen(true);
     },
     []
   );
 
+  // ── Open modal (edit) ───────────────────────────────────────────────────────
+  const handleEditGelClick = useCallback((gel: GelEntry) => {
+    setEditingGel(gel);
+    setPreselectedChecklistCardId(null);
+    setPreselectedPlayerName(null);
+    setModalOpen(true);
+  }, []);
+
   // ── Close modal ────────────────────────────────────────────────────────────
   const handleModalClose = useCallback(() => {
     setModalOpen(false);
-    setPreselectedTemplateId(null);
+    setPreselectedChecklistCardId(null);
     setPreselectedPlayerName(null);
+    setEditingGel(null);
   }, []);
 
-  // ── On successful gel add ──────────────────────────────────────────────────
-  // FIX: The old code set `isOwned: true` here, but ChecklistRow no longer has
-  // an `isOwned` boolean — it was replaced with `status: "Available" | "Owned"
-  // | "Surfaced"`. We now set `status: "Owned"` to mark the row as owned
-  // immediately after the user logs a gel, without waiting for a data refetch.
+  // ── On successful gel add or edit ───────────────────────────────────────────
+  // ChecklistRow's status is "Available" | "Owned" | "Surfaced" — a gel the
+  // user actually has in hand (isInHand: true, the default/"logging my own
+  // gel" path) marks the row "Owned" and joins "Your Gels"; a reported
+  // sighting of someone else's gel (isInHand: false, the "someone else's
+  // gel" path) marks it "Surfaced" instead and is excluded from "Your Gels"
+  // entirely, since that list is the user's own collection.
   const handleGelSuccess = useCallback(
-    (newGel: GelEntry) => {
-      setGels((prev) => [newGel, ...prev]);
+    (gel: GelEntry) => {
+      const isSurfaced = gel.isInHand === false;
+      const newStatus: "Owned" | "Surfaced" = isSurfaced ? "Surfaced" : "Owned";
+      let isNewGel = false;
+
+      setGels((prev) => {
+        if (isSurfaced) {
+          return prev.filter((g) => g.id !== gel.id);
+        }
+        const alreadyExists = prev.some((g) => g.id === gel.id);
+        isNewGel = !alreadyExists;
+        return alreadyExists
+          ? prev.map((g) => (g.id === gel.id ? gel : g))
+          : [gel, ...prev];
+      });
       setRows((prev) =>
         prev.map((r) =>
-          r.id === newGel.cardTemplateId
-            ? { ...r, status: "Owned" as const, ownedGelId: newGel.id }
+          r.id === gel.cardTemplateId
+            ? { ...r, status: newStatus, ownedGelId: gel.id }
             : r
         )
       );
+      // A brand-new own gel always counts toward the set-wide "Chases
+      // Pulled" total immediately; a "someone else's gel" report doesn't
+      // until the developer verifies it over on /admin/gels.
+      if (isNewGel && !isSurfaced) {
+        setChasesPulled((prev) => prev + 1);
+      }
     },
     []
+  );
+
+  // ── Delete a gel ─────────────────────────────────────────────────────────────
+  const handleDeleteGel = useCallback(
+    async (gelId: string) => {
+      const res = await fetch(`/api/sets/${setId}/gels/${gelId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to delete gel");
+      }
+      setGels((prev) => prev.filter((g) => g.id !== gelId));
+      // Every gel in "Your Gels" is isInHand: true, so it always counted
+      // toward the set-wide total — removing it always decrements that too.
+      setChasesPulled((prev) => Math.max(0, prev - 1));
+    },
+    [setId]
   );
 
   // ── Checklist filter/page change ───────────────────────────────────────────
@@ -146,8 +204,7 @@ export default function SetDetailClient({
   );
 
   // ── Derived stats ──────────────────────────────────────────────────────────
-  const userGelCount     = gels.length;
-  const cardsOpenedCount = gels.length;
+  const userGelCount = gels.length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -159,10 +216,10 @@ export default function SetDetailClient({
           sport={subCategory}
           year={year}
           manufacturer={brand}
-          totalCardsInSet={totalCardsInSet}
+          totalPrintRunInSet={totalPrintRunInSet}
           totalChaseCardsInSet={totalChaseCardsInSet}
           userGelCount={userGelCount}
-          cardsOpenedCount={cardsOpenedCount}
+          chasesPulled={chasesPulled}
           setImageUrl={imageUrl}
         />
 
@@ -170,6 +227,8 @@ export default function SetDetailClient({
         <YourGels
           gels={gels}
           onAddGelClick={() => handleAddGelClick()}
+          onEditGel={handleEditGelClick}
+          onDeleteGel={handleDeleteGel}
         />
 
         {/* ── Divider ───────────────────────────────────────────────── */}
@@ -180,6 +239,7 @@ export default function SetDetailClient({
           rows={rows}
           meta={meta}
           setId={setId}
+          category={category}
           onAddGelClick={handleAddGelClick}
           onFilterChange={handleFilterChange}
           isLoading={checklistLoading}
@@ -195,8 +255,9 @@ export default function SetDetailClient({
         onSuccess={handleGelSuccess}
         setId={setId}
         templates={allTemplates}
-        preselectedTemplateId={preselectedTemplateId}
+        preselectedChecklistCardId={preselectedChecklistCardId}
         preselectedPlayerName={preselectedPlayerName}
+        editingGel={editingGel}
       />
     </div>
   );

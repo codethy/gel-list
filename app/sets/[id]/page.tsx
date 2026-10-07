@@ -51,16 +51,19 @@ export default async function SetDetailPage({ params }: PageProps) {
     <SetDetailClient
       setId={data.setId}
       setName={data.setName}
+      category={data.category}
       subCategory={data.subCategory}
       year={data.year}
       brand={data.brand}
-      totalCardsInSet={data.totalCardsInSet}
+      totalPrintRunInSet={data.totalPrintRunInSet}
+      chasesPulledInSet={data.chasesPulledInSet}
       totalChaseCardsInSet={data.totalChaseCardsInSet}
       imageUrl={data.imageUrl}
       initialGels={data.userGels}
       initialRows={data.checklistRows}
       initialMeta={data.checklistMeta}
       availableTeams={data.availableTeams}
+      availableCategories={data.availableCategories}
       allTemplates={data.allTemplates}
     />
   );

@@ -1,0 +1,23 @@
+{
+  "fileName": "checklist.xlsx",
+  "sheetName": null,
+
+  "setName": "2026 Kakawow Aura Harry Potter 25th Anniversary",
+  "year": 2026,
+  "brand": "Kakawow",
+  "category": "ENTERTAINMENT",
+  "subCategory": "HARRY_POTTER",
+
+  "columns": {
+    "cardNumber": "cardNumber",
+    "playerName": "playerName",
+    "cardCategory": "cardCategory",
+    "cardTier": "cardTier",
+    "parallel": "parallel",
+    "printRun": "printRun",
+    "variationName": "variationName",
+    "isHit": "isHit"
+  },
+
+  "batchSize": 100
+}

@@ -6,12 +6,15 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 
 // ─── POST /api/sets/[id]/cards/[templateId]/like ──────────────────────────────
-// Toggles a like on a card template for the current user.
+// Toggles a like on a checklist card for the current user.
+// "templateId" here is a ChecklistCard id — the route folder name is a
+// leftover from the removed CardTemplate model, kept as-is since renaming it
+// would change the URL path for no functional benefit.
 // Returns: { liked: boolean, likeCount: number }
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; templateId: string } }
+  { params }: { params: Promise<{ id: string; templateId: string }> }
 ) {
   // ── 1. Auth guard ───────────────────────────────────────────────────────
   const session = await getServerSession(authOptions);
@@ -28,45 +31,46 @@ export async function POST(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const { id: setId, templateId } = params;
+  // Next.js 15 requires awaiting params before reading any property off it.
+  const { id: setId, templateId } = await params;
 
-  // ── 3. Confirm template belongs to this set ─────────────────────────────
-  const template = await prisma.cardTemplate.findFirst({
+  // ── 3. Confirm the checklist card belongs to this set ────────────────────
+  const checklistCard = await prisma.checklistCard.findFirst({
     where: { id: templateId, cardSetId: setId },
     select: { id: true },
   });
-  if (!template) {
+  if (!checklistCard) {
     return NextResponse.json({ error: "Card not found in this set" }, { status: 404 });
   }
 
   // ── 4. Toggle like ──────────────────────────────────────────────────────
-  const existing = await prisma.cardTemplateLike.findUnique({
+  const existing = await prisma.checklistCardLike.findUnique({
     where: {
-      userId_cardTemplateId: {
+      userId_checklistCardId: {
         userId: user.id,
-        cardTemplateId: templateId,
+        checklistCardId: templateId,
       },
     },
   });
 
   if (existing) {
     // Unlike
-    await prisma.cardTemplateLike.delete({
+    await prisma.checklistCardLike.delete({
       where: { id: existing.id },
     });
   } else {
     // Like
-    await prisma.cardTemplateLike.create({
+    await prisma.checklistCardLike.create({
       data: {
         userId: user.id,
-        cardTemplateId: templateId,
+        checklistCardId: templateId,
       },
     });
   }
 
   // ── 5. Return fresh count ───────────────────────────────────────────────
-  const likeCount = await prisma.cardTemplateLike.count({
-    where: { cardTemplateId: templateId },
+  const likeCount = await prisma.checklistCardLike.count({
+    where: { checklistCardId: templateId },
   });
 
   return NextResponse.json({

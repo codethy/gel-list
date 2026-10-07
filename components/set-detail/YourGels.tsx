@@ -2,7 +2,9 @@
 
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget } from "./ChecklistTable";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -10,6 +12,14 @@ import { motion, AnimatePresence } from "framer-motion";
 export interface GelEntry {
   id: string;
   cardTemplateId: string;
+  // True for the user's own gel, false for a reported sighting of someone
+  // else's — see AddGelModal's "logging your own gel or someone else's"
+  // choice. "Your Gels" only ever receives isInHand: true entries (filtered
+  // server-side in lib/data/sets.ts), but editing an existing gel reads this
+  // to decide which form variant to reopen into.
+  isInHand?: boolean;
+  // Whether the developer has verified this gel yet — see /admin/gels.
+  isVerified?: boolean;
   serialNumber?: number | null;
   hitYear?: number | null;
   hitMonth?: number | null;
@@ -25,6 +35,7 @@ export interface GelEntry {
     cardType: string;
     parallelType?: string | null;
     printRun?: number | null;
+    variationName?: string | null;
     team?: string | null;
   };
 }
@@ -32,6 +43,8 @@ export interface GelEntry {
 interface YourGelsProps {
   gels: GelEntry[];
   onAddGelClick: () => void; // callback to open the Add Gel modal
+  onEditGel: (gel: GelEntry) => void; // callback to open the Add Gel modal in edit mode
+  onDeleteGel: (gelId: string) => Promise<void>; // performs the delete + removes it from state
 }
 
 // ─── CARD TYPE BADGE ─────────────────────────────────────────────────────────
@@ -60,8 +73,17 @@ function CardTypeBadge({ type }: { type: string }) {
 
 // ─── SINGLE GEL CARD ─────────────────────────────────────────────────────────
 
-function GelCard({ gel, index }: { gel: GelEntry; index: number }) {
+function GelCard({
+  gel, index, onEdit, onDelete, onOpenImage,
+}: {
+  gel: GelEntry;
+  index: number;
+  onEdit: (gel: GelEntry) => void;
+  onDelete: (gelId: string) => Promise<void>;
+  onOpenImage: (target: CardImageTarget) => void;
+}) {
   const hasFrontImage = Boolean(gel.cardFrontImageUrl);
+  const subtitle = playerSubtitle(gel.cardTemplate);
   const locationParts = [gel.hitCity, gel.hitCountry].filter(Boolean);
   const location = locationParts.join(", ");
   const hitDate =
@@ -73,6 +95,39 @@ function GelCard({ gel, index }: { gel: GelEntry; index: number }) {
       ? String(gel.hitYear)
       : null;
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting]             = useState(false);
+  const [deleteFailed, setDeleteFailed]         = useState(false);
+
+  function handleEditClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    onEdit(gel);
+  }
+
+  function handleDeleteIconClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setDeleteFailed(false);
+    setConfirmingDelete(true);
+  }
+
+  function handleCancelDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    setConfirmingDelete(false);
+  }
+
+  async function handleConfirmDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    setIsDeleting(true);
+    try {
+      await onDelete(gel.id);
+    } catch {
+      setDeleteFailed(true);
+      setConfirmingDelete(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.96 }}
@@ -81,13 +136,34 @@ function GelCard({ gel, index }: { gel: GelEntry; index: number }) {
       className="group relative flex flex-col rounded-xl bg-slate-800/60 border border-slate-700/50 overflow-hidden hover:border-slate-600/70 hover:bg-slate-800/80 transition-all duration-200"
     >
       {/* ── Card Image ──────────────────────────────────────────────── */}
-      <div className="relative h-40 bg-slate-900/60 overflow-hidden">
+      {/*
+        aspect-[5/7] (a standard trading card's proportions) + object-contain
+        — rather than a fixed height with object-cover — so the whole photo
+        always shows regardless of exactly how a user framed it, instead of
+        cropping the top/bottom off a portrait card photo.
+      */}
+      <div className="relative aspect-[5/7] bg-slate-900/60 overflow-hidden">
         {hasFrontImage ? (
-          <img
-            src={gel.cardFrontImageUrl!}
-            alt={`${gel.cardTemplate.playerName} card`}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+          <button
+            type="button"
+            onClick={() =>
+              onOpenImage({
+                title: gel.cardTemplate.playerName,
+                subtitle,
+                imageUrl: gel.cardFrontImageUrl ?? null,
+                cardBackImageUrl: gel.cardBackImageUrl ?? null,
+              })
+            }
+            aria-label={`View card image for ${gel.cardTemplate.playerName}`}
+            title="View image"
+            className="absolute inset-0 w-full h-full cursor-zoom-in"
+          >
+            <img
+              src={gel.cardFrontImageUrl!}
+              alt={`${gel.cardTemplate.playerName} card`}
+              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+            />
+          </button>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-600">
             {/* Card placeholder SVG */}
@@ -116,6 +192,83 @@ function GelCard({ gel, index }: { gel: GelEntry; index: number }) {
             {gel.cardTemplate.printRun ? ` / ${gel.cardTemplate.printRun}` : ""}
           </div>
         )}
+
+        {/* Edit / Delete controls — top left, revealed on hover */}
+        <div
+          className={`absolute top-2 left-2 flex items-center gap-1 transition-opacity duration-150 ${
+            confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+        >
+          {confirmingDelete ? (
+            <div className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-lg bg-black/80 backdrop-blur-sm border border-white/10">
+              <span className="text-[10px] font-semibold text-slate-200">Delete?</span>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                aria-label="Confirm delete"
+                title="Confirm delete"
+                className="w-5 h-5 flex items-center justify-center rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50 transition-colors duration-150"
+              >
+                {isDeleting ? (
+                  <div className="w-2.5 h-2.5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
+                ) : (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                disabled={isDeleting}
+                aria-label="Cancel delete"
+                title="Cancel"
+                className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-600/40 text-slate-300 hover:bg-slate-600/60 disabled:opacity-50 transition-colors duration-150"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleEditClick}
+                aria-label="Edit this gel"
+                title="Edit"
+                className="w-6 h-6 flex items-center justify-center rounded-md bg-black/70 backdrop-blur-sm border border-white/10 text-slate-300 hover:text-white hover:bg-black/85 transition-colors duration-150"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteIconClick}
+                aria-label="Delete this gel"
+                title="Delete"
+                className="w-6 h-6 flex items-center justify-center rounded-md bg-black/70 backdrop-blur-sm border border-white/10 text-slate-300 hover:text-red-400 hover:bg-black/85 transition-colors duration-150"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Delete-failed notice */}
+        {deleteFailed && (
+          <div className="absolute inset-x-0 bottom-0 px-2 py-1 bg-red-950/90 text-red-300 text-[10px] text-center">
+            Delete failed — try again
+          </div>
+        )}
       </div>
 
       {/* ── Card Info ───────────────────────────────────────────────── */}
@@ -133,10 +286,10 @@ function GelCard({ gel, index }: { gel: GelEntry; index: number }) {
           <p className="text-xs text-slate-400">{gel.cardTemplate.team}</p>
         )}
 
-        {/* Parallel */}
-        {gel.cardTemplate.parallelType && (
+        {/* Subheader — matches the checklist row's subheader format */}
+        {subtitle && (
           <p className="text-xs text-slate-400 italic">
-            {gel.cardTemplate.parallelType}
+            {subtitle}
           </p>
         )}
 
@@ -159,6 +312,9 @@ function GelCard({ gel, index }: { gel: GelEntry; index: number }) {
               {gel.notes}
             </p>
           )}
+          <div className="pt-1">
+            <VerificationBadge isVerified={gel.isVerified ?? false} />
+          </div>
         </div>
       </div>
     </motion.div>
@@ -210,7 +366,9 @@ function EmptyGelsState({ onAddGelClick }: { onAddGelClick: () => void }) {
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
-export default function YourGels({ gels, onAddGelClick }: YourGelsProps) {
+export default function YourGels({ gels, onAddGelClick, onEditGel, onDeleteGel }: YourGelsProps) {
+  const [imageTarget, setImageTarget] = useState<CardImageTarget | null>(null);
+
   return (
     <section className="space-y-4">
       {/* ── Section Header ──────────────────────────────────────────── */}
@@ -257,11 +415,16 @@ export default function YourGels({ gels, onAddGelClick }: YourGelsProps) {
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
           >
             {gels.map((gel, i) => (
-              <GelCard key={gel.id} gel={gel} index={i} />
+              <GelCard key={gel.id} gel={gel} index={i} onEdit={onEditGel} onDelete={onDeleteGel} onOpenImage={setImageTarget} />
             ))}
           </motion.div>
         )}
       </AnimatePresence>
+
+      <CardImageModal
+        target={imageTarget}
+        onClose={() => setImageTarget(null)}
+      />
     </section>
   );
 }

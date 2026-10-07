@@ -11,10 +11,10 @@ interface SetHeaderProps {
   sport: string;
   year: number;
   manufacturer: string;
-  totalCardsInSet: number;
+  totalPrintRunInSet: number;
   totalChaseCardsInSet?: number | null;
-  userGelCount: number;         // how many cards this user has gelled
-  cardsOpenedCount: number;     // how many cards the user has opened from this set
+  userGelCount: number;  // how many cards this user has gelled
+  chasesPulled: number;  // set-wide: every confirmed-real pulled copy, across all users
   setImageUrl?: string | null;
 }
 
@@ -78,10 +78,10 @@ export default function SetHeader({
   sport,
   year,
   manufacturer,
-  totalCardsInSet,
+  totalPrintRunInSet,
   totalChaseCardsInSet,
   userGelCount,
-  cardsOpenedCount,
+  chasesPulled,
   setImageUrl,
 }: SetHeaderProps) {
   return (
@@ -95,18 +95,7 @@ export default function SetHeader({
       <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 via-violet-500 to-purple-600" />
 
       <div className="p-6 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-start gap-6">
-
-          {/* ── Set Image (if available) ─────────────────────────────── */}
-          {setImageUrl && (
-            <div className="shrink-0 w-20 h-28 md:w-24 md:h-32 rounded-lg overflow-hidden border border-slate-600/50 shadow-lg shadow-black/40">
-              <img
-                src={setImageUrl}
-                alt={`${setName} set image`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          )}
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
 
           {/* ── Set Info ─────────────────────────────────────────────── */}
           <div className="flex-1 min-w-0">
@@ -122,20 +111,17 @@ export default function SetHeader({
 
             {/* Stat pills row */}
             <div className="flex flex-wrap gap-2 mb-6">
-              <StatPill label="Cards in Set" value={totalCardsInSet} />
-              {totalChaseCardsInSet != null && (
-                <StatPill label="Chase Cards" value={totalChaseCardsInSet} />
-              )}
-              <StatPill label="Cards Opened" value={cardsOpenedCount} />
-              <StatPill label="Gels Logged" value={userGelCount} />
+              <StatPill label="Chases in Set" value={totalPrintRunInSet} />
+              <StatPill label="Chases Pulled" value={chasesPulled} />
+              <StatPill label="Your Gels" value={userGelCount} />
             </div>
 
             {/* Progress bars */}
             <div className="space-y-4 max-w-lg">
               <ProgressBar
                 label="Set Completion"
-                value={userGelCount}
-                max={totalCardsInSet}
+                value={chasesPulled}
+                max={totalPrintRunInSet}
                 color="bg-gradient-to-r from-blue-500 to-violet-500"
               />
               {totalChaseCardsInSet != null && totalChaseCardsInSet > 0 && (
@@ -147,6 +133,38 @@ export default function SetHeader({
                 />
               )}
             </div>
+          </div>
+
+          {/* ── Set Image ──────────────────────────────────────────────
+              Always rendered so every set's banner has the same shape.
+              Curated only by the developer, directly in the database —
+              see prisma/set-image.ts — there is no in-app upload control. */}
+          <div className="shrink-0 w-40 h-40 md:w-52 md:h-52 self-center md:self-start rounded-lg overflow-hidden border border-slate-600/50 shadow-lg shadow-black/40 bg-slate-900/60">
+            {setImageUrl ? (
+              <img
+                src={setImageUrl}
+                alt={`${setName} set image`}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-slate-700/60 text-slate-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  className="w-7 h-7"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+                <span className="text-[10px] uppercase tracking-wider font-medium">
+                  No Image
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
