@@ -4,6 +4,7 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import { generateUniqueHandle } from "@/lib/userHandle";
 import type { NextAuthOptions } from "next-auth";
 
 // ─── AUTH OPTIONS ─────────────────────────────────────────────────────────────
@@ -26,13 +27,26 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    // This callback adds the user's database ID to the session object.
-    // Without this, session.user.id would be undefined.
+    // This callback adds the user's database ID (and handle) to the session
+    // object. Without this, session.user.id would be undefined.
     async session({ session, user }) {
       if (session.user) {
+        const dbUser = user as { handle?: string | null; hasCustomName?: boolean };
         session.user.id = user.id;
+        session.user.handle = dbUser.handle ?? null;
+        session.user.needsName = !dbUser.hasCustomName;
       }
       return session;
+    },
+  },
+
+  events: {
+    // Fires exactly once, right after the PrismaAdapter creates a brand-new
+    // User row — i.e. the very first time someone signs in. We assign their
+    // permanent, unique handle here so it's never missing afterward.
+    async createUser({ user }) {
+      const handle = await generateUniqueHandle(prisma);
+      await prisma.user.update({ where: { id: user.id }, data: { handle } });
     },
   },
 

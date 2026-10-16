@@ -15,7 +15,7 @@ function SignInContent() {
         {/* Logo / App Name */}
         <div className="flex flex-col items-center gap-2">
           <h1 className="text-5xl font-black tracking-tight text-white">
-            Gel List
+            Gel Cards
           </h1>
           <p className="text-zinc-400 text-sm tracking-widest uppercase">
             Know Every Hit In Every Set

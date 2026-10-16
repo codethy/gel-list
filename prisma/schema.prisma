@@ -58,6 +58,20 @@ model User {
   profileImage        String?
   usernameLastChanged DateTime?
 
+  // Auto-generated the first time a user signs in (see events.createUser in
+  // app/api/auth/[...nextauth]/route.ts) — 5 lowercase-alphanumeric characters,
+  // unique, shown only to the user themself under their name. Distinct from
+  // `username` above, which is a different, unrelated display-name fallback
+  // used for gel attribution.
+  handle String? @unique
+
+  // False right after first sign-in — Google supplies an initial `name`, but
+  // every new user is required to pick their own display name via a blocking
+  // pop-up (see components/NameSetupModal.tsx) before using the app. This
+  // flips to true once they submit that form; names don't need to be unique,
+  // since `handle` already disambiguates users with the same name.
+  hasCustomName Boolean @default(false)
+
   // Developer-only access to /admin/gels — set by hand via prisma/make-admin.ts,
   // there is no in-app way to grant this.
   isAdmin Boolean @default(false)

@@ -13,7 +13,7 @@ export default function Navbar() {
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2 shrink-0">
         <span className="text-xl font-black tracking-tight text-white">
-          Gel List
+          Gel Cards
         </span>
       </Link>
 
@@ -32,12 +32,20 @@ export default function Navbar() {
           <div className="w-24 h-6 rounded bg-zinc-700 animate-pulse" />
         ) : session?.user ? (
           <div className="flex items-center gap-3">
-            {/* Username only — no profile picture */}
+            {/* Name only — no profile picture. The handle underneath is
+                private: only the signed-in user ever sees their own. */}
             <Link
               href="/profile"
-              className="text-sm text-zinc-300 hover:text-white transition-colors font-medium"
+              className="flex flex-col items-end leading-tight"
             >
-              {session.user.name}
+              <span className="text-sm text-zinc-300 hover:text-white transition-colors font-medium">
+                {session.user.name}
+              </span>
+              {session.user.handle && (
+                <span className="text-[11px] text-zinc-500">
+                  @{session.user.handle}
+                </span>
+              )}
             </Link>
 
             <button

@@ -7,7 +7,7 @@ import Navbar from "@/components/Navbar";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-
+  title: "Gel Cards",
   description: "Your card collection tracker",
 };
 

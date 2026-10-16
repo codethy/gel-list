@@ -31,7 +31,7 @@ npx tsx prisma/create-set.ts         # create a single CardSet record
 
 ## Architecture
 
-**Gel List** is a card-collection tracker (sports/TCG/entertainment cards). Users browse official card **sets**, view a set's **checklist** of cards, and log the physical cards they own (**"gels"**) against checklist entries.
+**Gel Cards** is a card-collection tracker (sports/TCG/entertainment cards). Users browse official card **sets**, view a set's **checklist** of cards, and log the physical cards they own (**"gels"**) against checklist entries.
 
 ### Data layer (Prisma 7, driver-adapter pattern)
 
