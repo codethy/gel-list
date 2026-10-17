@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import heic2any from "heic2any";
 import type { GelEntry } from "./YourGels";
 import { playerSubtitle } from "./ChecklistTable";
+import { useUploadThing } from "@/lib/uploadthing";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -81,17 +82,6 @@ export const MONTHS = [
 ];
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-
-// Reads a File/Blob and resolves with a base64 data URL string.
-// This is used for the card image upload — no server upload endpoint needed.
-function readFileAsDataURL(file: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 // iPhones save photos as HEIC by default. It's a valid "image/*" file (so it
 // passes the file-type check and iOS lets you pick it), but browsers other
@@ -190,12 +180,16 @@ export function ImageUploadField({
   onChange,
 }: {
   label: string;
-  value: string;         // base64 data URL, or "" if nothing selected
-  onChange: (dataUrl: string) => void;
+  value: string;         // the uploaded image's URL, or "" if nothing selected
+  onChange: (url: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isLoading, setIsLoading]     = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const { startUpload, isUploading } = useUploadThing("cardImage", {
+    onUploadError: () => {
+      alert("Could not upload this image. Please try again.");
+    },
+  });
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -208,14 +202,18 @@ export function ImageUploadField({
       return;
     }
 
-    setIsLoading(true);
     try {
-      let blobToStore: Blob = file;
+      let fileToUpload: File = file;
 
       if (isHeicFile(file)) {
         setIsConverting(true);
         try {
-          blobToStore = await convertHeicToJpeg(file);
+          const jpegBlob = await convertHeicToJpeg(file);
+          fileToUpload = new File(
+            [jpegBlob],
+            file.name.replace(/\.(heic|heif)$/i, ".jpg"),
+            { type: "image/jpeg" }
+          );
         } catch {
           alert("Could not convert this HEIC photo. Please try a different image.");
           return;
@@ -224,20 +222,25 @@ export function ImageUploadField({
         }
       }
 
-      // 5 MB size guard, checked against what's actually about to be
-      // encoded — a converted JPEG can end up a different size than the
-      // original file.
-      if (blobToStore.size > 5 * 1024 * 1024) {
-        alert("Please choose an image smaller than 5 MB.");
+      // 16 MB guard, matching the UploadThing route's own maxFileSize —
+      // checked against what's actually about to be uploaded, since a
+      // converted JPEG can end up a different size than the original file.
+      if (fileToUpload.size > 16 * 1024 * 1024) {
+        alert("Please choose an image smaller than 16 MB.");
         return;
       }
 
-      const dataUrl = await readFileAsDataURL(blobToStore);
-      onChange(dataUrl);
+      // Uploads straight to UploadThing's storage — the actual image bytes
+      // never pass through our own API, only the resulting URL does.
+      const result = await startUpload([fileToUpload]);
+      if (!result?.[0]) {
+        alert("Could not upload this image. Please try again.");
+        return;
+      }
+      onChange(result[0].ufsUrl);
     } catch {
-      alert("Could not read the file. Please try again.");
+      alert("Could not upload this image. Please try again.");
     } finally {
-      setIsLoading(false);
       // Reset input so the same file can be re-selected if the user removes and re-uploads
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -291,7 +294,7 @@ export function ImageUploadField({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={isLoading}
+          disabled={isUploading}
           className="
             w-full flex items-center justify-center gap-2
             px-3 py-3 rounded-xl
@@ -301,7 +304,7 @@ export function ImageUploadField({
             transition-all duration-150 group
           "
         >
-          {isLoading ? (
+          {isUploading ? (
             <div className="w-4 h-4 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
           ) : (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform duration-150">
@@ -311,9 +314,9 @@ export function ImageUploadField({
             </svg>
           )}
           <span className="text-sm font-medium">
-            {isConverting ? "Converting photo..." : isLoading ? "Reading file..." : "Upload Image"}
+            {isConverting ? "Converting photo..." : isUploading ? "Uploading..." : "Upload Image"}
           </span>
-          <span className="text-xs text-slate-600">JPG, PNG, WEBP — max 5 MB</span>
+          <span className="text-xs text-slate-600">JPG, PNG, WEBP — max 16 MB</span>
         </button>
       )}
     </div>

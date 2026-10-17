@@ -59,8 +59,9 @@ NextAuth **v4** (`next-auth@^4`), configured in `app/api/auth/[...nextauth]/rout
 
 Submitting the Add Gel modal posts to `app/api/sets/[id]/gels/route.ts`, which creates a `PortfolioCard`. Other API routes: `app/api/sets/route.ts` (paginated/filterable set list for the home page grid), `app/api/sets/[id]/checklist/route.ts` (paginated/filterable checklist rows), `app/api/sets/[id]/cards/[templateId]/like/route.ts` (toggle a `CardTemplateLike`).
 
+Card front/back images are uploaded directly to UploadThing from the browser (`components/set-detail/AddGelModal.tsx`'s `ImageUploadField`, via `lib/uploadthing.ts`'s `useUploadThing` hook) — the gel-creation API routes only ever receive the resulting URL string, never raw image bytes. This replaced an earlier base64-data-URL approach that worked locally but broke in production: Vercel caps a serverless function's request body at 4.5MB, which a base64-encoded phone photo easily exceeds. The file router lives in `app/api/uploadthing/core.ts` (auth-gated via the session, 16MB max per image) with its route handler in `app/api/uploadthing/route.ts`. Requires `UPLOADTHING_TOKEN` in the environment (the v7+ SDK's single-token format — from the UploadThing dashboard's API Keys page, "V7+" tab — not the older `UPLOADTHING_SECRET`/`UPLOADTHING_APP_ID` pair).
+
 ### Known gaps (relevant when touching this code)
 
 - `ChecklistTable.tsx` renders UI for like counts and a `CardHistoryEvent` chain-of-custody timeline, but `checklist/route.ts` always returns `likeCount: 0` / `cardHistory: []` — the backend for that isn't wired up yet.
 - `components/providers/SessionProvider.tsx` is an unused duplicate of `components/Providers.tsx` (the one actually used in `app/layout.tsx`).
-- `AddGelModal` stores card photos as base64 data URLs rather than using the already-installed `uploadthing` package.
