@@ -9,7 +9,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { dispatchWelcome } from "@/lib/welcomeEvent";
 
 const NAME_MIN_LENGTH = 3;
 const NAME_MAX_LENGTH = 30;
@@ -17,6 +19,7 @@ const ALLOWED_CHARS = /[^A-Za-z0-9 ]/g;
 
 export default function NameSetupModal() {
   const { data: session, status, update } = useSession();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +60,8 @@ export default function NameSetupModal() {
       // Refreshes the session so session.user.needsName flips to false
       // and session.user.name picks up the new value everywhere (e.g. Navbar).
       await update();
+      dispatchWelcome(trimmed);
+      router.push("/");
     } finally {
       setSubmitting(false);
     }
