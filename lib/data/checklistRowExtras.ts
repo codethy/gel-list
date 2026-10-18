@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { CardHistoryEvent, LoggedGel } from "@/components/set-detail/ChecklistTable";
+import { getProductLabel } from "@/lib/productTypes";
 
 type NameableUser = { username: string | null; name: string | null } | null;
 
@@ -89,6 +90,10 @@ export async function getChecklistRowExtras(
         createdAt:         true,
         cardFrontImageUrl: true,
         cardBackImageUrl:  true,
+        hitCity:           true,
+        hitCountry:        true,
+        productType:       true,
+        productTypeOther:  true,
         user:              { select: userSelect },
       },
     }),
@@ -163,6 +168,7 @@ export async function getChecklistRowExtras(
       // it's since changed hands, otherwise whoever is holding it now.
       const originalHolder = cardTransfers[0]?.fromUser ?? pc.user;
       const { username, displayName } = nameFor(originalHolder);
+      const locationParts = [pc.hitCity, pc.hitCountry].filter(Boolean);
       events.push({
         id:         `${pc.id}-acquired`,
         eventType:  pc.acquisitionMethod,
@@ -170,6 +176,8 @@ export async function getChecklistRowExtras(
         displayName,
         occurredAt: pc.createdAt.toISOString(),
         note:       pc.notes,
+        location:   locationParts.length > 0 ? locationParts.join(", ") : null,
+        product:    pc.productType ? getProductLabel(String(pc.productType), pc.productTypeOther) : null,
       });
     }
 

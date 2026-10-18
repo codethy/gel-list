@@ -7,14 +7,15 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "HOBBY_BOX", label: "Hobby Box" },
   { value: "BLASTER_BOX", label: "Blaster Box" },
   { value: "JUMBO_BOX", label: "Jumbo Box" },
+  { value: "BREAKERS_DELIGHT_BOX", label: "Breakers Delight Box" },
   { value: "HANGER_BOX", label: "Hanger Box" },
   { value: "BOOSTER_PACK", label: "Booster Pack" },
-  { value: "CASE", label: "Case" },
   { value: "ETB", label: "ETB" },
   { value: "BOOSTER_BUNDLE", label: "Booster Bundle" },
   { value: "UPC", label: "UPC" },
   { value: "SPC", label: "SPC" },
   { value: "BOOSTER_BOX", label: "Booster Box" },
+  { value: "TROVE", label: "Trove" },
   { value: "OTHER", label: "Other" },
 ];
 

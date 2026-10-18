@@ -23,6 +23,10 @@ export interface CardHistoryEvent {
   displayName?: string | null;
   occurredAt?: string | null;
   note?: string | null;
+  // Only ever populated on the "acquired" event (PULLED/BOUGHT/etc.) —
+  // transfer and ownership events have no hit-context data to show.
+  location?: string | null;
+  product?: string | null;
 }
 
 export type CardStatus = "Available" | "Owned" | "Surfaced";
@@ -292,6 +296,16 @@ function CardHistoryDrawer({ history }: { history: CardHistoryEvent[] }) {
                         {event.note && <span className="text-slate-500 italic"> &bull; {event.note}</span>}
                       </p>
                       {dateStr && <p className="text-[11px] text-slate-600 mt-0.5">{dateStr}</p>}
+                      {event.location && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          <span className="font-bold text-white">Location:</span> {event.location}
+                        </p>
+                      )}
+                      {event.product && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          <span className="font-bold text-white">Product:</span> {event.product}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );

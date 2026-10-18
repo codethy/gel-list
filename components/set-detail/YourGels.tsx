@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget } from "./ChecklistTable";
+import { getProductLabel } from "@/lib/productTypes";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,8 @@ function GelCard({
       : gel.hitYear
       ? String(gel.hitYear)
       : null;
+  const isPulled = gel.acquisitionMethod === "PULLED";
+  const productLabel = gel.productType ? getProductLabel(gel.productType, gel.productTypeOther ?? null) : null;
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isDeleting, setIsDeleting]             = useState(false);
@@ -299,11 +302,22 @@ function GelCard({
         <div className="mt-auto pt-2 border-t border-slate-700/50 space-y-1">
           {hitDate && (
             <p className="text-[11px] text-slate-500">
-              Pulled: {hitDate}
-              {location ? ` in ${location}` : ""}
+              <span className="font-bold text-white">Pulled:</span> {hitDate}
             </p>
           )}
-          {gel.acquisitionMethod && (
+          {location && (
+            <p className="text-[11px] text-slate-500">
+              <span className="font-bold text-white">Location:</span> {location}
+            </p>
+          )}
+          {productLabel && (
+            <p className="text-[11px] text-slate-500">
+              <span className="font-bold text-white">Product:</span> {productLabel}
+            </p>
+          )}
+          {/* Suppressed when PULLED — "Pulled: {date}" above already says
+              this; still shown for BOUGHT, where it's not redundant. */}
+          {!isPulled && gel.acquisitionMethod && (
             <p className="text-[11px] text-slate-500 capitalize">
               {gel.acquisitionMethod.toLowerCase()}
               {gel.seller ? ` from ${gel.seller}` : ""}

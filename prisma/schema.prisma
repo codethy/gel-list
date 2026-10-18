@@ -303,6 +303,7 @@ enum ProductType {
   HOBBY_BOX
   BLASTER_BOX
   JUMBO_BOX
+  BREAKERS_DELIGHT_BOX
   HANGER_BOX
   BOOSTER_PACK
   CASE
@@ -311,6 +312,7 @@ enum ProductType {
   UPC
   SPC
   BOOSTER_BOX
+  TROVE
   OTHER
 }
 
