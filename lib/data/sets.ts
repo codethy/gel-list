@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import type { CardHistoryEvent, LoggedGel } from "@/components/set-detail/ChecklistTable";
 import { getChecklistRowExtras } from "@/lib/data/checklistRowExtras";
+import { getProductLabel } from "@/lib/productTypes";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,8 @@ export interface SetDetailData {
     cardBackImageUrl:  string | null;
     seller:            string | null;
     notes:             string | null;
+    productType:       string | null;
+    productTypeOther:  string | null;
     cardTemplate: {
       playerName:    string;
       cardType:      string;
@@ -88,6 +91,16 @@ export interface SetDetailData {
 
   availableTeams: string[];
   availableCategories:  string[];   // ✅ NEW — distinct CardCategory values for this set
+
+  // Admin-curated product catalog for this set (see SetProduct in
+  // prisma/schema.prisma) — powers the "Which Product" dropdown in the Log
+  // a Gel form, enabled only when "How did you get it?" is "Pulled".
+  products: {
+    id:               string;
+    productType:      string;
+    productTypeOther: string | null;
+    label:            string;
+  }[];
 }
 
 // ─── MAIN FETCH FUNCTION ──────────────────────────────────────────────────────
@@ -128,6 +141,7 @@ export async function getSetDetail(
     printRunSum,            // ✅ NEW — see step 5c below
     unlimitedPrintRunCount, // ✅ NEW
     chasesPulledInSet,      // ✅ NEW — see step 5d below
+    setProducts,            // ✅ NEW
   ] = await Promise.all([
 
     // ── 2a. Total count ──────────────────────────────────────────────────
@@ -187,6 +201,8 @@ export async function getSetDetail(
         cardBackImageUrl:  true,
         seller:            true,
         notes:             true,
+        productType:       true,
+        productTypeOther:  true,
         checklistCard: {
           select: {
             id:            true,
@@ -267,6 +283,13 @@ export async function getSetDetail(
         ],
       },
     }),
+
+    // ── 2j. This set's admin-curated product catalog ─────────────────── ✅ NEW
+    prisma.setProduct.findMany({
+      where:   { cardSetId: setId },
+      orderBy: { createdAt: "asc" },
+      select:  { id: true, productType: true, productTypeOther: true },
+    }),
   ]);
 
   // ── 3. Shape user gels ──────────────────────────────────────────────────
@@ -290,6 +313,8 @@ export async function getSetDetail(
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
     notes:             pc.notes             ?? null,
+    productType:       pc.productType != null ? String(pc.productType) : null,
+    productTypeOther:  pc.productTypeOther  ?? null,
     cardTemplate: {
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),
@@ -384,5 +409,11 @@ export async function getSetDetail(
     })),
     availableTeams,
     availableCategories,   // ✅ NEW
+    products: setProducts.map((p) => ({
+      id:               p.id,
+      productType:      String(p.productType),
+      productTypeOther: p.productTypeOther,
+      label:            getProductLabel(String(p.productType), p.productTypeOther),
+    })),
   };
 }

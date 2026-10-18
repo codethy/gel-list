@@ -54,6 +54,8 @@ export async function PATCH(
   const {
     loggedFor,
     acquisitionMethod,
+    productType,
+    productTypeOther,
     serialNumber,
     hitYear,
     hitMonth,
@@ -66,6 +68,11 @@ export async function PATCH(
   } = body;
 
   const isInHand = loggedFor !== "OTHER";
+
+  // "Which Product" only ever applies to "my own gel, pulled it" — re-derived
+  // server-side rather than trusting the client honored the form's
+  // enabled/disabled state.
+  const productApplies = isInHand && acquisitionMethod === "PULLED";
 
   if (typeof cardFrontImageUrl !== "string" || !cardFrontImageUrl) {
     return NextResponse.json(
@@ -99,6 +106,14 @@ export async function PATCH(
         typeof acquisitionMethod === "string"
           ? (acquisitionMethod as never)
           : null,
+      productType:
+        productApplies && typeof productType === "string"
+          ? (productType as never)
+          : null,
+      productTypeOther:
+        productApplies && typeof productTypeOther === "string"
+          ? productTypeOther
+          : null,
       serialNumber:
         typeof serialNumber === "number" ? serialNumber : null,
       hitYear:
@@ -124,6 +139,8 @@ export async function PATCH(
       isInHand:          true,
       isVerified:        true,
       acquisitionMethod: true,
+      productType:       true,
+      productTypeOther:  true,
       serialNumber:      true,
       hitYear:           true,
       hitMonth:          true,
@@ -153,6 +170,8 @@ export async function PATCH(
     isInHand:          portfolioCard.isInHand,
     isVerified:        portfolioCard.isVerified,
     acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
+    productType:       portfolioCard.productType ? String(portfolioCard.productType) : null,
+    productTypeOther:  portfolioCard.productTypeOther  ?? null,
     serialNumber:      portfolioCard.serialNumber      ?? null,
     hitYear:           portfolioCard.hitYear           ?? null,
     hitMonth:          portfolioCard.hitMonth          ?? null,

@@ -20,12 +20,23 @@ export interface ChecklistCardOption {
   team?: string | null;
 }
 
+// One entry in this set's admin-curated product catalog (see SetProduct in
+// prisma/schema.prisma) — options for the "Which Product" dropdown, enabled
+// only when "How did you get it?" is "Pulled".
+export interface ProductOption {
+  id:               string;
+  productType:      string;
+  productTypeOther: string | null;
+  label:            string;
+}
+
 interface AddGelModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (gel: GelEntry) => void;
   setId: string;
   templates: ChecklistCardOption[];
+  products: ProductOption[];
   preselectedChecklistCardId?: string | null;
   preselectedPlayerName?: string | null;
   // When set, the modal edits this existing gel instead of creating a new
@@ -49,12 +60,17 @@ type LoggedFor = "SELF" | "OTHER";
 interface FormState {
   checklistCardId: string;
   acquisitionMethod: string;
+  // The selected ProductOption's id (not the raw ProductType) — a set can
+  // have more than one "Other" entry with different custom labels, so the
+  // option's own id is what disambiguates which one was picked. Resolved
+  // back to productType/productTypeOther at submit time.
+  productOptionId: string;
   serialNumber: string;
   hitYear: string;
   hitMonth: string;
   hitCity: string;
   hitCountry: string;
-  // These now hold base64 data URLs from the uploaded files, not typed URLs
+  // These hold UploadThing URLs once uploaded, not the raw file
   cardFrontImageUrl: string;
   cardBackImageUrl: string;
   seller: string;
@@ -64,6 +80,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   checklistCardId:   "",
   acquisitionMethod: "",
+  productOptionId:   "",
   serialNumber:      "",
   hitYear:           "",
   hitMonth:          "",
@@ -154,13 +171,15 @@ export function Textarea({
 export function Select({
   value,
   onChange,
+  disabled,
   children,
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       value={value}
       onChange={onChange}
-      className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150 cursor-pointer"
+      disabled={disabled}
+      className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {children}
     </select>
@@ -461,6 +480,7 @@ export default function AddGelModal({
   onSuccess,
   setId,
   templates,
+  products,
   preselectedChecklistCardId,
   editingGel,
 }: AddGelModalProps) {
@@ -488,9 +508,19 @@ export default function AddGelModal({
       // originally logged under — there's no reassigning SELF ↔ OTHER.
       setStep("form");
       setLoggedFor(editingGel.isInHand === false ? "OTHER" : "SELF");
+      // Resolve which ProductOption (if any) matches this gel's stored
+      // productType/productTypeOther — note this can come up empty if the
+      // admin has since removed that product from the set's catalog, in
+      // which case "Which Product" just reopens unselected.
+      const matchingProduct = products.find(
+        (p) =>
+          p.productType === (editingGel.productType ?? null) &&
+          p.productTypeOther === (editingGel.productTypeOther ?? null)
+      );
       setForm({
         checklistCardId:   editingGel.cardTemplateId,
         acquisitionMethod: editingGel.acquisitionMethod ?? "",
+        productOptionId:   editingGel.productType ? (matchingProduct?.id ?? "") : "",
         serialNumber:      editingGel.serialNumber      != null ? String(editingGel.serialNumber) : "",
         hitYear:           editingGel.hitYear            != null ? String(editingGel.hitYear)      : "",
         hitMonth:          editingGel.hitMonth            != null ? String(editingGel.hitMonth)     : "",
@@ -507,7 +537,7 @@ export default function AddGelModal({
       setForm({ ...EMPTY_FORM, checklistCardId: preselectedChecklistCardId ?? "" });
     }
     setError(null);
-  }, [isOpen, editingGel, preselectedChecklistCardId]);
+  }, [isOpen, editingGel, preselectedChecklistCardId, products]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -563,6 +593,14 @@ export default function AddGelModal({
         ? `/api/sets/${setId}/gels/${editingGel!.id}`
         : `/api/sets/${setId}/gels`;
 
+      // "Which Product" only ever applies to the "my own gel, pulled it"
+      // case — resolve the chosen ProductOption's id back to the raw
+      // productType/productTypeOther pair the server stores.
+      const selectedProduct =
+        !isOther && form.acquisitionMethod === "PULLED"
+          ? products.find((p) => p.id === form.productOptionId)
+          : undefined;
+
       const res = await fetch(url, {
         method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -575,12 +613,14 @@ export default function AddGelModal({
           cardTemplateId:    form.checklistCardId,
           loggedFor:         loggedFor,
           acquisitionMethod: form.acquisitionMethod || null,
+          productType:       selectedProduct?.productType ?? null,
+          productTypeOther:  selectedProduct?.productTypeOther ?? null,
           serialNumber:      form.serialNumber ? parseInt(form.serialNumber) : null,
           hitYear:           form.hitYear   ? parseInt(form.hitYear)   : null,
           hitMonth:          form.hitMonth  ? parseInt(form.hitMonth)  : null,
           hitCity:           form.hitCity   || null,
           hitCountry:        form.hitCountry || null,
-          // These will be base64 data URLs or null if no file was chosen
+          // These hold UploadThing URLs, or null if no image was chosen
           cardFrontImageUrl: form.cardFrontImageUrl || null,
           cardBackImageUrl:  form.cardBackImageUrl  || null,
           seller:            form.seller || null,
@@ -753,7 +793,19 @@ export default function AddGelModal({
               {/* ── Acquisition Method ───────────────────────────────────── */}
               <div>
                 <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
-                <Select value={form.acquisitionMethod} onChange={setField("acquisitionMethod")}>
+                <Select
+                  value={form.acquisitionMethod}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      acquisitionMethod: value,
+                      // "Which Product" only applies to "Pulled" — clear
+                      // any selection made while it was briefly enabled.
+                      productOptionId: value === "PULLED" ? prev.productOptionId : "",
+                    }));
+                  }}
+                >
                   {isOther ? (
                     <>
                       <option value="" className="bg-slate-900">Select source...</option>
@@ -772,6 +824,32 @@ export default function AddGelModal({
                   )}
                 </Select>
               </div>
+
+              {/* ── Which Product (SELF flow only, enabled only once
+                  "Pulled" is selected above) ───────────────────────────── */}
+              {!isOther && (
+                <div>
+                  <Label>Which Product</Label>
+                  <Select
+                    value={form.productOptionId}
+                    onChange={setField("productOptionId")}
+                    disabled={form.acquisitionMethod !== "PULLED"}
+                  >
+                    {form.acquisitionMethod !== "PULLED" ? (
+                      <option value="" className="bg-slate-900">Select &quot;Pulled&quot; above first</option>
+                    ) : products.length === 0 ? (
+                      <option value="" className="bg-slate-900">No products added for this set yet</option>
+                    ) : (
+                      <>
+                        <option value="" className="bg-slate-900">Select product...</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
+                        ))}
+                      </>
+                    )}
+                  </Select>
+                </div>
+              )}
 
               {/* ── Seller (conditional on BOUGHT, "my own gel" flow only —
                   the "someone else's gel" flow captures this in Notes instead) ── */}

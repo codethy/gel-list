@@ -22,6 +22,11 @@ import { prisma } from "@/lib/prisma";
 //   acquisitionMethod  — optional enum string. For loggedFor "SELF":
 //                        "PULLED" | "BOUGHT". For "OTHER": "BREAKER" |
 //                        "EBAY" | "FRIEND" | "SOCIAL_MEDIA" | "OTHER".
+//   productType        — optional ProductType enum string (e.g. "HOBBY_BOX")
+//                        — only stored when loggedFor is "SELF" and
+//                        acquisitionMethod is "PULLED"; ignored otherwise.
+//   productTypeOther   — optional string, only meaningful when productType
+//                        is "OTHER".
 //   serialNumber       — optional number
 //   hitYear            — optional number
 //   hitMonth           — optional number
@@ -66,6 +71,8 @@ export async function POST(
     cardTemplateId: checklistCardId,
     loggedFor,
     acquisitionMethod,
+    productType,
+    productTypeOther,
     serialNumber,
     hitYear,
     hitMonth,
@@ -81,6 +88,11 @@ export async function POST(
   // client-sent boolean directly, so there's one unambiguous place deciding
   // what counts as "this user's own gel" vs. "a reported sighting."
   const isInHand = loggedFor !== "OTHER";
+
+  // "Which Product" only ever applies to "my own gel, pulled it" — re-derived
+  // server-side rather than trusting the client honored the form's
+  // enabled/disabled state.
+  const productApplies = isInHand && acquisitionMethod === "PULLED";
 
   // ── 3. Validate required fields ──────────────────────────────────────────────
   if (!checklistCardId || typeof checklistCardId !== "string") {
@@ -150,6 +162,14 @@ export async function POST(
         typeof acquisitionMethod === "string"
           ? (acquisitionMethod as never)
           : undefined,
+      productType:
+        productApplies && typeof productType === "string"
+          ? (productType as never)
+          : null,
+      productTypeOther:
+        productApplies && typeof productTypeOther === "string"
+          ? productTypeOther
+          : null,
       serialNumber:
         typeof serialNumber === "number" ? serialNumber : null,
       hitYear:
@@ -177,6 +197,8 @@ export async function POST(
       isInHand:          true,
       isVerified:        true,
       acquisitionMethod: true,
+      productType:       true,
+      productTypeOther:  true,
       serialNumber:      true,
       hitYear:           true,
       hitMonth:          true,
@@ -209,6 +231,8 @@ export async function POST(
     isInHand:          portfolioCard.isInHand,
     isVerified:        portfolioCard.isVerified,
     acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
+    productType:       portfolioCard.productType ? String(portfolioCard.productType) : null,
+    productTypeOther:  portfolioCard.productTypeOther  ?? null,
     serialNumber:      portfolioCard.serialNumber      ?? null,
     hitYear:           portfolioCard.hitYear           ?? null,
     hitMonth:          portfolioCard.hitMonth          ?? null,

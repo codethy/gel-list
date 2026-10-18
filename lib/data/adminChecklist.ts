@@ -8,6 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { CardCategory, CardTier } from "@prisma/client";
+import { getProductLabel } from "@/lib/productTypes";
 
 export interface AdminChecklistSet {
   id:        string;
@@ -32,9 +33,17 @@ export interface AdminChecklistCard {
   sortOrder:     number;
 }
 
+export interface AdminProductRow {
+  id:               string;
+  productType:      string;
+  productTypeOther: string | null;
+  label:            string;
+}
+
 export interface AdminChecklistSetDetail {
-  set:   { id: string; name: string; year: number; brand: string; category: string };
-  cards: AdminChecklistCard[];
+  set:      { id: string; name: string; year: number; brand: string; category: string };
+  cards:    AdminChecklistCard[];
+  products: AdminProductRow[];
 }
 
 // Every set, newest first, for the /admin/sets picker page.
@@ -87,6 +96,12 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
     },
   });
 
+  const products = await prisma.setProduct.findMany({
+    where:   { cardSetId: setId },
+    orderBy: { createdAt: "asc" },
+    select:  { id: true, productType: true, productTypeOther: true },
+  });
+
   return {
     set: {
       id:       cardSet.id,
@@ -107,6 +122,12 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       variationName: c.variationName,
       isHit:         c.isHit,
       sortOrder:     c.sortOrder,
+    })),
+    products: products.map((p) => ({
+      id:               p.id,
+      productType:      String(p.productType),
+      productTypeOther: p.productTypeOther,
+      label:            getProductLabel(String(p.productType), p.productTypeOther),
     })),
   };
 }

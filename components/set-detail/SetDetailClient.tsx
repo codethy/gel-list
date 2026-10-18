@@ -9,7 +9,7 @@ import ChecklistTable, {
   type ChecklistRow,
   type ChecklistMeta,
 } from "./ChecklistTable";
-import AddGelModal, { type ChecklistCardOption } from "./AddGelModal";
+import AddGelModal, { type ChecklistCardOption, type ProductOption } from "./AddGelModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +37,9 @@ interface SetDetailClientProps {
 
   // All card templates for the Add Gel modal search
   allTemplates: ChecklistCardOption[];
+
+  // This set's admin-curated product catalog — powers "Which Product"
+  products: ProductOption[];
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -58,6 +61,7 @@ export default function SetDetailClient({
   availableTeams,
   availableCategories,   // ✅ NEW
   allTemplates,
+  products,
 }: SetDetailClientProps) {
 
   // ── Gel state ──────────────────────────────────────────────────────────────
@@ -255,6 +259,7 @@ export default function SetDetailClient({
         onSuccess={handleGelSuccess}
         setId={setId}
         templates={allTemplates}
+        products={products}
         preselectedChecklistCardId={preselectedChecklistCardId}
         preselectedPlayerName={preselectedPlayerName}
         editingGel={editingGel}

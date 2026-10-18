@@ -12,6 +12,7 @@ import {
   VALID_CARD_TIERS,
 } from "@/lib/data/adminChecklist";
 import AdminChecklistClient from "@/components/admin/AdminChecklistClient";
+import AdminProductsClient from "@/components/admin/AdminProductsClient";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -39,6 +40,10 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
           initialCards={detail.cards}
           cardCategoryOptions={VALID_CARD_CATEGORIES}
           cardTierOptions={VALID_CARD_TIERS}
+        />
+        <AdminProductsClient
+          setId={detail.set.id}
+          initialProducts={detail.products}
         />
       </div>
     </div>

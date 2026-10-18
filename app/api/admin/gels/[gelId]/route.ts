@@ -67,6 +67,11 @@ export async function PATCH(
 
   const portfolioCard = await prisma.portfolioCard.update({
     where: { id: gelId },
+    // Deliberately doesn't mention productType/productTypeOther — this
+    // admin quick-edit form doesn't have a "Which Product" field, and
+    // Prisma leaves a column untouched when it's absent from `data`, so
+    // omitting it here preserves whatever was set via the user-facing
+    // AddGelModal rather than silently wiping it on every admin edit.
     data: {
       isInHand,
       acquisitionMethod:

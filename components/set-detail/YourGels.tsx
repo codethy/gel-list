@@ -30,6 +30,8 @@ export interface GelEntry {
   acquisitionMethod?: string | null;
   seller?: string | null;
   notes?: string | null;
+  productType?: string | null;
+  productTypeOther?: string | null;
   cardTemplate: {
     playerName: string;
     cardType: string;
