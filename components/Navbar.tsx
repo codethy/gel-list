@@ -2,6 +2,7 @@
 
 import { useSession, signOut, signIn } from "next-auth/react";
 import Link from "next/link";
+import SetSearchBar from "./SetSearchBar";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -19,11 +20,7 @@ export default function Navbar() {
 
       {/* Search Bar */}
       <div className="flex-1 max-w-xl mx-auto">
-        <input
-          type="text"
-          placeholder="Search sets, players, series..."
-          className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
-        />
+        <SetSearchBar />
       </div>
 
       {/* Right side */}

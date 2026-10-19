@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Sidebar, { TAXONOMY, SidebarFilters } from "@/components/Sidebar";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -176,7 +177,13 @@ function groupByCategory(sets: SetItem[]): Record<string, SetItem[]> {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function HomePage() {
+function HomeContent() {
+  const searchParams = useSearchParams();
+  // Set via the Navbar's search bar (pressing Enter navigates to
+  // /?search=...) — reusing the same filterable grid "Filter" already uses,
+  // rather than a separate search-results view.
+  const searchQuery = searchParams.get("search") ?? "";
+
   const [filters, setFilters] = useState<SidebarFilters>({
     subcategories: new Set<string>(),
     years:         new Set<number>(),
@@ -206,7 +213,7 @@ export default function HomePage() {
     }
 
     try {
-      const url  = buildApiUrl(currentFilters, currentCursor ?? undefined);
+      const url  = buildApiUrl(currentFilters, currentCursor ?? undefined, searchQuery);
       const res  = await fetch(url);
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -226,12 +233,12 @@ export default function HomePage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [searchQuery]);
 
-  // ── Re-fetch whenever filters change ────────────────────────────────────
+  // ── Re-fetch whenever filters or the search query change ────────────────
   useEffect(() => {
     fetchSets(filters, null, true);
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── IntersectionObserver ─────────────────────────────────────────────────
   useEffect(() => {
@@ -275,11 +282,22 @@ export default function HomePage() {
           <h1 className="text-3xl font-black text-white tracking-tight">
             Browse Sets
           </h1>
-          {!loading && !isEmpty && (
+          {searchQuery ? (
             <p className="text-zinc-500 text-sm mt-1">
-              {sets.length} set{sets.length !== 1 ? "s" : ""}
-              {hasMore ? "+" : ""} loaded
+              Results for &quot;{searchQuery}&quot;
+              {!loading && ` — ${sets.length}${hasMore ? "+" : ""} found`}
+              {" · "}
+              <Link href="/" className="text-zinc-400 hover:text-white underline underline-offset-2">
+                Clear
+              </Link>
             </p>
+          ) : (
+            !loading && !isEmpty && (
+              <p className="text-zinc-500 text-sm mt-1">
+                {sets.length} set{sets.length !== 1 ? "s" : ""}
+                {hasMore ? "+" : ""} loaded
+              </p>
+            )
           )}
         </div>
 
@@ -347,5 +365,13 @@ export default function HomePage() {
 
       </main>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
   );
 }
