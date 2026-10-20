@@ -93,6 +93,7 @@ model User {
   receivedTransfers CardTransfer[]  @relation("TransferReceiver")
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred from this user
   sentTransfers     CardTransfer[]  @relation("TransferSender")
+  favoriteGels      FavoriteGel[]
 }
 
 // ─── TAXONOMY ───────────────────────────────────────────────────────────────
@@ -423,6 +424,25 @@ model PortfolioCard {
   ripSession    RipSession?    @relation(fields: [ripSessionId], references: [id])
   // ✅ NEW: chain of custody transfers originating from this portfolio entry
   transfers     CardTransfer[]
+  favoritedBy   FavoriteGel[]
+}
+
+// ─── FAVORITE GEL ─────────────────────────────────────────────────────────────
+// A user's hand-picked "Favorite Gels" shown on their profile page (max 6,
+// enforced in app/api/profile/favorites/route.ts, not here) — `order`
+// drives the display sequence, which the user can rearrange.
+model FavoriteGel {
+  id              String   @id @default(cuid())
+  userId          String
+  portfolioCardId String
+  order           Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioCard PortfolioCard @relation(fields: [portfolioCardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, portfolioCardId])
+  @@index([userId, order])
 }
 
 // ─── RIP SESSION ────────────────────────────────────────────────────────────

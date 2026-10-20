@@ -76,13 +76,17 @@ function CardTypeBadge({ type }: { type: string }) {
 
 // ─── SINGLE GEL CARD ─────────────────────────────────────────────────────────
 
-function GelCard({
+// onEdit/onDelete are optional — omitting both renders a view-only card
+// (no hover edit/delete controls), used where editing wouldn't make sense
+// outside the set-detail page's own context (e.g. the profile page's
+// Favorite Gels / All Your Gels views).
+export function GelCard({
   gel, index, onEdit, onDelete, onOpenImage,
 }: {
   gel: GelEntry;
   index: number;
-  onEdit: (gel: GelEntry) => void;
-  onDelete: (gelId: string) => Promise<void>;
+  onEdit?: (gel: GelEntry) => void;
+  onDelete?: (gelId: string) => Promise<void>;
   onOpenImage: (target: CardImageTarget) => void;
 }) {
   const hasFrontImage = Boolean(gel.cardFrontImageUrl);
@@ -106,7 +110,7 @@ function GelCard({
 
   function handleEditClick(e: React.MouseEvent) {
     e.stopPropagation();
-    onEdit(gel);
+    onEdit?.(gel);
   }
 
   function handleDeleteIconClick(e: React.MouseEvent) {
@@ -122,6 +126,7 @@ function GelCard({
 
   async function handleConfirmDelete(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!onDelete) return;
     setIsDeleting(true);
     try {
       await onDelete(gel.id);
@@ -199,6 +204,7 @@ function GelCard({
         )}
 
         {/* Edit / Delete controls — top left, revealed on hover */}
+        {(onEdit || onDelete) && (
         <div
           className={`absolute top-2 left-2 flex items-center gap-1 transition-opacity duration-150 ${
             confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -267,6 +273,7 @@ function GelCard({
             </>
           )}
         </div>
+        )}
 
         {/* Delete-failed notice */}
         {deleteFailed && (
