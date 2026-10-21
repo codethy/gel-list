@@ -34,6 +34,7 @@ interface SetDetailClientProps {
   initialMeta:    ChecklistMeta;
   availableTeams: string[];
   availableCategories: string[];   // ✅ NEW
+  availableTiers: string[];
 
   // All card templates for the Add Gel modal search
   allTemplates: ChecklistCardOption[];
@@ -60,6 +61,7 @@ export default function SetDetailClient({
   initialMeta,
   availableTeams,
   availableCategories,   // ✅ NEW
+  availableTiers,
   allTemplates,
   products,
 }: SetDetailClientProps) {
@@ -181,7 +183,10 @@ export default function SetDetailClient({
       try {
         const params = new URLSearchParams();
         if (filters.search)      params.set("search", filters.search);
-        if (filters.filterType)  params.set("type",   filters.filterType);
+        // TCG sets filter this dropdown by rarity (cardTier) instead of
+        // type (cardCategory) — see ChecklistTable's typeColumnLabel for
+        // the matching display-side decision.
+        if (filters.filterType)  params.set(category === "TCG" ? "tier" : "type", filters.filterType);
         if (filters.filterTeam)  params.set("team",   filters.filterTeam);
         if (filters.page)        params.set("page",   String(filters.page));
 
@@ -204,7 +209,7 @@ export default function SetDetailClient({
         setChecklistLoading(false);
       }
     },
-    [setId]
+    [setId, category]
   );
 
   // ── Derived stats ──────────────────────────────────────────────────────────
@@ -249,6 +254,7 @@ export default function SetDetailClient({
           isLoading={checklistLoading}
           availableTeams={availableTeams}
           availableCategories={availableCategories}   // ✅ NEW
+          availableTiers={availableTiers}
         />
       </div>
 

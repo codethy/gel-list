@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession }          from "next-auth";
 import { authOptions }               from "@/app/api/auth/[...nextauth]/route";
 import { prisma }                    from "@/lib/prisma";
-import { Prisma, CardCategory }      from "@prisma/client";
+import { Prisma, CardCategory, CardTier } from "@prisma/client";
 import { getChecklistRowExtras }     from "@/lib/data/checklistRowExtras";
 // ✅ FIX: import CardCategory (not CardType — that enum doesn't exist)
 
@@ -31,6 +31,7 @@ export async function GET(
   const { searchParams } = new URL(req.url);
   const search     = searchParams.get("search")?.trim() ?? "";
   const filterType = searchParams.get("type")?.trim()   ?? "";
+  const filterTier = searchParams.get("tier")?.trim()   ?? ""; // TCG sets only — see below
   const filterTeam = searchParams.get("team")?.trim()   ?? "";
   const page       = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const pageSize   = Math.min(100, Math.max(1, parseInt(searchParams.get("size") ?? "50")));
@@ -42,6 +43,13 @@ export async function GET(
   const validatedCategory =
     filterType && validCardCategories.includes(filterType as CardCategory)
       ? (filterType as CardCategory)
+      : undefined;
+
+  // Same validation for the TCG-only "Rarity" filter (cardTier).
+  const validCardTiers = Object.values(CardTier);
+  const validatedTier =
+    filterTier && validCardTiers.includes(filterTier as CardTier)
+      ? (filterTier as CardTier)
       : undefined;
 
   // Search splits on whitespace into keywords — every keyword must match
@@ -95,6 +103,9 @@ export async function GET(
     ...(validatedCategory ? {
       cardCategory: validatedCategory,
     } : {}),
+    ...(validatedTier ? {
+      cardTier: validatedTier,
+    } : {}),
     ...(filterTeam ? {
       team: { contains: filterTeam, mode: Prisma.QueryMode.insensitive },
     } : {}),
@@ -138,6 +149,7 @@ export async function GET(
       playerName:        c.playerName,
       team:          c.team        ?? null,
       cardType:      String(c.cardCategory),  // cardCategory → cardType for UI
+      cardTier:      String(c.cardTier),      // only shown for TCG sets, as "Rarity"
       parallelType:  c.parallel    ?? null,   // parallel → parallelType for UI
       printRun:      c.printRun    ?? null,
       variationName: c.variationName ?? null,

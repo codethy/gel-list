@@ -30,7 +30,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 function SkeletonCard() {
   return (
     <div className="bg-[#111111] border border-[#222222] rounded-xl p-3 flex flex-col gap-3 animate-pulse">
-      <div className="w-full aspect-[3/4] bg-[#1e1e1e] rounded-lg" />
+      <div className="w-full aspect-square bg-[#1e1e1e] rounded-lg" />
       <div className="flex flex-col gap-2">
         <div className="h-3 bg-[#1e1e1e] rounded w-3/4" />
         <div className="h-3 bg-[#1e1e1e] rounded w-1/2" />
@@ -52,13 +52,13 @@ function SetCard({ set }: { set: SetItem }) {
       className="bg-[#111111] border border-[#222222] rounded-xl p-3 flex flex-col gap-3 hover:border-zinc-600 hover:bg-[#161616] transition-all duration-200 cursor-pointer group"
     >
       {/* Image */}
-      <div className="w-full aspect-[3/4] bg-[#1a1a1a] rounded-lg flex items-center justify-center border border-[#2a2a2a] group-hover:border-zinc-600 transition-colors overflow-hidden">
+      <div className="w-full aspect-square bg-[#1a1a1a] rounded-lg flex items-center justify-center border border-[#2a2a2a] group-hover:border-zinc-600 transition-colors overflow-hidden">
         {set.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={set.imageUrl}
             alt={set.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
         ) : (
           <svg
@@ -82,7 +82,7 @@ function SetCard({ set }: { set: SetItem }) {
           {set.name}
         </h3>
         <p className="text-xs text-zinc-500">
-          {set.subCategory.replace(/_/g, " ")} · {set.year}
+          {set.subCategory.replace(/_/g, " ").toUpperCase()} · {set.year}
         </p>
       </div>
 
@@ -115,7 +115,7 @@ function CategorySection({
       <h2 className="text-lg font-bold text-white mb-4 tracking-tight">
         {label}
       </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {sets.map((set) => (
           <SetCard key={set.id} set={set} />
         ))}
@@ -131,7 +131,7 @@ function SkeletonLayout() {
       {["Sports", "Entertainment", "Trading Card Games"].map((label) => (
         <section key={label}>
           <div className="h-5 w-40 bg-[#1e1e1e] rounded animate-pulse mb-4" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
@@ -348,7 +348,7 @@ function HomeContent() {
         )}
 
         {loadingMore && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonCard key={`more-skel-${i}`} />
             ))}

@@ -57,6 +57,7 @@ export interface SetDetailData {
     playerName:    string;
     team:          string | null;
     cardType:      string;
+    cardTier:      string;
     parallelType:  string | null;
     printRun:      number | null;
     variationName: string | null;
@@ -91,6 +92,7 @@ export interface SetDetailData {
 
   availableTeams: string[];
   availableCategories:  string[];   // ✅ NEW — distinct CardCategory values for this set
+  availableTiers:       string[];   // distinct CardTier values — TCG sets' "Rarity" filter
 
   // Admin-curated product catalog for this set (see SetProduct in
   // prisma/schema.prisma) — powers the "Which Product" dropdown in the Log
@@ -138,6 +140,7 @@ export async function getSetDetail(
     allChecklistCards,
     teamsRaw,
     categoriesRaw,          // ✅ NEW
+    tiersRaw,               // ✅ NEW
     printRunSum,            // ✅ NEW — see step 5c below
     unlimitedPrintRunCount, // ✅ NEW
     chasesPulledInSet,      // ✅ NEW — see step 5d below
@@ -257,6 +260,16 @@ export async function getSetDetail(
       orderBy:  { cardCategory: "asc" },
     }),
 
+    // ── 2f-bis. Distinct cardTier values — drives the same filter dropdown,
+    // but by rarity instead of type, for TCG sets only (see
+    // ChecklistTable's typeColumnLabel).
+    prisma.checklistCard.findMany({
+      where:    { cardSetId: setId },
+      select:   { cardTier: true },
+      distinct: ["cardTier"],
+      orderBy:  { cardTier: "asc" },
+    }),
+
     // ── 2g. Sum of printRun across cards that have one specified ────── ✅ NEW
     // Cards with no printRun (unlimited/unspecified — e.g. base autos or
     // case hits) are counted separately below and defaulted to 10 each,
@@ -343,6 +356,7 @@ export async function getSetDetail(
       playerName:    c.playerName,
       team:          c.team         ?? null,
       cardType:      String(c.cardCategory),   // output as cardType for UI compatibility
+      cardTier:      String(c.cardTier),       // only shown for TCG sets, as "Rarity"
       parallelType:  c.parallel     ?? null,   // ChecklistCard.parallel → parallelType
       printRun:      c.printRun     ?? null,
       variationName: c.variationName ?? null,
@@ -366,6 +380,7 @@ export async function getSetDetail(
 
   // ── 5b. Categories list ─────────────────────────────────────────────── ✅ NEW
   const availableCategories = categoriesRaw.map((c) => String(c.cardCategory));
+  const availableTiers      = tiersRaw.map((t) => String(t.cardTier));
 
   // ── 5c. Total print run in set ────────────────────────────────────── ✅ NEW
   // "Cards in Set" on the set detail banner counts every physical copy the
@@ -409,6 +424,7 @@ export async function getSetDetail(
     })),
     availableTeams,
     availableCategories,   // ✅ NEW
+    availableTiers,
     products: setProducts.map((p) => ({
       id:               p.id,
       productType:      String(p.productType),

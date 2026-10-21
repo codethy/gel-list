@@ -54,6 +54,9 @@ export interface ChecklistRow {
   playerName: string;
   team?: string | null;
   cardType: string;
+  // Only ever displayed for TCG sets (as "Rarity") — see typeColumnLabel in
+  // the main ChecklistTable component.
+  cardTier: string;
   parallelType?: string | null;
   printRun?: number | null;
   variationName?: string | null;
@@ -91,6 +94,7 @@ interface ChecklistTableProps {
   isLoading?: boolean;
   availableTeams: string[];
   availableCategories: string[];
+  availableTiers: string[];
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -670,12 +674,13 @@ function gridColsClass(showTeam: boolean): string {
 }
 
 function ChecklistRowItem({
-  row, setId, index, showTeam, onAddGelClick, onOpenHistory, onOpenImage,
+  row, setId, index, showTeam, category, onAddGelClick, onOpenHistory, onOpenImage,
 }: {
   row: ChecklistRow;
   setId: string;
   index: number;
   showTeam: boolean;
+  category: string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
   onAddGelClick: (checklistCardId: string, playerName: string) => void;
   onOpenHistory: (row: ChecklistRow) => void;
   onOpenImage: (row: ChecklistRow) => void;
@@ -800,9 +805,9 @@ function ChecklistRowItem({
           </div>
         )}
 
-        {/* Type */}
+        {/* Type (Sports/Entertainment) / Rarity (TCG) */}
         <div className="flex items-center justify-start">
-          <CardTypeBadge type={row.cardType} />
+          <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
         </div>
 
         {/* Gels pulled / print run + "view details" hint */}
@@ -846,7 +851,7 @@ function ChecklistRowItem({
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function ChecklistTable({
-  rows, meta, setId, category, onAddGelClick, onFilterChange, isLoading = false, availableTeams, availableCategories,
+  rows, meta, setId, category, onAddGelClick, onFilterChange, isLoading = false, availableTeams, availableCategories, availableTiers,
 }: ChecklistTableProps) {
   const [search, setSearch]             = useState("");
   const [filterType, setFilterType]     = useState("");
@@ -862,7 +867,13 @@ export default function ChecklistTable({
 
   // Sports sets feature athletes ("Player"); Entertainment and TCG sets
   // feature characters ("Character") — e.g. Harry Potter, Pokémon.
-  const playerColumnLabel = category === "SPORTS" ? "Player" : "Character";
+  const playerColumnLabel =
+    category === "SPORTS" ? "Player" : category === "TCG" ? "Card Name" : "Character";
+  // TCG cards are collected by rarity tier (Common/Rare/Secret Rare/etc. —
+  // ChecklistCard.cardTier), not by print finish (Holo/Full Art/etc. —
+  // cardCategory, what "Type" shows for Sports/Entertainment) — so this
+  // column shows a different underlying field for TCG, not just a relabel.
+  const typeColumnLabel = category === "TCG" ? "Rarity" : "Type";
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -896,10 +907,17 @@ export default function ChecklistTable({
     ...availableTeams.map((t) => ({ label: t, value: t })),
   ];
 
-  const typeOptions = [
-    { label: "All Types", value: "" },
-    ...availableCategories.map((c) => ({ label: formatCategoryLabel(c), value: c })),
-  ];
+  // TCG filters this dropdown by rarity (cardTier) instead of type
+  // (cardCategory) — matches typeColumnLabel's display-side decision.
+  const typeOptions = category === "TCG"
+    ? [
+        { label: "All Rarities", value: "" },
+        ...availableTiers.map((t) => ({ label: formatCategoryLabel(t), value: t })),
+      ]
+    : [
+        { label: "All Types", value: "" },
+        ...availableCategories.map((c) => ({ label: formatCategoryLabel(c), value: c })),
+      ];
 
   return (
     <section className="space-y-4">
@@ -914,7 +932,7 @@ export default function ChecklistTable({
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <SearchBar value={search} onChange={handleSearchChange} />
-        <FilterSelect value={filterType} onChange={handleTypeChange} options={typeOptions} placeholder="Filter by type" />
+        <FilterSelect value={filterType} onChange={handleTypeChange} options={typeOptions} placeholder={category === "TCG" ? "Filter by rarity" : "Filter by type"} />
         {availableTeams.length > 0 && (
           <FilterSelect value={filterTeam} onChange={handleTeamChange} options={teamOptions} placeholder="Filter by team" />
         )}
@@ -950,7 +968,7 @@ export default function ChecklistTable({
             {showTeam && (
               <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block">Team</div>
             )}
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Type</div>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{typeColumnLabel}</div>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Gels</div>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center">Add a Gel</div> {/* Changed from "Gel" to "Add a Gel" */}
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block pl-3">Notes</div> {/* Reintroduced Notes heading */}
@@ -968,6 +986,7 @@ export default function ChecklistTable({
                   setId={setId}
                   index={i}
                   showTeam={showTeam}
+                  category={category}
                   onAddGelClick={onAddGelClick}
                   onOpenHistory={setHistoryRow}
                   onOpenImage={(row) => setImageTarget({
