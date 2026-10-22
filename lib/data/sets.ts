@@ -169,6 +169,7 @@ export async function getSetDetail(
         printRun:      true,
         variationName: true,
         isHit:         true,
+        imageUrl:      true,
       },
     }),
 
@@ -360,7 +361,9 @@ export async function getSetDetail(
       parallelType:  c.parallel     ?? null,   // ChecklistCard.parallel → parallelType
       printRun:      c.printRun     ?? null,
       variationName: c.variationName ?? null,
-      imageUrl:          extras.imageUrl,         // first-logged gel's front image, if any
+      // A real logged gel's own photo takes precedence; the admin-set
+      // default image (ChecklistCard.imageUrl) only fills in until one exists.
+      imageUrl:          extras.imageUrl ?? c.imageUrl ?? null,
       cardBackImageUrl:  extras.cardBackImageUrl,
       status:        extras.status,
       ownedGelId:    extras.ownedGelId,

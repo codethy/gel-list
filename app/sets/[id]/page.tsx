@@ -56,6 +56,7 @@ export default async function SetDetailPage({ params }: PageProps) {
       year={data.year}
       brand={data.brand}
       totalPrintRunInSet={data.totalPrintRunInSet}
+      totalCardsInSet={data.totalCardsInSet}
       chasesPulledInSet={data.chasesPulledInSet}
       totalChaseCardsInSet={data.totalChaseCardsInSet}
       imageUrl={data.imageUrl}

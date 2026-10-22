@@ -8,10 +8,15 @@ import { motion } from "framer-motion";
 
 interface SetHeaderProps {
   setName: string;
+  category: string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
   sport: string;
   year: number;
   manufacturer: string;
   totalPrintRunInSet: number;
+  // Plain checklist-row count — what TCG sets show instead of
+  // totalPrintRunInSet, since there's no reliable print run to sum (or
+  // estimate via the usual default-10-per-card) for TCG cards.
+  totalCardsInSet: number;
   totalChaseCardsInSet?: number | null;
   userGelCount: number;  // how many cards this user has gelled
   chasesPulled: number;  // set-wide: every confirmed-real pulled copy, across all users
@@ -75,15 +80,24 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
 
 export default function SetHeader({
   setName,
+  category,
   sport,
   year,
   manufacturer,
   totalPrintRunInSet,
+  totalCardsInSet,
   totalChaseCardsInSet,
   userGelCount,
   chasesPulled,
   setImageUrl,
 }: SetHeaderProps) {
+  // TCG sets have no reliable print run to sum (or estimate a default for),
+  // so their first stat box shows a plain checklist-row count instead, and
+  // the print-run-based "Set Completion" bar below doesn't apply at all.
+  const isTcg = category === "TCG";
+  const chasesInSetLabel = isTcg ? "Chase Cards" : "Chases in Set";
+  const chasesInSetValue = isTcg ? totalCardsInSet : totalPrintRunInSet;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -16 }}
@@ -111,19 +125,21 @@ export default function SetHeader({
 
             {/* Stat pills row */}
             <div className="flex flex-wrap gap-2 mb-6">
-              <StatPill label="Chases in Set" value={totalPrintRunInSet} />
+              <StatPill label={chasesInSetLabel} value={chasesInSetValue} />
               <StatPill label="Chases Pulled" value={chasesPulled} />
               <StatPill label="Your Gels" value={userGelCount} />
             </div>
 
             {/* Progress bars */}
             <div className="space-y-4 max-w-lg">
-              <ProgressBar
-                label="Set Completion"
-                value={chasesPulled}
-                max={totalPrintRunInSet}
-                color="bg-gradient-to-r from-blue-500 to-violet-500"
-              />
+              {!isTcg && (
+                <ProgressBar
+                  label="Set Completion"
+                  value={chasesPulled}
+                  max={totalPrintRunInSet}
+                  color="bg-gradient-to-r from-blue-500 to-violet-500"
+                />
+              )}
               {totalChaseCardsInSet != null && totalChaseCardsInSet > 0 && (
                 <ProgressBar
                   label="Chase Completion"

@@ -14,6 +14,7 @@ interface SetItem {
   year:            number;
   imageUrl:           string | null;
   totalPrintRunInSet: number;
+  totalCardsInSet:    number;
   totalHitsInSet:     number;
 }
 
@@ -89,7 +90,11 @@ function SetCard({ set }: { set: SetItem }) {
       {/* Stats */}
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#1e1e1e]">
         <span className="text-[11px] text-zinc-500">
-          {set.totalPrintRunInSet.toLocaleString()} chase cards
+          {/* TCG has no reliable print run to sum/estimate, so it shows a
+              plain chase-card count instead — see SetHeader.tsx. */}
+          {set.category === "TCG"
+            ? `${set.totalCardsInSet.toLocaleString()} chase cards`
+            : `${set.totalPrintRunInSet.toLocaleString()} chase cards`}
         </span>
         {set.totalHitsInSet > 0 && (
           <span className="text-[11px] text-yellow-500/80 font-medium">

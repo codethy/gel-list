@@ -3,7 +3,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import heic2any from "heic2any";
 import type { GelEntry } from "./YourGels";
 import { playerSubtitle } from "./ChecklistTable";
 import { useUploadThing } from "@/lib/uploadthing";
@@ -118,6 +117,11 @@ function isHeicFile(file: File): boolean {
 // Photos) — a card photo is always a single image, so the first result is
 // the one we want.
 async function convertHeicToJpeg(file: File): Promise<Blob> {
+  // Loaded dynamically, not as a top-level import — heic2any references
+  // `window` at module-load time, which crashes server-side rendering of
+  // this whole component if it's imported statically. A dynamic import only
+  // ever runs here, inside a browser-only event handler, never during SSR.
+  const heic2any = (await import("heic2any")).default;
   const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
   return Array.isArray(result) ? result[0] : result;
 }

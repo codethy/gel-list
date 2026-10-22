@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
           year:            true,
           imageUrl:        true,
           totalHitsInSet:  true,
+          totalCardsInSet: true,
         },
       }),
       prisma.cardSet.count({ where }),

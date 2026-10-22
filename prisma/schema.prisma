@@ -567,6 +567,12 @@ model ChecklistCard {
   // source checklist before import), so the flag carried no information.
   isHit Boolean @default(false) // AUTO, RELIC, AUTO_RELIC, etc.
 
+  // Admin-set default image for this checklist row, uploaded per card from
+  // /admin/sets/[id]/checklist — shown until a real user logs a gel against
+  // this card, whose own photo then takes precedence (see
+  // lib/data/checklistRowExtras.ts and lib/data/sets.ts for the fallback).
+  imageUrl String?
+
   // Position of this card in the original checklist file (0 = first row).
   // The checklist page always displays cards ordered by this field, so it
   // matches the sequence the set's source file was published in, rather

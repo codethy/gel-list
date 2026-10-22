@@ -22,6 +22,11 @@ interface SetDetailClientProps {
   year:                  number;
   brand:                 string;
   totalPrintRunInSet:    number;
+  // For TCG sets specifically, "Chases in Set" shows this plain row count
+  // instead of totalPrintRunInSet — there's no reliable print run to sum
+  // for TCG cards, so estimating one (the usual default-10-per-card
+  // fallback) isn't meaningful there. See SetHeader.tsx.
+  totalCardsInSet:       number;
   chasesPulledInSet:     number;
   totalChaseCardsInSet?: number | null;
   imageUrl?:             string | null;
@@ -53,6 +58,7 @@ export default function SetDetailClient({
   year,
   brand,
   totalPrintRunInSet,
+  totalCardsInSet,
   chasesPulledInSet,
   totalChaseCardsInSet,
   imageUrl,
@@ -222,10 +228,12 @@ export default function SetDetailClient({
         {/* ── 1. Set Header ─────────────────────────────────────────── */}
         <SetHeader
           setName={setName}
+          category={category}
           sport={subCategory}
           year={year}
           manufacturer={brand}
           totalPrintRunInSet={totalPrintRunInSet}
+          totalCardsInSet={totalCardsInSet}
           totalChaseCardsInSet={totalChaseCardsInSet}
           userGelCount={userGelCount}
           chasesPulled={chasesPulled}

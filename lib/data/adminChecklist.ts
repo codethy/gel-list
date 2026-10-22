@@ -31,6 +31,7 @@ export interface AdminChecklistCard {
   variationName: string | null;
   isHit:         boolean;
   sortOrder:     number;
+  imageUrl:      string | null;
 }
 
 export interface AdminProductRow {
@@ -93,6 +94,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       variationName: true,
       isHit:         true,
       sortOrder:     true,
+      imageUrl:      true,
     },
   });
 
@@ -122,6 +124,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       variationName: c.variationName,
       isHit:         c.isHit,
       sortOrder:     c.sortOrder,
+      imageUrl:      c.imageUrl,
     })),
     products: products.map((p) => ({
       id:               p.id,

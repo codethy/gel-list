@@ -130,6 +130,7 @@ export async function GET(
         printRun:      true,
         variationName: true,
         isHit:         true,
+        imageUrl:      true,
       },
     }),
   ]);
@@ -144,7 +145,9 @@ export async function GET(
     return {
       id:                c.id,
       cardNumber:        c.cardNumber  ?? null,
-      imageUrl:          extras.imageUrl,
+      // A real logged gel's own photo takes precedence; the admin-set
+      // default image (ChecklistCard.imageUrl) only fills in until one exists.
+      imageUrl:          extras.imageUrl ?? c.imageUrl ?? null,
       cardBackImageUrl:  extras.cardBackImageUrl,
       playerName:        c.playerName,
       team:          c.team        ?? null,

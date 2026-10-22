@@ -9,6 +9,7 @@ import { useState } from "react";
 import AdminChecklistCardModal, {
   type ChecklistCardFormValues,
 } from "./AdminChecklistCardModal";
+import AdminChecklistImageModal from "./AdminChecklistImageModal";
 import type { AdminChecklistCard } from "@/lib/data/adminChecklist";
 
 interface AdminChecklistClientProps {
@@ -35,6 +36,7 @@ export default function AdminChecklistClient({
   const [cards, setCards]       = useState<AdminChecklistCard[]>(initialCards);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<AdminChecklistCard | null>(null);
+  const [imageCard, setImageCard]     = useState<AdminChecklistCard | null>(null);
   const [deletingId, setDeletingId]   = useState<string | null>(null);
   const [rowError, setRowError]       = useState<{ id: string; message: string } | null>(null);
 
@@ -85,6 +87,20 @@ export default function AdminChecklistClient({
     setModalOpen(false);
   };
 
+  const handleImageSubmit = async (imageUrl: string | null): Promise<string | void> => {
+    if (!imageCard) return;
+    const res = await fetch(`/api/admin/sets/${setId}/checklist/${imageCard.id}/image`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ imageUrl }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return data.error ?? "Failed to save image";
+
+    setCards((prev) => prev.map((c) => (c.id === imageCard.id ? { ...c, imageUrl: data.card.imageUrl } : c)));
+    setImageCard(null);
+  };
+
   const handleDelete = async (card: AdminChecklistCard) => {
     if (!confirm(`Delete "${card.cardNumber} — ${card.playerName}"? This cannot be undone.`)) return;
 
@@ -118,6 +134,7 @@ export default function AdminChecklistClient({
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800/60 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <th className="px-4 py-3">Image</th>
               <th className="px-4 py-3">No.</th>
               <th className="px-4 py-3">{playerColumnLabel}</th>
               {showTeam && <th className="px-4 py-3">Team</th>}
@@ -131,6 +148,24 @@ export default function AdminChecklistClient({
           <tbody>
             {cards.map((c) => (
               <tr key={c.id} className="border-t border-slate-800/60 hover:bg-slate-800/30">
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setImageCard(c)}
+                    className="w-10 h-10 rounded-md bg-slate-900/60 border border-slate-700/50 overflow-hidden flex items-center justify-center hover:border-slate-500 transition-colors shrink-0"
+                    title="Set default image"
+                  >
+                    {c.imageUrl ? (
+                      <img src={c.imageUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-600">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="M21 15l-5-5L5 21" />
+                      </svg>
+                    )}
+                  </button>
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap text-slate-300">{c.cardNumber}</td>
                 <td className="px-4 py-3">
                   <p className="text-slate-200">{c.playerName}</p>
@@ -167,7 +202,7 @@ export default function AdminChecklistClient({
             ))}
             {cards.length === 0 && (
               <tr>
-                <td colSpan={showTeam ? 8 : 7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={showTeam ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
                   No cards in this checklist yet.
                 </td>
               </tr>
@@ -185,6 +220,12 @@ export default function AdminChecklistClient({
         showTeam={showTeam}
         cardCategoryOptions={cardCategoryOptions}
         cardTierOptions={cardTierOptions}
+      />
+
+      <AdminChecklistImageModal
+        card={imageCard}
+        onClose={() => setImageCard(null)}
+        onSubmit={handleImageSubmit}
       />
     </div>
   );
