@@ -11,6 +11,12 @@ export interface CardHistoryEvent {
   eventType:
     | "PULLED"
     | "BOUGHT"
+    // "Pulled it myself from a break I paid into" — the SELF-flow's "From a
+    // Break" option. Distinct from BREAKER below (a sighting of someone
+    // else's card seen from a breaker), which is why it needs its own
+    // value: same underlying AcquisitionMethod enum value (BREAKER) can mean
+    // either, depending on whether the logging user actually owns the card.
+    | "BREAKER_OWNED"
     | "BREAKER"
     | "EBAY"
     | "FRIEND"
@@ -146,6 +152,7 @@ const EVENT_META: Record<
 > = {
   PULLED:          { label: "Pulled",               color: "text-blue-300",    dotColor: "bg-blue-500"    },
   BOUGHT:          { label: "Purchased",             color: "text-violet-300",  dotColor: "bg-violet-500"  },
+  BREAKER_OWNED:   { label: "Pulled from a break",    color: "text-blue-300",    dotColor: "bg-blue-500"    },
   // "Someone else's gel" sources — reported sightings, not owned copies.
   BREAKER:         { label: "Seen from a breaker",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
   EBAY:            { label: "Seen on eBay",            color: "text-orange-300",  dotColor: "bg-orange-500"  },
@@ -510,6 +517,12 @@ export interface CardImageTarget {
   subtitle?: string | null;
   imageUrl: string | null;
   cardBackImageUrl: string | null;
+  // Only ever set when opened from the "Recent Pulls" feed — drives the
+  // serial/logged-by/ownership badge row next to the close button below.
+  serialNumber?: number | null;
+  printRun?: number | null;
+  loggedByName?: string | null;
+  isInHand?: boolean;
 }
 
 export function CardImageModal({
@@ -557,6 +570,36 @@ export function CardImageModal({
                     <p className="text-xs text-slate-400 mt-0.5 truncate">{target.subtitle}</p>
                   )}
                 </div>
+
+                {/* "Recent Pulls" only — the same serial/logged-by/ownership
+                    badges shown on the card itself, next to the close button */}
+                {(target.serialNumber != null || target.loggedByName) && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {target.serialNumber != null && (
+                      <span className="px-2 py-0.5 rounded-md bg-black/70 text-xs font-bold text-white border border-white/10 whitespace-nowrap">
+                        #{target.serialNumber}
+                        {target.printRun ? ` / ${target.printRun}` : ""}
+                      </span>
+                    )}
+                    {/* "Recent Pulls" only — who logged it and whether it's
+                        their own gel or a reported sighting */}
+                    {target.loggedByName && (
+                      <>
+                        <span className="px-2 py-0.5 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-200 border border-white/10 whitespace-nowrap">
+                          {target.loggedByName}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap ${
+                            target.isInHand ? "bg-emerald-600/90" : "bg-amber-600/90"
+                          }`}
+                        >
+                          {target.isInHand ? "Own Gel" : "Someone Else's"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   onClick={onClose}

@@ -51,6 +51,37 @@ export interface SetDetailData {
     };
   }[];
 
+  // Most recently logged gels across every user for this set — shown in
+  // the "Recent Pulls" feed above "Your Gels". Same shape as userGels plus
+  // who logged it.
+  recentPulls: {
+    id:                string;
+    cardTemplateId:    string;
+    isInHand:          boolean;
+    isVerified:        boolean;
+    acquisitionMethod: string | null;
+    serialNumber:      number | null;
+    hitYear:           number | null;
+    hitMonth:          number | null;
+    hitCity:           string | null;
+    hitCountry:        string | null;
+    cardFrontImageUrl: string | null;
+    cardBackImageUrl:  string | null;
+    seller:            string | null;
+    notes:             string | null;
+    productType:       string | null;
+    productTypeOther:  string | null;
+    loggedByName:      string;
+    cardTemplate: {
+      playerName:    string;
+      cardType:      string;
+      parallelType:  string | null;
+      printRun:      number | null;
+      variationName: string | null;
+      team:          string | null;
+    };
+  }[];
+
   checklistRows: {
     id:            string;
     cardNumber:    string | null;
@@ -131,6 +162,7 @@ export async function getSetDetail(
   if (!cardSet) return null;
 
   const PAGE_SIZE = 50;
+  const RECENT_PULLS_LIMIT = 12;
 
   // ── 2. Run all queries in parallel ─────────────────────────────────────
     const [
@@ -145,6 +177,7 @@ export async function getSetDetail(
     unlimitedPrintRunCount, // ✅ NEW
     chasesPulledInSet,      // ✅ NEW — see step 5d below
     setProducts,            // ✅ NEW
+    recentPullsRaw,         // ✅ NEW
   ] = await Promise.all([
 
     // ── 2a. Total count ──────────────────────────────────────────────────
@@ -170,6 +203,7 @@ export async function getSetDetail(
         variationName: true,
         isHit:         true,
         imageUrl:      true,
+        notes:         true,
       },
     }),
 
@@ -304,6 +338,46 @@ export async function getSetDetail(
       orderBy: { createdAt: "asc" },
       select:  { id: true, productType: true, productTypeOther: true },
     }),
+
+    // ── 2k. "Recent Pulls" — the most recently logged gels across EVERY
+    // user for this set (both own gels and "someone else's gel" reports),
+    // for the feed shown above "Your Gels". Deliberately not scoped to the
+    // viewer, and not filtered by isVerified — it's a live activity feed,
+    // not a trust-gated stat like chasesPulledInSet.
+    prisma.portfolioCard.findMany({
+      where:   { cardSetId: setId },
+      orderBy: { createdAt: "desc" },
+      take:    RECENT_PULLS_LIMIT,
+      select: {
+        id:                true,
+        isInHand:          true,
+        isVerified:        true,
+        acquisitionMethod: true,
+        serialNumber:      true,
+        hitYear:           true,
+        hitMonth:          true,
+        hitCity:           true,
+        hitCountry:        true,
+        cardFrontImageUrl: true,
+        cardBackImageUrl:  true,
+        seller:            true,
+        notes:             true,
+        productType:       true,
+        productTypeOther:  true,
+        user: { select: { name: true, username: true } },
+        checklistCard: {
+          select: {
+            id:            true,
+            playerName:    true,
+            cardCategory:  true,
+            parallel:      true,
+            printRun:      true,
+            variationName: true,
+            team:          true,
+          },
+        },
+      },
+    }),
   ]);
 
   // ── 3. Shape user gels ──────────────────────────────────────────────────
@@ -329,6 +403,38 @@ export async function getSetDetail(
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
     productTypeOther:  pc.productTypeOther  ?? null,
+    cardTemplate: {
+      playerName:    pc.checklistCard.playerName,
+      cardType:      String(pc.checklistCard.cardCategory),
+      parallelType:  pc.checklistCard.parallel ?? null,
+      printRun:      pc.checklistCard.printRun ?? null,
+      variationName: pc.checklistCard.variationName ?? null,
+      team:          pc.checklistCard.team     ?? null,
+    },
+  }));
+
+  // ── 3b. Shape "Recent Pulls" — same shape as userGels, plus who logged
+  // it, across every user for this set (see 2k above).
+  const recentPulls = recentPullsRaw.map((pc) => ({
+    id:                pc.id,
+    cardTemplateId:    pc.checklistCard.id,
+    isInHand:          pc.isInHand,
+    isVerified:        pc.isVerified,
+    acquisitionMethod: pc.acquisitionMethod != null
+                         ? String(pc.acquisitionMethod)
+                         : null,
+    serialNumber:      pc.serialNumber      ?? null,
+    hitYear:           pc.hitYear           ?? null,
+    hitMonth:          pc.hitMonth          ?? null,
+    hitCity:           pc.hitCity           ?? null,
+    hitCountry:        pc.hitCountry        ?? null,
+    cardFrontImageUrl: pc.cardFrontImageUrl ?? null,
+    cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
+    seller:            pc.seller            ?? null,
+    notes:             pc.notes             ?? null,
+    productType:       pc.productType != null ? String(pc.productType) : null,
+    productTypeOther:  pc.productTypeOther  ?? null,
+    loggedByName:      pc.user.name ?? pc.user.username ?? "A user",
     cardTemplate: {
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),
@@ -367,7 +473,9 @@ export async function getSetDetail(
       cardBackImageUrl:  extras.cardBackImageUrl,
       status:        extras.status,
       ownedGelId:    extras.ownedGelId,
-      notes:         extras.notes,
+      // Admin-only note (ChecklistCard.notes) — a logged gel's own note
+      // only ever appears in that gel's Card History now, not here.
+      notes:         c.notes ?? null,
       likeCount:     extras.likeCount,
       isLikedByUser: extras.isLikedByUser,
       gelsPulled:    extras.gelsPulled,
@@ -409,6 +517,7 @@ export async function getSetDetail(
     totalChaseCardsInSet: cardSet.totalChaseCardsInSet ?? null,
     imageUrl:             cardSet.imageUrl             ?? null,
     userGels,
+    recentPulls,
     checklistRows,
     checklistMeta: {
       total:      totalCards,

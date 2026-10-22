@@ -57,6 +57,7 @@ export default function AdminChecklistClient({
     printRun:      values.printRun.trim() === "" ? null : Number(values.printRun),
     variationName: values.variationName.trim() || null,
     isHit:         values.isHit,
+    notes:         values.notes.trim() || null,
   });
 
   const handleSubmit = async (values: ChecklistCardFormValues): Promise<string | void> => {
@@ -142,6 +143,7 @@ export default function AdminChecklistClient({
               <th className="px-4 py-3">Tier</th>
               <th className="px-4 py-3">Parallel / Print Run</th>
               <th className="px-4 py-3">Hit</th>
+              <th className="px-4 py-3">Notes</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -178,6 +180,7 @@ export default function AdminChecklistClient({
                   {c.parallel ?? "—"}{c.printRun ? ` /${c.printRun}` : ""}
                 </td>
                 <td className="px-4 py-3 text-slate-400">{c.isHit ? "Yes" : "—"}</td>
+                <td className="px-4 py-3 text-slate-400 max-w-[180px] truncate" title={c.notes ?? undefined}>{c.notes ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end items-center gap-2">
                     <button
@@ -202,7 +205,7 @@ export default function AdminChecklistClient({
             ))}
             {cards.length === 0 && (
               <tr>
-                <td colSpan={showTeam ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={showTeam ? 10 : 9} className="px-4 py-8 text-center text-slate-500">
                   No cards in this checklist yet.
                 </td>
               </tr>

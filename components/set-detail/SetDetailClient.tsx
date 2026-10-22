@@ -5,6 +5,7 @@
 import { useState, useCallback, useTransition } from "react";
 import SetHeader from "./SetHeader";
 import YourGels, { type GelEntry } from "./YourGels";
+import RecentPulls from "./RecentPulls";
 import ChecklistTable, {
   type ChecklistRow,
   type ChecklistMeta,
@@ -33,6 +34,7 @@ interface SetDetailClientProps {
 
   // User's gels for this set
   initialGels: GelEntry[];
+  recentPulls: GelEntry[];
 
   // Checklist (first page, pre-fetched server-side)
   initialRows:    ChecklistRow[];
@@ -63,6 +65,7 @@ export default function SetDetailClient({
   totalChaseCardsInSet,
   imageUrl,
   initialGels,
+  recentPulls,
   initialRows,
   initialMeta,
   availableTeams,
@@ -239,6 +242,9 @@ export default function SetDetailClient({
           chasesPulled={chasesPulled}
           setImageUrl={imageUrl}
         />
+
+        {/* ── Recent Pulls (all users, above Your Gels) ──────────────── */}
+        <RecentPulls gels={recentPulls} />
 
         {/* ── 2. Your Gels ──────────────────────────────────────────── */}
         <YourGels

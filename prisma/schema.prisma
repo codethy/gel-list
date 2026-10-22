@@ -573,6 +573,12 @@ model ChecklistCard {
   // lib/data/checklistRowExtras.ts and lib/data/sets.ts for the fallback).
   imageUrl String?
 
+  // Admin-only notes shown in the public checklist's "Notes" column — set
+  // from the Edit Checklist Card flow at /admin/sets/[id]/checklist. Not to
+  // be confused with PortfolioCard.notes (a user's own note about their
+  // logged gel, which only ever appears in that gel's own Card History).
+  notes String? @db.Text
+
   // Position of this card in the original checklist file (0 = first row).
   // The checklist page always displays cards ordered by this field, so it
   // matches the sequence the set's source file was published in, rather

@@ -33,6 +33,12 @@ export interface GelEntry {
   notes?: string | null;
   productType?: string | null;
   productTypeOther?: string | null;
+  // Only ever set for the "Recent Pulls" feed (see RecentPulls.tsx) — its
+  // presence is what turns on the two extra badges (logged-by name,
+  // own-gel/someone-else's) on the card and in the image modal. "Your
+  // Gels"/Favorites/All Your Gels never set this, since those are always
+  // unambiguously the viewer's own.
+  loggedByName?: string | null;
   cardTemplate: {
     playerName: string;
     cardType: string;
@@ -162,6 +168,10 @@ export function GelCard({
                 subtitle,
                 imageUrl: gel.cardFrontImageUrl ?? null,
                 cardBackImageUrl: gel.cardBackImageUrl ?? null,
+                serialNumber: gel.serialNumber ?? null,
+                printRun: gel.cardTemplate.printRun ?? null,
+                loggedByName: gel.loggedByName ?? null,
+                isInHand: gel.isInHand ?? true,
               })
             }
             aria-label={`View card image for ${gel.cardTemplate.playerName}`}
@@ -200,6 +210,19 @@ export function GelCard({
           <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-xs font-bold text-white border border-white/10">
             #{gel.serialNumber}
             {gel.cardTemplate.printRun ? ` / ${gel.cardTemplate.printRun}` : ""}
+          </div>
+        )}
+
+        {/* "Recent Pulls" only — own gel vs. a reported sighting. Solid,
+            saturated background (not the usual translucent badge style) so
+            it stays legible over a light/white card photo too. */}
+        {gel.loggedByName && (
+          <div
+            className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-sm ${
+              gel.isInHand ? "bg-emerald-600/90" : "bg-amber-600/90"
+            }`}
+          >
+            {gel.isInHand ? "Own Gel" : "Someone Else's"}
           </div>
         )}
 
@@ -335,8 +358,14 @@ export function GelCard({
               {gel.notes}
             </p>
           )}
-          <div className="pt-1">
+          <div className="pt-1 flex items-center gap-1.5 flex-wrap">
             <VerificationBadge isVerified={gel.isVerified ?? false} />
+            {/* "Recent Pulls" only — who logged it */}
+            {gel.loggedByName && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold text-slate-300 bg-slate-700/60 border border-slate-600/50 whitespace-nowrap truncate max-w-[120px]">
+                {gel.loggedByName}
+              </span>
+            )}
           </div>
         </div>
       </div>

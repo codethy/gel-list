@@ -69,6 +69,7 @@ export async function GET(
     const pattern   = `%${keyword}%`;
     return Prisma.sql`(
       unaccent("playerName") ILIKE unaccent(${pattern})
+      OR unaccent("cardNumber") ILIKE unaccent(${pattern})
       OR unaccent(COALESCE("parallel", '')) ILIKE unaccent(${pattern})
       OR unaccent(COALESCE("variationName", '')) ILIKE unaccent(${pattern})
       OR unaccent(COALESCE("team", '')) ILIKE unaccent(${pattern})
@@ -131,6 +132,7 @@ export async function GET(
         variationName: true,
         isHit:         true,
         imageUrl:      true,
+        notes:         true,
       },
     }),
   ]);
@@ -161,7 +163,9 @@ export async function GET(
       likeCount:     extras.likeCount,
       isLikedByUser: extras.isLikedByUser,
       gelsPulled:    extras.gelsPulled,
-      notes:         extras.notes,
+      // Admin-only note (ChecklistCard.notes) — a logged gel's own note
+      // only ever appears in that gel's Card History now, not here.
+      notes:         c.notes ?? null,
       cardHistory:   extras.cardHistory,
       loggedGels:    extras.loggedGels,
     };

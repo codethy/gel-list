@@ -198,6 +198,7 @@ export default function AdminEditGelModal({
                       <option value="" className="bg-slate-900">Select method...</option>
                       <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
                       <option value="BOUGHT" className="bg-slate-900">Bought</option>
+                      <option value="BREAKER" className="bg-slate-900">From a Break</option>
                     </>
                   )}
                 </Select>

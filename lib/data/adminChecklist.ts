@@ -32,6 +32,7 @@ export interface AdminChecklistCard {
   isHit:         boolean;
   sortOrder:     number;
   imageUrl:      string | null;
+  notes:         string | null;
 }
 
 export interface AdminProductRow {
@@ -95,6 +96,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       isHit:         true,
       sortOrder:     true,
       imageUrl:      true,
+      notes:         true,
     },
   });
 
@@ -125,6 +127,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       isHit:         c.isHit,
       sortOrder:     c.sortOrder,
       imageUrl:      c.imageUrl,
+      notes:         c.notes,
     })),
     products: products.map((p) => ({
       id:               p.id,
@@ -172,6 +175,7 @@ export interface ChecklistCardInput {
   printRun:      number | null;
   variationName: string | null;
   isHit:         boolean;
+  notes:         string | null;
 }
 
 function parseOptionalString(value: unknown): string | null {
@@ -220,6 +224,7 @@ export function parseChecklistCardInput(
       printRun,
       variationName: parseOptionalString(body?.variationName),
       isHit:         Boolean(body?.isHit),
+      notes:         parseOptionalString(body?.notes),
     },
   };
 }

@@ -27,10 +27,6 @@ export interface ChecklistRowExtras {
   // confirmed owning it. "Available": nothing logged at all yet.
   status:        "Available" | "Owned" | "Surfaced";
   ownedGelId:    string | null;
-  // The note on whichever PortfolioCard is "the" one being tracked for this
-  // row — same canonical (most-recently-logged) pick as status/ownedGelId/
-  // cardHistory above.
-  notes:         string | null;
   cardHistory:   CardHistoryEvent[];
   // Total PortfolioCard rows logged against this checklist card — can be
   // more than 1 (e.g. two different users each logging their own numbered
@@ -169,9 +165,17 @@ export async function getChecklistRowExtras(
       const originalHolder = cardTransfers[0]?.fromUser ?? pc.user;
       const { username, displayName } = nameFor(originalHolder);
       const locationParts = [pc.hitCity, pc.hitCountry].filter(Boolean);
+      // BREAKER means two different things depending on isInHand: "I paid
+      // into a break and this is genuinely mine" (SELF flow's "From a
+      // Break") vs. "I saw someone else pull this from a breaker" (OTHER
+      // flow's sighting report) — same AcquisitionMethod value, but shown
+      // with owned-gel styling only in the first case.
+      const eventType = pc.isInHand && pc.acquisitionMethod === "BREAKER"
+        ? ("BREAKER_OWNED" as const)
+        : pc.acquisitionMethod;
       events.push({
         id:         `${pc.id}-acquired`,
-        eventType:  pc.acquisitionMethod,
+        eventType,
         username,
         displayName,
         occurredAt: pc.createdAt.toISOString(),
@@ -270,7 +274,6 @@ export async function getChecklistRowExtras(
       isLikedByUser: likedCardIds.has(id),
       status:        pc ? (pc.isInHand ? "Owned" : "Surfaced") : "Available",
       ownedGelId:    pc?.id ?? null,
-      notes:         pc?.notes ?? null,
       cardHistory:   pc ? buildHistory(pc) : [],
       gelsPulled:    gelsPulledByCard.get(id) ?? 0,
       loggedGels,

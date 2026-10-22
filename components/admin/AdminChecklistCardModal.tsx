@@ -7,7 +7,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Label, Input, Select } from "@/components/set-detail/AddGelModal";
+import { Label, Input, Select, Textarea } from "@/components/set-detail/AddGelModal";
 import type { AdminChecklistCard } from "@/lib/data/adminChecklist";
 
 export interface ChecklistCardFormValues {
@@ -20,6 +20,7 @@ export interface ChecklistCardFormValues {
   printRun:      string;
   variationName: string;
   isHit:         boolean;
+  notes:         string;
 }
 
 function emptyForm(defaultCategory: string, defaultTier: string): ChecklistCardFormValues {
@@ -33,6 +34,7 @@ function emptyForm(defaultCategory: string, defaultTier: string): ChecklistCardF
     printRun:      "",
     variationName: "",
     isHit:         false,
+    notes:         "",
   };
 }
 
@@ -47,6 +49,7 @@ function toForm(card: AdminChecklistCard): ChecklistCardFormValues {
     printRun:      card.printRun != null ? String(card.printRun) : "",
     variationName: card.variationName ?? "",
     isHit:         card.isHit,
+    notes:         card.notes ?? "",
   };
 }
 
@@ -87,7 +90,7 @@ export default function AdminChecklistCardModal({
 
   const setField =
     (key: keyof ChecklistCardFormValues) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const value = e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value;
       setForm((prev) => ({ ...prev, [key]: value }));
     };
@@ -186,6 +189,15 @@ export default function AdminChecklistCardModal({
             />
             This is a hit (auto/relic/etc.)
           </label>
+
+          <div>
+            <Label>Notes</Label>
+            <Textarea
+              value={form.notes}
+              onChange={setField("notes")}
+              placeholder="Admin-only note shown in the public checklist's Notes column"
+            />
+          </div>
 
           {error && <p className="text-xs text-red-400">{error}</p>}
 
