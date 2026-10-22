@@ -218,7 +218,7 @@ export function GelCard({
             it stays legible over a light/white card photo too. */}
         {gel.loggedByName && (
           <div
-            className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-sm ${
+            className={`absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-sm uppercase ${
               gel.isInHand ? "bg-emerald-600/90" : "bg-amber-600/90"
             }`}
           >

@@ -589,7 +589,7 @@ export function CardImageModal({
                           {target.loggedByName}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap ${
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap uppercase ${
                             target.isInHand ? "bg-emerald-600/90" : "bg-amber-600/90"
                           }`}
                         >
