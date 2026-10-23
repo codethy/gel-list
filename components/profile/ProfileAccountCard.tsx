@@ -77,7 +77,9 @@ export default function ProfileAccountCard({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/") && !isHeicFile(file)) {
+    const treatAsHeic = await isHeicFile(file);
+
+    if (!file.type.startsWith("image/") && !treatAsHeic) {
       alert("Please select an image file (JPG, PNG, WEBP, etc.)");
       return;
     }
@@ -86,7 +88,7 @@ export default function ProfileAccountCard({
     try {
       let fileToUpload: File = file;
 
-      if (isHeicFile(file)) {
+      if (treatAsHeic) {
         try {
           const jpegBlob = await convertHeicToJpeg(file);
           fileToUpload = new File(

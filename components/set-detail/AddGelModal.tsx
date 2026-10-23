@@ -104,12 +104,35 @@ export const MONTHS = [
 // than Safari can't decode HEIC in an <img> tag — it just renders broken.
 // file.type is usually "image/heic"/"image/heif", but some browsers leave it
 // blank for HEIC files, so the extension is checked too as a fallback.
-export function isHeicFile(file: File): boolean {
-  return (
+//
+// Neither check is airtight, though: seen in production, a real HEIC photo
+// picked via a mobile browser came through with file.type "image/png" and a
+// ".png" name — both checks above missed it, so it got uploaded un-converted
+// and silently failed to render anywhere. As a last resort, this sniffs the
+// file's magic bytes: HEIF's container format (ISO base media) has "ftyp" at
+// byte offset 4 followed by a 4-byte brand, and every HEIC/HEIF brand starts
+// with "he" or is the generic "mif1"/"msf1" — unlike JPEG/PNG/WEBP.
+export async function isHeicFile(file: File): Promise<boolean> {
+  if (
     file.type === "image/heic" ||
     file.type === "image/heif" ||
     /\.(heic|heif)$/i.test(file.name)
-  );
+  ) {
+    return true;
+  }
+
+  try {
+    const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const ftyp = String.fromCharCode(...header.slice(4, 8));
+    const brand = String.fromCharCode(...header.slice(8, 12)).trim();
+    if (ftyp === "ftyp") {
+      return /^(heic|heix|heim|heis|hevc|hevx|mif1|msf1)$/.test(brand);
+    }
+  } catch {
+    // Sniffing failed for some reason — fall through and treat it as a
+    // normal image rather than blocking the upload over it.
+  }
+  return false;
 }
 
 // Converts a HEIC file to a JPEG Blob so it can actually be displayed.
@@ -218,9 +241,12 @@ export function ImageUploadField({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Only allow image files — HEIC sometimes reports a blank file.type, so
-    // the extension is also accepted here (isHeicFile checks both).
-    if (!file.type.startsWith("image/") && !isHeicFile(file)) {
+    // Only allow image files — HEIC sometimes reports a blank/wrong
+    // file.type, so isHeicFile also checks the extension and, as a last
+    // resort, the file's magic bytes.
+    const treatAsHeic = await isHeicFile(file);
+
+    if (!file.type.startsWith("image/") && !treatAsHeic) {
       alert("Please select an image file (JPG, PNG, WEBP, etc.)");
       return;
     }
@@ -228,7 +254,7 @@ export function ImageUploadField({
     try {
       let fileToUpload: File = file;
 
-      if (isHeicFile(file)) {
+      if (treatAsHeic) {
         setIsConverting(true);
         try {
           const jpegBlob = await convertHeicToJpeg(file);
