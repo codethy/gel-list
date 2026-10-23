@@ -104,7 +104,7 @@ export const MONTHS = [
 // than Safari can't decode HEIC in an <img> tag — it just renders broken.
 // file.type is usually "image/heic"/"image/heif", but some browsers leave it
 // blank for HEIC files, so the extension is checked too as a fallback.
-function isHeicFile(file: File): boolean {
+export function isHeicFile(file: File): boolean {
   return (
     file.type === "image/heic" ||
     file.type === "image/heif" ||
@@ -116,7 +116,7 @@ function isHeicFile(file: File): boolean {
 // heic2any returns an array only for multi-image HEIC containers (e.g. Live
 // Photos) — a card photo is always a single image, so the first result is
 // the one we want.
-async function convertHeicToJpeg(file: File): Promise<Blob> {
+export async function convertHeicToJpeg(file: File): Promise<Blob> {
   // Loaded dynamically, not as a top-level import — heic2any references
   // `window` at module-load time, which crashes server-side rendering of
   // this whole component if it's imported statically. A dynamic import only

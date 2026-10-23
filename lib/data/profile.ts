@@ -85,6 +85,7 @@ export interface ProfileStats {
   setsOpened:        number;
   totalGels:         number;
   totalContributions: number;
+  likesReceived:     number;
 }
 
 // "Sets opened" — distinct sets the user has an actual own gel in.
@@ -92,8 +93,12 @@ export interface ProfileStats {
 // "Total contributions" — own gels plus every "someone else's gel" report
 // they've submitted, verified or not — a measure of total effort, not a
 // trust-gated public stat like "Chases Pulled" is.
+// "Likes received" — total likes (ChecklistCardLike rows) on every checklist
+// card the user owns a gel for. Likes live on the checklist card itself (see
+// ChecklistCardLike), not on an individual gel, so this counts each owned
+// checklist card once even if the user somehow logged more than one copy of it.
 export async function getProfileStats(userId: string): Promise<ProfileStats> {
-  const [distinctSets, totalGels, totalContributions] = await Promise.all([
+  const [distinctSets, totalGels, totalContributions, ownedCards] = await Promise.all([
     prisma.portfolioCard.findMany({
       where:    { userId, isInHand: true },
       select:   { cardSetId: true },
@@ -101,12 +106,22 @@ export async function getProfileStats(userId: string): Promise<ProfileStats> {
     }),
     prisma.portfolioCard.count({ where: { userId, isInHand: true } }),
     prisma.portfolioCard.count({ where: { userId } }),
+    prisma.portfolioCard.findMany({
+      where:    { userId, isInHand: true },
+      select:   { checklistCardId: true },
+      distinct: ["checklistCardId"],
+    }),
   ]);
+
+  const likesReceived = await prisma.checklistCardLike.count({
+    where: { checklistCardId: { in: ownedCards.map((c) => c.checklistCardId) } },
+  });
 
   return {
     setsOpened: distinctSets.length,
     totalGels,
     totalContributions,
+    likesReceived,
   };
 }
 
