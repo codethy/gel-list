@@ -1,11 +1,31 @@
 // lib/data/profile.ts
 //
-// Data layer for /profile and /profile/gels — the signed-in user's own
-// stats, their hand-picked Favorite Gels, and the full list of every gel
-// they've personally logged (isInHand: true) across every set.
+// Data layer for /profile, /profile/gels, and the public /u/[handle] view —
+// a user's stats, their hand-picked Favorite Gels, and the full list of
+// every gel they've personally logged (isInHand: true) across every set.
 
 import { prisma } from "@/lib/prisma";
 import type { GelEntry } from "@/components/set-detail/YourGels";
+
+export interface PublicProfileUser {
+  id:           string;
+  name:         string;
+  handle:       string;
+  profileImage: string | null;
+  createdAt:    Date;
+}
+
+// Resolves a @handle (from the /u/[handle] URL) to the user it belongs to.
+// Users without a handle (shouldn't happen — see generateUniqueHandle) are
+// unreachable here, same as a handle that doesn't exist at all.
+export async function getUserByHandle(handle: string): Promise<PublicProfileUser | null> {
+  const user = await prisma.user.findUnique({
+    where:  { handle },
+    select: { id: true, name: true, handle: true, profileImage: true, createdAt: true },
+  });
+  if (!user || !user.handle) return null;
+  return { id: user.id, name: user.name ?? "A user", handle: user.handle, profileImage: user.profileImage, createdAt: user.createdAt };
+}
 
 const portfolioCardSelect = {
   id:                true,

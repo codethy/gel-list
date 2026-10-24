@@ -1,9 +1,12 @@
 // components/profile/ProfileAccountCard.tsx
 //
-// The account-identity card on /profile (upper right): avatar (editable),
-// name + handle (editable), and read-only email/member-since. Replaces the
-// old static card + separate ProfileSignOutButton — sign-out already lives
-// in the Navbar, so this page doesn't need its own copy.
+// The account-identity card at the top of a profile page: avatar, name +
+// handle, and read-only email/member-since. Used by both /profile (the
+// signed-in user's own, editable=true — avatar upload, name/handle editing)
+// and /u/[handle] (a public, read-only view of someone else's profile,
+// editable=false — no edit controls, no email). Replaces the old static
+// card + separate ProfileSignOutButton — sign-out already lives in the
+// Navbar, so neither page needs its own copy.
 
 "use client";
 
@@ -12,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useUploadThing } from "@/lib/uploadthing";
 import { isHeicFile, convertHeicToJpeg } from "@/components/set-detail/AddGelModal";
+import { getInitials } from "@/lib/initials";
 
 const NAME_MIN_LENGTH = 3;
 const NAME_MAX_LENGTH = 30;
@@ -21,24 +25,16 @@ const HANDLE_MIN_LENGTH = 3;
 const HANDLE_MAX_LENGTH = 20;
 const HANDLE_PATTERN = /^[a-z0-9_]+$/;
 
-const MAX_INITIALS = 3;
-
-// "Michael" -> "M", "Michael Jordan" -> "MJ" — one letter per word, capped
-// at MAX_INITIALS for long names.
-function getInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  return words
-    .slice(0, MAX_INITIALS)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
-}
-
 interface ProfileAccountCardProps {
   initialName:         string;
   initialHandle:       string | null;
   initialProfileImage: string | null;
   email:               string | null;
   memberSince:         string | null;
+  // false on the public /u/[handle] view — hides the avatar upload/remove
+  // controls and the name/handle edit control. Defaults to true (the
+  // signed-in user's own /profile).
+  editable?: boolean;
 }
 
 export default function ProfileAccountCard({
@@ -47,6 +43,7 @@ export default function ProfileAccountCard({
   initialProfileImage,
   email,
   memberSince,
+  editable = true,
 }: ProfileAccountCardProps) {
   const router = useRouter();
   const { update: updateSession } = useSession();
@@ -123,6 +120,7 @@ export default function ProfileAccountCard({
         return;
       }
       setProfileImage(result[0].ufsUrl);
+      await updateSession(); // picks up the new photo in the Navbar avatar too
       router.refresh();
     } finally {
       setAvatarBusy(false);
@@ -140,6 +138,7 @@ export default function ProfileAccountCard({
       });
       if (!res.ok) return;
       setProfileImage(null);
+      await updateSession();
       router.refresh();
     } finally {
       setAvatarBusy(false);
@@ -243,22 +242,26 @@ export default function ProfileAccountCard({
                 />
               </button>
 
-              {/* Darkens on hover to set up the reveal below */}
-              <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 transition-colors pointer-events-none" />
+              {editable && (
+                <>
+                  {/* Darkens on hover to set up the reveal below */}
+                  <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 transition-colors pointer-events-none" />
 
-              {/* Hover-only — removing a photo only makes sense once one exists */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveAvatar();
-                }}
-                disabled={avatarBusy}
-                title="Remove profile picture"
-                className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/80 border border-white/20 flex items-center justify-center text-white text-sm opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
-              >
-                ×
-              </button>
+                  {/* Hover-only — removing a photo only makes sense once one exists */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveAvatar();
+                    }}
+                    disabled={avatarBusy}
+                    title="Remove profile picture"
+                    className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/80 border border-white/20 flex items-center justify-center text-white text-sm opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                </>
+              )}
             </>
           ) : (
             // Default icon for every user who hasn't uploaded their own photo —
@@ -271,28 +274,32 @@ export default function ProfileAccountCard({
             </div>
           )}
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={handleAvatarChange}
-            aria-label="Upload profile picture"
-          />
+          {editable && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={handleAvatarChange}
+                aria-label="Upload profile picture"
+              />
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={avatarBusy}
-            title="Change profile picture"
-            className="absolute -bottom-1.5 -right-1.5 w-12 h-12 rounded-full bg-slate-600 border border-slate-800 flex items-center justify-center text-base text-white hover:bg-slate-500 transition-colors disabled:opacity-50"
-          >
-            {avatarBusy ? (
-              <span className="w-6 h-6 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-            ) : (
-              "✎"
-            )}
-          </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarBusy}
+                title="Change profile picture"
+                className="absolute -bottom-1.5 -right-1.5 w-12 h-12 rounded-full bg-slate-600 border border-slate-800 flex items-center justify-center text-base text-white hover:bg-slate-500 transition-colors disabled:opacity-50"
+              >
+                {avatarBusy ? (
+                  <span className="w-6 h-6 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                ) : (
+                  "✎"
+                )}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Name / handle */}
@@ -341,14 +348,16 @@ export default function ProfileAccountCard({
           <div className="flex flex-col items-center gap-1 text-center">
             <div className="flex items-center gap-2">
               <p className="text-xl font-bold text-white">{name}</p>
-              <button
-                type="button"
-                onClick={openEdit}
-                title="Edit name and handle"
-                className="text-slate-500 hover:text-white transition-colors text-sm"
-              >
-                ✎
-              </button>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={openEdit}
+                  title="Edit name and handle"
+                  className="text-slate-500 hover:text-white transition-colors text-sm"
+                >
+                  ✎
+                </button>
+              )}
             </div>
             {handle && <p className="text-sm text-slate-500">@{handle}</p>}
           </div>
@@ -359,10 +368,12 @@ export default function ProfileAccountCard({
         <div className="w-full h-px bg-slate-700/50" />
 
         <div className="w-full flex flex-col gap-2 text-sm">
-          <div className="flex justify-between gap-2">
-            <span className="text-slate-500 shrink-0">Email</span>
-            <span className="text-slate-300 truncate">{email}</span>
-          </div>
+          {email && (
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-500 shrink-0">Email</span>
+              <span className="text-slate-300 truncate">{email}</span>
+            </div>
+          )}
           {memberSince && (
             <div className="flex justify-between gap-2">
               <span className="text-slate-500 shrink-0">Member since</span>

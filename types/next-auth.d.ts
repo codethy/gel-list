@@ -13,6 +13,7 @@ declare module "next-auth" {
       id: string;
       handle: string | null;
       needsName: boolean;
+      profileImage: string | null;
     } & DefaultSession["user"];
   }
 }

@@ -72,6 +72,7 @@ export interface SetDetailData {
     productType:       string | null;
     productTypeOther:  string | null;
     loggedByName:      string;
+    loggedByHandle:    string | null;
     cardTemplate: {
       playerName:    string;
       cardType:      string;
@@ -364,7 +365,7 @@ export async function getSetDetail(
         notes:             true,
         productType:       true,
         productTypeOther:  true,
-        user: { select: { name: true, username: true } },
+        user: { select: { name: true, username: true, handle: true } },
         checklistCard: {
           select: {
             id:            true,
@@ -435,6 +436,7 @@ export async function getSetDetail(
     productType:       pc.productType != null ? String(pc.productType) : null,
     productTypeOther:  pc.productTypeOther  ?? null,
     loggedByName:      pc.user.name ?? pc.user.username ?? "A user",
+    loggedByHandle:    pc.user.handle ?? null,
     cardTemplate: {
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),

@@ -13,9 +13,13 @@ interface ProfileFavoritesProps {
   initialFavorites: FavoriteGelEntry[];
   allGels:          UserGelEntry[];
   maxFavorites:     number;
+  // false on the public /u/[handle] view — hides "Manage Favorites" and
+  // "See All Your Gels", both of which only make sense for the owner.
+  // Defaults to true (the signed-in user's own /profile).
+  editable?: boolean;
 }
 
-export default function ProfileFavorites({ initialFavorites, allGels, maxFavorites }: ProfileFavoritesProps) {
+export default function ProfileFavorites({ initialFavorites, allGels, maxFavorites, editable = true }: ProfileFavoritesProps) {
   const [favorites, setFavorites] = useState<FavoriteGelEntry[]>(initialFavorites);
   const [modalOpen, setModalOpen] = useState(false);
   const [busyId, setBusyId]       = useState<string | null>(null);
@@ -75,29 +79,33 @@ export default function ProfileFavorites({ initialFavorites, allGels, maxFavorit
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-white">Favorite Gels</h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-600/50 hover:border-slate-500/60 transition-all duration-150"
-          >
-            {favorites.length === 0 ? "Choose Favorite Gels" : "Manage Favorites"}
-          </button>
-          <Link
-            href="/profile/gels"
-            className="flex items-center gap-0.5 px-2 py-1 rounded-md text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors duration-150"
-          >
-            See All Your Gels
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </Link>
-        </div>
+        {editable && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-600/50 hover:border-slate-500/60 transition-all duration-150"
+            >
+              {favorites.length === 0 ? "Choose Favorite Gels" : "Manage Favorites"}
+            </button>
+            <Link
+              href="/profile/gels"
+              className="flex items-center gap-0.5 px-2 py-1 rounded-md text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors duration-150"
+            >
+              See All Your Gels
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </Link>
+          </div>
+        )}
       </div>
 
       {favorites.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center gap-3 rounded-xl border border-dashed border-slate-700/60 bg-slate-900/30">
           <p className="text-sm text-slate-500 max-w-xs">
-            Pick up to {maxFavorites} gels from your collection to show off here.
+            {editable
+              ? `Pick up to ${maxFavorites} gels from your collection to show off here.`
+              : "No favorite gels picked yet."}
           </p>
         </div>
       ) : (
@@ -108,17 +116,19 @@ export default function ProfileFavorites({ initialFavorites, allGels, maxFavorit
         </div>
       )}
 
-      <ManageFavoritesModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        allGels={allGels}
-        favorites={favorites}
-        maxFavorites={maxFavorites}
-        busyId={busyId}
-        onAdd={handleAdd}
-        onRemove={handleRemove}
-        onMove={handleMove}
-      />
+      {editable && (
+        <ManageFavoritesModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          allGels={allGels}
+          favorites={favorites}
+          maxFavorites={maxFavorites}
+          busyId={busyId}
+          onAdd={handleAdd}
+          onRemove={handleRemove}
+          onMove={handleMove}
+        />
+      )}
 
       <CardImageModal target={imageTarget} onClose={() => setImageTarget(null)} />
     </section>

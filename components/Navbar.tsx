@@ -3,6 +3,7 @@
 import { useSession, signOut, signIn } from "next-auth/react";
 import Link from "next/link";
 import SetSearchBar from "./SetSearchBar";
+import { getInitials } from "@/lib/initials";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -29,20 +30,38 @@ export default function Navbar() {
           <div className="w-24 h-6 rounded bg-zinc-700 animate-pulse" />
         ) : session?.user ? (
           <div className="flex items-center gap-3">
-            {/* Name only — no profile picture. The handle underneath is
-                private: only the signed-in user ever sees their own. */}
+            {/* Avatar + name + handle, all linking to the signed-in user's
+                own profile. Other users see this same handle on their
+                public /u/[handle] page now too — no longer private. */}
             <Link
               href="/profile"
-              className="flex flex-col items-end leading-tight"
+              className="flex items-center gap-2"
             >
-              <span className="text-sm text-zinc-300 hover:text-white transition-colors font-medium">
-                {session.user.name}
-              </span>
-              {session.user.handle && (
-                <span className="text-[11px] text-zinc-500">
-                  @{session.user.handle}
-                </span>
+              {session.user.profileImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={session.user.profileImage}
+                  alt=""
+                  className="w-8 h-8 rounded-full border border-zinc-700 object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-black border border-zinc-700 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-black text-white">
+                    {getInitials(session.user.name ?? "")}
+                  </span>
+                </div>
               )}
+
+              <div className="flex flex-col items-end leading-tight">
+                <span className="text-sm text-zinc-300 hover:text-white transition-colors font-medium">
+                  {session.user.name}
+                </span>
+                {session.user.handle && (
+                  <span className="text-[11px] text-zinc-500">
+                    @{session.user.handle}
+                  </span>
+                )}
+              </div>
             </Link>
 
             <button

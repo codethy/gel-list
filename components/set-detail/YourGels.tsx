@@ -3,6 +3,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget } from "./ChecklistTable";
 import { getProductLabel } from "@/lib/productTypes";
@@ -39,6 +40,10 @@ export interface GelEntry {
   // Gels"/Favorites/All Your Gels never set this, since those are always
   // unambiguously the viewer's own.
   loggedByName?: string | null;
+  // The logging user's @handle — used to link the loggedByName badge to
+  // their public profile (/u/[handle]). Null only for the rare user with no
+  // handle at all (shouldn't normally happen — see generateUniqueHandle).
+  loggedByHandle?: string | null;
   cardTemplate: {
     playerName: string;
     cardType: string;
@@ -171,6 +176,7 @@ export function GelCard({
                 serialNumber: gel.serialNumber ?? null,
                 printRun: gel.cardTemplate.printRun ?? null,
                 loggedByName: gel.loggedByName ?? null,
+                loggedByHandle: gel.loggedByHandle ?? null,
                 isInHand: gel.isInHand ?? true,
               })
             }
@@ -360,11 +366,23 @@ export function GelCard({
           )}
           <div className="pt-1 flex items-center gap-1.5 flex-wrap">
             <VerificationBadge isVerified={gel.isVerified ?? false} />
-            {/* "Recent Pulls" only — who logged it */}
+            {/* "Recent Pulls" only — who logged it. Links to their public
+                profile (own profile, if it's the viewer's own tag — see
+                app/u/[handle]/page.tsx's own-handle redirect). */}
             {gel.loggedByName && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold text-slate-300 bg-slate-700/60 border border-slate-600/50 whitespace-nowrap truncate max-w-[120px]">
-                {gel.loggedByName}
-              </span>
+              gel.loggedByHandle ? (
+                <Link
+                  href={`/u/${gel.loggedByHandle}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold text-slate-300 bg-slate-700/60 border border-slate-600/50 hover:bg-slate-700 hover:text-white hover:border-slate-500 transition-colors whitespace-nowrap truncate max-w-[120px]"
+                >
+                  {gel.loggedByName}
+                </Link>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold text-slate-300 bg-slate-700/60 border border-slate-600/50 whitespace-nowrap truncate max-w-[120px]">
+                  {gel.loggedByName}
+                </span>
+              )
             )}
           </div>
         </div>

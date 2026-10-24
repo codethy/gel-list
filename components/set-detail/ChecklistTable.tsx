@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -522,6 +523,7 @@ export interface CardImageTarget {
   serialNumber?: number | null;
   printRun?: number | null;
   loggedByName?: string | null;
+  loggedByHandle?: string | null;
   isInHand?: boolean;
 }
 
@@ -582,12 +584,22 @@ export function CardImageModal({
                       </span>
                     )}
                     {/* "Recent Pulls" only — who logged it and whether it's
-                        their own gel or a reported sighting */}
+                        their own gel or a reported sighting. Links to their
+                        public profile. */}
                     {target.loggedByName && (
                       <>
-                        <span className="px-2 py-0.5 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-200 border border-white/10 whitespace-nowrap">
-                          {target.loggedByName}
-                        </span>
+                        {target.loggedByHandle ? (
+                          <Link
+                            href={`/u/${target.loggedByHandle}`}
+                            className="px-2 py-0.5 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-200 border border-white/10 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                          >
+                            {target.loggedByName}
+                          </Link>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-200 border border-white/10 whitespace-nowrap">
+                            {target.loggedByName}
+                          </span>
+                        )}
                         <span
                           className={`px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap uppercase ${
                             target.isInHand ? "bg-emerald-600/90" : "bg-amber-600/90"

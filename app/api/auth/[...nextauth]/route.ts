@@ -31,10 +31,11 @@ export const authOptions: NextAuthOptions = {
     // object. Without this, session.user.id would be undefined.
     async session({ session, user }) {
       if (session.user) {
-        const dbUser = user as { handle?: string | null; hasCustomName?: boolean };
+        const dbUser = user as { handle?: string | null; hasCustomName?: boolean; profileImage?: string | null };
         session.user.id = user.id;
         session.user.handle = dbUser.handle ?? null;
         session.user.needsName = !dbUser.hasCustomName;
+        session.user.profileImage = dbUser.profileImage ?? null;
       }
       return session;
     },
