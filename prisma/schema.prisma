@@ -176,6 +176,24 @@ model CardSet {
   portfolioCards PortfolioCard[]
   ripSessions    RipSession[]
   products       SetProduct[]
+  featuredOn     HomepageFeaturedSet[]
+}
+
+// Admin-curated selection of sets shown on the home page for each category
+// (up to HomepageFeaturedSet.MAX_PER_CATEGORY — see lib/data/homepage.ts).
+// Replaces just showing whatever sets happen to sort first; managed from
+// /admin/homepage.
+model HomepageFeaturedSet {
+  id        String   @id @default(cuid())
+  category  Category
+  cardSetId String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  cardSet CardSet @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+
+  @@unique([category, cardSetId])
+  @@index([category, order])
 }
 
 // ─── CARD TAXONOMY (CardCategory / CardTier) ─────────────────────────────────

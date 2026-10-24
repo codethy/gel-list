@@ -22,10 +22,18 @@ export default async function AdminHomePage() {
 
         <Link
           href="/admin/gels"
-          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
         >
           <p className="font-semibold text-white">Gel Review Queue</p>
           <p className="text-sm text-slate-400">Verify, reject, edit, or delete logged gels across every set.</p>
+        </Link>
+
+        <Link
+          href="/admin/homepage"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+        >
+          <p className="font-semibold text-white">Home Page Sets</p>
+          <p className="text-sm text-slate-400">Choose and reorder which sets are featured on the home page, per category.</p>
         </Link>
 
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">

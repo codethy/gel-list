@@ -4,19 +4,9 @@ import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Sidebar, { TAXONOMY, SidebarFilters } from "@/components/Sidebar";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-interface SetItem {
-  id:              string;
-  name:            string;
-  category:        string;
-  subCategory:     string;
-  year:            number;
-  imageUrl:           string | null;
-  totalPrintRunInSet: number;
-  totalCardsInSet:    number;
-  totalHitsInSet:     number;
-}
+import { SetCard, SkeletonCard, type SetItem } from "@/components/SetCard";
+import SeeAllLink from "@/components/SeeAllLink";
+import { categoryToSlug } from "@/lib/taxonomy";
 
 // ─── Category display config ─────────────────────────────────────────────────
 const CATEGORY_ORDER = ["SPORTS", "ENTERTAINMENT", "TCG"] as const;
@@ -27,99 +17,25 @@ const CATEGORY_LABELS: Record<string, string> = {
   TCG:           "Trading Card Games",
 };
 
-// ─── Skeleton Card ───────────────────────────────────────────────────────────
-function SkeletonCard() {
-  return (
-    <div className="bg-[#111111] border border-[#222222] rounded-xl p-3 flex flex-col gap-3 animate-pulse">
-      <div className="w-full aspect-square bg-[#1e1e1e] rounded-lg" />
-      <div className="flex flex-col gap-2">
-        <div className="h-3 bg-[#1e1e1e] rounded w-3/4" />
-        <div className="h-3 bg-[#1e1e1e] rounded w-1/2" />
-      </div>
-      <div className="pt-2 border-t border-[#1e1e1e] flex justify-between">
-        <div className="h-2.5 bg-[#1e1e1e] rounded w-16" />
-        <div className="h-2.5 bg-[#1e1e1e] rounded w-10" />
-      </div>
-    </div>
-  );
-}
-
-// ─── Set Card ────────────────────────────────────────────────────────────────
-// ✅ FIX: Wrapped in <Link> so clicking navigates to /sets/[id]
-function SetCard({ set }: { set: SetItem }) {
-  return (
-    <Link
-      href={`/sets/${set.id}`}
-      className="bg-[#111111] border border-[#222222] rounded-xl p-3 flex flex-col gap-3 hover:border-zinc-600 hover:bg-[#161616] transition-all duration-200 cursor-pointer group"
-    >
-      {/* Image */}
-      <div className="w-full aspect-square bg-[#1a1a1a] rounded-lg flex items-center justify-center border border-[#2a2a2a] group-hover:border-zinc-600 transition-colors overflow-hidden">
-        {set.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={set.imageUrl}
-            alt={set.name}
-            className="w-full h-full object-contain"
-          />
-        ) : (
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1"
-            className="text-zinc-700"
-          >
-            <rect x="2" y="3" width="14" height="20" rx="2" />
-            <path d="M8 21h8a2 2 0 002-2V7l-5-5H8a2 2 0 00-2 2" />
-          </svg>
-        )}
-      </div>
-
-      {/* Name + meta */}
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-white leading-tight line-clamp-2">
-          {set.name}
-        </h3>
-        <p className="text-xs text-zinc-500">
-          {set.subCategory.replace(/_/g, " ").toUpperCase()} · {set.year}
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#1e1e1e]">
-        <span className="text-[11px] text-zinc-500">
-          {/* TCG has no reliable print run to sum/estimate, so it shows a
-              plain chase-card count instead — see SetHeader.tsx. */}
-          {set.category === "TCG"
-            ? `${set.totalCardsInSet.toLocaleString()} chase cards`
-            : `${set.totalPrintRunInSet.toLocaleString()} chase cards`}
-        </span>
-        {set.totalHitsInSet > 0 && (
-          <span className="text-[11px] text-yellow-500/80 font-medium">
-            {set.totalHitsInSet} hits
-          </span>
-        )}
-      </div>
-    </Link>
-  );
-}
-
 // ─── Category Section ────────────────────────────────────────────────────────
 function CategorySection({
   label,
   sets,
+  seeAllHref,
 }: {
-  label: string;
-  sets:  SetItem[];
+  label:      string;
+  sets:       SetItem[];
+  seeAllHref?: string;
 }) {
   if (sets.length === 0) return null;
   return (
     <section className="mb-10">
-      <h2 className="text-lg font-bold text-white mb-4 tracking-tight">
-        {label}
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-white tracking-tight">
+          {label}
+        </h2>
+        {seeAllHref && <SeeAllLink href={seeAllHref} />}
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {sets.map((set) => (
           <SetCard key={set.id} set={set} />
@@ -194,6 +110,12 @@ function HomeContent() {
     years:         new Set<number>(),
   });
 
+  // No filter/search active — the default landing view, showing each
+  // category's admin-curated "featured" sets (see /admin/homepage) instead
+  // of browsing every set. Filtering or searching falls back to the full,
+  // infinite-scrolling browse experience below.
+  const isCurated = filters.subcategories.size === 0 && filters.years.size === 0 && !searchQuery;
+
   const [sets,        setSets]        = useState<SetItem[]>([]);
   const [cursor,      setCursor]      = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
@@ -202,7 +124,23 @@ function HomeContent() {
 
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // ── Core fetch function ──────────────────────────────────────────────────
+  // ── Curated fetch (default landing view) ─────────────────────────────────
+  const fetchFeatured = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/sets/featured");
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const data = await res.json() as { grouped: Record<string, SetItem[]> };
+      setSets(CATEGORY_ORDER.flatMap((catId) => data.grouped[catId] ?? []));
+      setHasMore(false);
+    } catch (err) {
+      console.error("[HomePage] Failed to load featured sets:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Core fetch function (filtered/search browse) ─────────────────────────
   const fetchSets = useCallback(async (
     currentFilters: SidebarFilters,
     currentCursor:  string | null,
@@ -242,13 +180,18 @@ function HomeContent() {
 
   // ── Re-fetch whenever filters or the search query change ────────────────
   useEffect(() => {
-    fetchSets(filters, null, true);
-  }, [filters, searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isCurated) {
+      fetchFeatured();
+    } else {
+      fetchSets(filters, null, true);
+    }
+  }, [filters, searchQuery, isCurated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── IntersectionObserver ─────────────────────────────────────────────────
+  // ── IntersectionObserver (filtered/search browse only — the curated view
+  //    has nothing more to load) ────────────────────────────────────────────
   useEffect(() => {
     const sentinel = sentinelRef.current;
-    if (!sentinel) return;
+    if (!sentinel || isCurated) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -261,7 +204,7 @@ function HomeContent() {
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, cursor, filters, fetchSets]);
+  }, [hasMore, loading, loadingMore, cursor, filters, fetchSets, isCurated]);
 
   const visibleCategories =
     filters.subcategories.size > 0
@@ -297,7 +240,7 @@ function HomeContent() {
               </Link>
             </p>
           ) : (
-            !loading && !isEmpty && (
+            !loading && !isEmpty && !isCurated && (
               <p className="text-zinc-500 text-sm mt-1">
                 {sets.length} set{sets.length !== 1 ? "s" : ""}
                 {hasMore ? "+" : ""} loaded
@@ -337,6 +280,7 @@ function HomeContent() {
                 key={catId}
                 label={CATEGORY_LABELS[catId] ?? catId}
                 sets={grouped[catId] ?? []}
+                seeAllHref={isCurated ? `/categories/${categoryToSlug(catId)}` : undefined}
               />
             ))}
 
@@ -358,12 +302,6 @@ function HomeContent() {
               <SkeletonCard key={`more-skel-${i}`} />
             ))}
           </div>
-        )}
-
-        {!hasMore && sets.length > 0 && (
-          <p className="text-center text-zinc-600 text-sm py-10">
-            All sets loaded
-          </p>
         )}
 
         <div ref={sentinelRef} className="h-4" />

@@ -1,0 +1,24 @@
+{
+  "fileName": "checklist.xlsx",
+  "sheetName": null,
+
+  "setName": "Disney Lorcana - Archazia's Island",
+  "year": 2025,
+  "brand": "Disney Lorcana",
+  "category": "TCG",
+  "subCategory": "LORCANA",
+
+  "columns": {
+    "cardNumber": "cardNumber",
+    "playerName": "playerName",
+    "cardCategory": "cardCategory",
+    "cardTier": "cardTier",
+    "team": "team",
+    "parallel": "parallel",
+    "printRun": "printRun",
+    "variationName": "variationName",
+    "isHit": "isHit"
+  },
+
+  "batchSize": 100
+}

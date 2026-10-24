@@ -82,3 +82,32 @@ export function resolveSubCategory(raw: string): { valid: string | null; error: 
     error: `"${raw}" is not a recognized subCategory. Valid values are: ${[...VALID_SUBCATEGORY_IDS].join(", ")}`,
   };
 }
+
+// ─── URL SLUGS ────────────────────────────────────────────────────────────────
+// Used by /categories/[category]/[subcategory] (the category/subcategory
+// "See all" pages) — human-friendly, hyphenated-lowercase versions of the
+// enum/id values above. A subcategory id alone isn't globally unique (e.g.
+// "OTHER" exists under every category), so resolving one always needs the
+// parent category's slug too.
+
+export function categoryToSlug(categoryEnumValue: string): string {
+  return categoryEnumValue.toLowerCase();
+}
+
+export function slugToCategory(slug: string): (typeof TAXONOMY)[number] | null {
+  return TAXONOMY.find((t) => t.enumValue.toLowerCase() === slug.toLowerCase()) ?? null;
+}
+
+export function subCategoryToSlug(subCategoryId: string): string {
+  return subCategoryId.toLowerCase().replace(/_/g, "-");
+}
+
+export function slugToSubCategory(
+  categoryEnumValue: string,
+  slug: string
+): { id: string; label: string } | null {
+  const parent = TAXONOMY.find((t) => t.enumValue === categoryEnumValue);
+  if (!parent) return null;
+  const normalized = slug.toLowerCase();
+  return parent.children.find((c) => subCategoryToSlug(c.id) === normalized) ?? null;
+}

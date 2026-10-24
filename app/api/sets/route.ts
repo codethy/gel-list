@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { SUBCATEGORY_TO_CATEGORY } from "@/lib/taxonomy";
+import { attachPrintRunTotals } from "@/lib/data/setPrintRun";
 
 const PAGE_SIZE = 18;
 
@@ -82,36 +83,9 @@ export async function GET(req: NextRequest) {
     const nextCursor =
       sets.length === limit ? sets[sets.length - 1].id : null;
 
-    // ── Total print run per set — same "chase cards" figure shown in the ──
-    // set detail banner's first stat box (see lib/data/sets.ts): every
-    // checklist card counts as its printRun, defaulting to 10 when
-    // unspecified. Computed here via two grouped aggregates (rather than
-    // one query per set) so this page's per-set totals cost two queries no
-    // matter how many sets are on the page.
-    const setIds = sets.map((s) => s.id);
-    const DEFAULT_PRINT_RUN = 10;
-
-    const [printRunSums, unlimitedPrintRunCounts] = await Promise.all([
-      prisma.checklistCard.groupBy({
-        by:    ["cardSetId"],
-        where: { cardSetId: { in: setIds }, printRun: { not: null } },
-        _sum:  { printRun: true },
-      }),
-      prisma.checklistCard.groupBy({
-        by:    ["cardSetId"],
-        where: { cardSetId: { in: setIds }, printRun: null },
-        _count: { _all: true },
-      }),
-    ]);
-
-    const printRunSumBySet     = new Map(printRunSums.map((r) => [r.cardSetId, r._sum.printRun ?? 0]));
-    const unlimitedCountBySet  = new Map(unlimitedPrintRunCounts.map((r) => [r.cardSetId, r._count._all]));
-
-    const setsWithPrintRun = sets.map((s) => ({
-      ...s,
-      totalPrintRunInSet:
-        (printRunSumBySet.get(s.id) ?? 0) + (unlimitedCountBySet.get(s.id) ?? 0) * DEFAULT_PRINT_RUN,
-    }));
+    // Total print run per set — same "chase cards" figure shown in the set
+    // detail banner's first stat box (see lib/data/sets.ts).
+    const setsWithPrintRun = await attachPrintRunTotals(sets);
 
     return NextResponse.json({ sets: setsWithPrintRun, nextCursor, totalCount });
 
