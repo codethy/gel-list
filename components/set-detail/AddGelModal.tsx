@@ -11,6 +11,7 @@ import { useUploadThing } from "@/lib/uploadthing";
 
 export interface ChecklistCardOption {
   id: string;
+  cardNumber: string;
   playerName: string;
   cardType: string;
   parallelType?: string | null;
@@ -34,6 +35,10 @@ interface AddGelModalProps {
   onClose: () => void;
   onSuccess: (gel: GelEntry) => void;
   setId: string;
+  // "SPORTS" | "ENTERTAINMENT" | "TCG" — gates TCG-only differences: the
+  // "Search for a card" placeholder (vs. "Search for a player") and hiding
+  // the Serial Number field (TCG cards aren't reliably serial-numbered).
+  category: string;
   templates: ChecklistCardOption[];
   products: ProductOption[];
   preselectedChecklistCardId?: string | null;
@@ -392,6 +397,7 @@ function matchesKeyword(t: ChecklistCardOption, keyword: string): boolean {
   const q = foldDiacritics(keyword.toLowerCase());
 
   if (foldDiacritics(t.playerName.toLowerCase()).includes(q)) return true;
+  if (t.cardNumber && t.cardNumber.toLowerCase().includes(q)) return true;
   if (t.parallelType && foldDiacritics(t.parallelType.toLowerCase()).includes(q)) return true;
   if (t.variationName && foldDiacritics(t.variationName.toLowerCase()).includes(q)) return true;
   if (t.team && foldDiacritics(t.team.toLowerCase()).includes(q)) return true;
@@ -409,16 +415,24 @@ function matchesSearchQuery(t: ChecklistCardOption, rawQuery: string): boolean {
 
 // ─── CHECKLIST CARD SEARCH ────────────────────────────────────────────────────
 
+// "208/204 Jasmine" — card number first so the dropdown reads in the same
+// order it's sorted (by card number), then the player/card name.
+function cardOptionTitle(t: ChecklistCardOption): string {
+  return t.cardNumber ? `${t.cardNumber} ${t.playerName}` : t.playerName;
+}
+
 function ChecklistCardSearch({
   templates,
   selectedId,
   onSelect,
   isLocked,
+  category,
 }: {
   templates: ChecklistCardOption[];
   selectedId: string;
   onSelect: (id: string) => void;
   isLocked: boolean;
+  category: string;
 }) {
   const [query, setQuery]   = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -443,7 +457,7 @@ function ChecklistCardSearch({
   if (isLocked && selected) {
     return (
       <div className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200">
-        <span className="font-semibold">{selected.playerName}</span>
+        <span className="font-semibold">{cardOptionTitle(selected)}</span>
         {playerSubtitle(selected) && (
           <span className="text-slate-400 ml-2">— {playerSubtitle(selected)}</span>
         )}
@@ -457,7 +471,7 @@ function ChecklistCardSearch({
         type="text"
         value={
           selected
-            ? [selected.playerName, playerSubtitle(selected)].filter(Boolean).join(" ")
+            ? [cardOptionTitle(selected), playerSubtitle(selected)].filter(Boolean).join(" ")
             : query
         }
         onChange={(e) => {
@@ -466,7 +480,7 @@ function ChecklistCardSearch({
           setIsOpen(true);
         }}
         onFocus={() => setIsOpen(true)}
-        placeholder="Search for a player..."
+        placeholder={category === "TCG" ? "Search for a card..." : "Search for a player..."}
         className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150"
       />
       <AnimatePresence>
@@ -489,7 +503,7 @@ function ChecklistCardSearch({
                 }}
                 className="w-full px-3 py-2.5 text-left hover:bg-slate-800/80 transition-colors duration-100 border-b border-slate-800/60 last:border-0"
               >
-                <p className="text-sm text-slate-200 font-medium">{t.playerName}</p>
+                <p className="text-sm text-slate-200 font-medium">{cardOptionTitle(t)}</p>
                 {playerSubtitle(t) && (
                   <p className="text-xs text-slate-500">{playerSubtitle(t)}</p>
                 )}
@@ -509,6 +523,7 @@ export default function AddGelModal({
   onClose,
   onSuccess,
   setId,
+  category,
   templates,
   products,
   preselectedChecklistCardId,
@@ -817,6 +832,7 @@ export default function AddGelModal({
                   selectedId={form.checklistCardId}
                   onSelect={(id) => setForm((prev) => ({ ...prev, checklistCardId: id }))}
                   isLocked={Boolean(preselectedChecklistCardId) || isEditing}
+                  category={category}
                 />
               </div>
 
@@ -904,17 +920,21 @@ export default function AddGelModal({
                 )}
               </AnimatePresence>
 
-              {/* ── Serial Number ────────────────────────────────────────── */}
-              <div>
-                <Label>Serial Number</Label>
-                <Input
-                  type="number"
-                  value={form.serialNumber}
-                  onChange={setField("serialNumber")}
-                  placeholder="e.g. 42"
-                  min="1"
-                />
-              </div>
+              {/* ── Serial Number ─────────────────────────────────────────── */}
+              {/* TCG cards aren't reliably serial-numbered, so this field is
+                  hidden entirely for TCG sets (both SELF and OTHER). */}
+              {category !== "TCG" && (
+                <div>
+                  <Label>Serial Number</Label>
+                  <Input
+                    type="number"
+                    value={form.serialNumber}
+                    onChange={setField("serialNumber")}
+                    placeholder="e.g. 8"
+                    min="1"
+                  />
+                </div>
+              )}
 
               {/* ── Hit Date ─────────────────────────────────────────────── */}
               <div className="grid grid-cols-2 gap-3">
@@ -933,7 +953,6 @@ export default function AddGelModal({
                     type="number"
                     value={form.hitYear}
                     onChange={setField("hitYear")}
-                    placeholder="e.g. 2024"
                     min="1980"
                     max={new Date().getFullYear()}
                   />
@@ -947,7 +966,6 @@ export default function AddGelModal({
                   <Input
                     value={form.hitCity}
                     onChange={setField("hitCity")}
-                    placeholder="e.g. Chicago"
                   />
                 </div>
                 <div>
@@ -955,7 +973,6 @@ export default function AddGelModal({
                   <Input
                     value={form.hitCountry}
                     onChange={setField("hitCountry")}
-                    placeholder="e.g. USA"
                   />
                 </div>
               </div>

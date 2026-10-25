@@ -114,6 +114,7 @@ export interface SetDetailData {
 
   allTemplates: {
     id:            string;
+    cardNumber:    string;
     playerName:    string;
     cardType:      string;
     parallelType:  string | null;
@@ -266,9 +267,10 @@ export async function getSetDetail(
     // so it's left as-is here and deferred to that step.
     prisma.checklistCard.findMany({
       where:   { cardSetId: setId },
-      orderBy: [{ playerName: "asc" }],
+      orderBy: [{ sortOrder: "asc" }], // same order as the checklist table itself
       select: {
         id:            true,
+        cardNumber:    true,
         playerName:    true,
         cardCategory:  true,
         parallel:      true,
@@ -529,6 +531,7 @@ export async function getSetDetail(
     },
     allTemplates: allChecklistCards.map((c) => ({
       id:            c.id,
+      cardNumber:    c.cardNumber,
       playerName:    c.playerName,
       cardType:      String(c.cardCategory),
       parallelType:  c.parallel ?? null,

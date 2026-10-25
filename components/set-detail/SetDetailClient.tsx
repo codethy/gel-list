@@ -278,6 +278,7 @@ export default function SetDetailClient({
         onClose={handleModalClose}
         onSuccess={handleGelSuccess}
         setId={setId}
+        category={category}
         templates={allTemplates}
         products={products}
         preselectedChecklistCardId={preselectedChecklistCardId}
