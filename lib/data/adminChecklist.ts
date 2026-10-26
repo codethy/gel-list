@@ -11,12 +11,13 @@ import { CardCategory, CardTier } from "@prisma/client";
 import { getProductLabel } from "@/lib/productTypes";
 
 export interface AdminChecklistSet {
-  id:        string;
-  name:      string;
-  year:      number;
-  brand:     string;
-  category:  string;
-  cardCount: number;
+  id:          string;
+  name:        string;
+  year:        number;
+  brand:       string;
+  category:    string;
+  subCategory: string;
+  cardCount:   number;
 }
 
 export interface AdminChecklistCard {
@@ -43,7 +44,15 @@ export interface AdminProductRow {
 }
 
 export interface AdminChecklistSetDetail {
-  set:      { id: string; name: string; year: number; brand: string; category: string };
+  set: {
+    id:          string;
+    name:        string;
+    year:        number;
+    brand:       string;
+    category:    string;
+    subCategory: string;
+    description: string | null;
+  };
   cards:    AdminChecklistCard[];
   products: AdminProductRow[];
 }
@@ -53,22 +62,24 @@ export async function getAdminChecklistSets(): Promise<AdminChecklistSet[]> {
   const sets = await prisma.cardSet.findMany({
     orderBy: [{ year: "desc" }, { name: "asc" }],
     select: {
-      id:       true,
-      name:     true,
-      year:     true,
-      brand:    true,
-      category: true,
-      _count:   { select: { checklistCards: true } },
+      id:          true,
+      name:        true,
+      year:        true,
+      brand:       true,
+      category:    true,
+      subCategory: true,
+      _count:      { select: { checklistCards: true } },
     },
   });
 
   return sets.map((s) => ({
-    id:        s.id,
-    name:      s.name,
-    year:      s.year,
-    brand:     s.brand,
-    category:  String(s.category),
-    cardCount: s._count.checklistCards,
+    id:          s.id,
+    name:        s.name,
+    year:        s.year,
+    brand:       s.brand,
+    category:    String(s.category),
+    subCategory: s.subCategory,
+    cardCount:   s._count.checklistCards,
   }));
 }
 
@@ -76,29 +87,11 @@ export async function getAdminChecklistSets(): Promise<AdminChecklistSet[]> {
 export async function getAdminChecklistForSet(setId: string): Promise<AdminChecklistSetDetail | null> {
   const cardSet = await prisma.cardSet.findUnique({
     where:  { id: setId },
-    select: { id: true, name: true, year: true, brand: true, category: true },
+    select: { id: true, name: true, year: true, brand: true, category: true, subCategory: true, description: true },
   });
   if (!cardSet) return null;
 
-  const cards = await prisma.checklistCard.findMany({
-    where:   { cardSetId: setId },
-    orderBy: { sortOrder: "asc" },
-    select: {
-      id:            true,
-      cardNumber:    true,
-      playerName:    true,
-      team:          true,
-      cardCategory:  true,
-      cardTier:      true,
-      parallel:      true,
-      printRun:      true,
-      variationName: true,
-      isHit:         true,
-      sortOrder:     true,
-      imageUrl:      true,
-      notes:         true,
-    },
-  });
+  const cards = await getAdminChecklistCards(setId);
 
   const products = await prisma.setProduct.findMany({
     where:   { cardSetId: setId },
@@ -108,27 +101,15 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
 
   return {
     set: {
-      id:       cardSet.id,
-      name:     cardSet.name,
-      year:     cardSet.year,
-      brand:    cardSet.brand,
-      category: String(cardSet.category),
+      id:          cardSet.id,
+      name:        cardSet.name,
+      year:        cardSet.year,
+      brand:       cardSet.brand,
+      category:    String(cardSet.category),
+      subCategory: cardSet.subCategory,
+      description: cardSet.description,
     },
-    cards: cards.map((c) => ({
-      id:            c.id,
-      cardNumber:    c.cardNumber,
-      playerName:    c.playerName,
-      team:          c.team,
-      cardCategory:  String(c.cardCategory),
-      cardTier:      String(c.cardTier),
-      parallel:      c.parallel,
-      printRun:      c.printRun,
-      variationName: c.variationName,
-      isHit:         c.isHit,
-      sortOrder:     c.sortOrder,
-      imageUrl:      c.imageUrl,
-      notes:         c.notes,
-    })),
+    cards,
     products: products.map((p) => ({
       id:               p.id,
       productType:      String(p.productType),
@@ -227,4 +208,109 @@ export function parseChecklistCardInput(
       notes:         parseOptionalString(body?.notes),
     },
   };
+}
+
+// ─── CHECKLIST CARD POSITIONING ────────────────────────────────────────────
+// Lets the admin place a card above/below another card it's searched for,
+// instead of always landing at the end of the checklist — see
+// AdminChecklistCardModal.tsx.
+
+export interface PositionInstruction {
+  anchorCardId: string;
+  where:        "above" | "below";
+}
+
+// Parses the optional `position` field on a create/edit request body.
+// Returns { data: null } (not an error) when the field is simply absent —
+// positioning is optional, so most requests won't include it at all.
+export function parsePositionInstruction(
+  body: any
+): { data: PositionInstruction | null; error?: undefined } | { data?: undefined; error: string } {
+  if (body?.position == null) return { data: null };
+
+  const anchorCardId = typeof body.position.anchorCardId === "string" ? body.position.anchorCardId : "";
+  if (!anchorCardId) return { error: "position.anchorCardId is required" };
+
+  const where = body.position.where;
+  if (where !== "above" && where !== "below") {
+    return { error: 'position.where must be "above" or "below"' };
+  }
+
+  return { data: { anchorCardId, where } };
+}
+
+// Moves one card to sit directly above/below another, renumbering every
+// row in the set to its new 0-based index. Admin-triggered and infrequent
+// (not a page-load query), so an O(n) rewrite is an acceptable cost even
+// for this app's largest set (~9,700 rows) — simpler and more robust than
+// trying to shift only the rows in between, especially since historical
+// deletes can leave gaps in the stored sortOrder values.
+export async function repositionChecklistCard(
+  setId: string,
+  cardId: string,
+  instruction: PositionInstruction
+): Promise<{ error: string | null }> {
+  const cards = await prisma.checklistCard.findMany({
+    where:   { cardSetId: setId },
+    orderBy: { sortOrder: "asc" },
+    select:  { id: true },
+  });
+
+  const others = cards.map((c) => c.id).filter((id) => id !== cardId);
+  const anchorIndex = others.indexOf(instruction.anchorCardId);
+  if (anchorIndex === -1) {
+    return { error: "The selected reference card was not found in this set" };
+  }
+
+  const insertIndex = instruction.where === "above" ? anchorIndex : anchorIndex + 1;
+  const newOrder = [...others.slice(0, insertIndex), cardId, ...others.slice(insertIndex)];
+
+  await prisma.$transaction(
+    newOrder.map((id, index) =>
+      prisma.checklistCard.update({ where: { id }, data: { sortOrder: index } })
+    )
+  );
+
+  return { error: null };
+}
+
+// Re-fetches one set's full checklist in display order — used after a
+// create/edit (optionally including a reposition) so the client can just
+// replace its whole list rather than guess where a moved row landed.
+export async function getAdminChecklistCards(setId: string): Promise<AdminChecklistCard[]> {
+  const cards = await prisma.checklistCard.findMany({
+    where:   { cardSetId: setId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id:            true,
+      cardNumber:    true,
+      playerName:    true,
+      team:          true,
+      cardCategory:  true,
+      cardTier:      true,
+      parallel:      true,
+      printRun:      true,
+      variationName: true,
+      isHit:         true,
+      sortOrder:     true,
+      imageUrl:      true,
+      notes:         true,
+    },
+  });
+
+  return cards.map((c) => ({
+    id:            c.id,
+    cardNumber:    c.cardNumber,
+    playerName:    c.playerName,
+    team:          c.team,
+    cardCategory:  String(c.cardCategory),
+    cardTier:      String(c.cardTier),
+    parallel:      c.parallel,
+    printRun:      c.printRun,
+    variationName: c.variationName,
+    isHit:         c.isHit,
+    sortOrder:     c.sortOrder,
+    imageUrl:      c.imageUrl,
+    notes:         c.notes,
+  }));
 }

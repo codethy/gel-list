@@ -4,6 +4,7 @@
 // delete individual ChecklistCard rows after the set has already been
 // imported. Access is granted by hand via prisma/make-admin.ts.
 
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminUserId } from "@/lib/admin";
 import {
@@ -11,6 +12,7 @@ import {
   VALID_CARD_CATEGORIES,
   VALID_CARD_TIERS,
 } from "@/lib/data/adminChecklist";
+import AdminSetHeader from "@/components/admin/AdminSetHeader";
 import AdminChecklistClient from "@/components/admin/AdminChecklistClient";
 import AdminProductsClient from "@/components/admin/AdminProductsClient";
 
@@ -29,11 +31,12 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-white mb-1">{detail.set.name}</h1>
-        <p className="text-sm text-slate-400 mb-8">
-          {detail.set.year} &bull; {detail.set.brand} &bull; {detail.cards.length.toLocaleString()} cards.
-          Add, edit, or delete checklist rows to fix import mistakes.
-        </p>
+        <Link href="/admin" className="text-sm text-slate-400 hover:text-white transition-colors">
+          &larr; Admin
+        </Link>
+        <div className="mt-2">
+          <AdminSetHeader set={detail.set} cardCount={detail.cards.length} />
+        </div>
         <AdminChecklistClient
           setId={detail.set.id}
           category={detail.set.category}

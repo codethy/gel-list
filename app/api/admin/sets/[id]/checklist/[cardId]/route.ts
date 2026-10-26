@@ -17,6 +17,9 @@ import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import {
   parseChecklistCardInput,
+  parsePositionInstruction,
+  repositionChecklistCard,
+  getAdminChecklistCards,
   syncTotalCardsInSet,
   countChecklistCardReferences,
 } from "@/lib/data/adminChecklist";
@@ -50,9 +53,26 @@ export async function PATCH(
     return NextResponse.json({ error }, { status: 400 });
   }
 
+  const { data: position, error: positionError } = parsePositionInstruction(body);
+  if (positionError) {
+    return NextResponse.json({ error: positionError }, { status: 400 });
+  }
+  if (position && position.anchorCardId === cardId) {
+    return NextResponse.json({ error: "Can't position a card relative to itself" }, { status: 400 });
+  }
+
   try {
-    const card = await prisma.checklistCard.update({ where: { id: cardId }, data: data! });
-    return NextResponse.json({ card });
+    await prisma.checklistCard.update({ where: { id: cardId }, data: data! });
+
+    if (position) {
+      const { error: repositionError } = await repositionChecklistCard(setId, cardId, position);
+      if (repositionError) {
+        return NextResponse.json({ error: repositionError }, { status: 400 });
+      }
+    }
+
+    const cards = await getAdminChecklistCards(setId);
+    return NextResponse.json({ cards });
   } catch (e: any) {
     if (e.code === "P2002") {
       return NextResponse.json(

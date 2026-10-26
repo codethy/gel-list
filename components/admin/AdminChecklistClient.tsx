@@ -10,7 +10,7 @@ import AdminChecklistCardModal, {
   type ChecklistCardFormValues,
 } from "./AdminChecklistCardModal";
 import AdminChecklistImageModal from "./AdminChecklistImageModal";
-import type { AdminChecklistCard } from "@/lib/data/adminChecklist";
+import type { AdminChecklistCard, PositionInstruction } from "@/lib/data/adminChecklist";
 
 interface AdminChecklistClientProps {
   setId:               string;
@@ -60,8 +60,11 @@ export default function AdminChecklistClient({
     notes:         values.notes.trim() || null,
   });
 
-  const handleSubmit = async (values: ChecklistCardFormValues): Promise<string | void> => {
-    const body = toApiBody(values);
+  const handleSubmit = async (
+    values: ChecklistCardFormValues,
+    position: PositionInstruction | null
+  ): Promise<string | void> => {
+    const body = { ...toApiBody(values), position };
 
     if (editingCard) {
       const res = await fetch(`/api/admin/sets/${setId}/checklist/${editingCard.id}`, {
@@ -72,7 +75,7 @@ export default function AdminChecklistClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return data.error ?? "Failed to save changes";
 
-      setCards((prev) => prev.map((c) => (c.id === editingCard.id ? data.card : c)));
+      setCards(data.cards);
     } else {
       const res = await fetch(`/api/admin/sets/${setId}/checklist`, {
         method:  "POST",
@@ -82,7 +85,7 @@ export default function AdminChecklistClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return data.error ?? "Failed to add card";
 
-      setCards((prev) => [...prev, data.card]);
+      setCards(data.cards);
     }
 
     setModalOpen(false);
@@ -223,6 +226,7 @@ export default function AdminChecklistClient({
         showTeam={showTeam}
         cardCategoryOptions={cardCategoryOptions}
         cardTierOptions={cardTierOptions}
+        setId={setId}
       />
 
       <AdminChecklistImageModal
