@@ -112,17 +112,6 @@ export interface SetDetailData {
     totalPages: number;
   };
 
-  allTemplates: {
-    id:            string;
-    cardNumber:    string;
-    playerName:    string;
-    cardType:      string;
-    parallelType:  string | null;
-    printRun:      number | null;
-    variationName: string | null;
-    team:          string | null;
-  }[];
-
   availableTeams: string[];
   availableCategories:  string[];   // ✅ NEW — distinct CardCategory values for this set
   availableTiers:       string[];   // distinct CardTier values — TCG sets' "Rarity" filter
@@ -171,7 +160,6 @@ export async function getSetDetail(
     totalCards,
     firstPageCards,
     userPortfolioCards,
-    allChecklistCards,
     teamsRaw,
     categoriesRaw,          // ✅ NEW
     tiersRaw,               // ✅ NEW
@@ -254,29 +242,6 @@ export async function getSetDetail(
             team:          true,
           },
         },
-      },
-    }),
-
-    // ── 2d. All checklist cards for Add Gel modal ────────────────────────
-    // ⚠️ Scaling note: this fetches every checklist row for the set,
-    // unpaginated. Fine for this set's ~3.6k rows, but a set with a much
-    // larger, heavily-paralleled checklist would make this slower on every
-    // page load. The proper fix is to have the Add Gel modal search against
-    // the paginated /api/sets/[id]/checklist endpoint instead of receiving
-    // the full list as a prop — that also requires updating AddGelModal.tsx,
-    // so it's left as-is here and deferred to that step.
-    prisma.checklistCard.findMany({
-      where:   { cardSetId: setId },
-      orderBy: [{ sortOrder: "asc" }], // same order as the checklist table itself
-      select: {
-        id:            true,
-        cardNumber:    true,
-        playerName:    true,
-        cardCategory:  true,
-        parallel:      true,
-        printRun:      true,
-        variationName: true,
-        team:          true,
       },
     }),
 
@@ -529,16 +494,6 @@ export async function getSetDetail(
       pageSize:   PAGE_SIZE,
       totalPages: Math.ceil(totalCards / PAGE_SIZE),
     },
-    allTemplates: allChecklistCards.map((c) => ({
-      id:            c.id,
-      cardNumber:    c.cardNumber,
-      playerName:    c.playerName,
-      cardType:      String(c.cardCategory),
-      parallelType:  c.parallel ?? null,
-      printRun:      c.printRun ?? null,
-      variationName: c.variationName ?? null,
-      team:          c.team     ?? null,
-    })),
     availableTeams,
     availableCategories,   // ✅ NEW
     availableTiers,

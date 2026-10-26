@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
   // results, not a full PAGE_SIZE page.
   const limitParam    = Number(searchParams.get("limit"));
   const limit         = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : PAGE_SIZE;
+  // The browsing grid shows a "chase cards" total per set, which costs 2
+  // extra aggregate queries (see attachPrintRunTotals) — callers that only
+  // need name/image/year (the Navbar's live search, the admin homepage-
+  // curation search) can skip that work entirely.
+  const withPrintRun  = searchParams.get("withPrintRun") !== "false";
 
   // ── Build Prisma where clause ──────────────────────────────────────────
   const where: Record<string, unknown> = {};
@@ -84,8 +89,11 @@ export async function GET(req: NextRequest) {
       sets.length === limit ? sets[sets.length - 1].id : null;
 
     // Total print run per set — same "chase cards" figure shown in the set
-    // detail banner's first stat box (see lib/data/sets.ts).
-    const setsWithPrintRun = await attachPrintRunTotals(sets);
+    // detail banner's first stat box (see lib/data/sets.ts). Skipped for
+    // callers that don't display it (see withPrintRun above).
+    const setsWithPrintRun = withPrintRun
+      ? await attachPrintRunTotals(sets)
+      : sets.map((s) => ({ ...s, totalPrintRunInSet: 0 }));
 
     return NextResponse.json({ sets: setsWithPrintRun, nextCursor, totalCount });
 

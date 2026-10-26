@@ -4,6 +4,7 @@
 import { useState, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import type { ChecklistCardOption } from "./AddGelModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ interface ChecklistTableProps {
   // "SPORTS" | "ENTERTAINMENT" | "TCG" — drives the Player/Character column
   // header label.
   category: string;
-  onAddGelClick: (checklistCardId: string, playerName: string) => void;
+  onAddGelClick: (option: ChecklistCardOption) => void;
   onFilterChange: (filters: {
     search?: string;
     filterType?: string | null;
@@ -736,7 +737,7 @@ function ChecklistRowItem({
   index: number;
   showTeam: boolean;
   category: string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
-  onAddGelClick: (checklistCardId: string, playerName: string) => void;
+  onAddGelClick: (option: ChecklistCardOption) => void;
   onOpenHistory: (row: ChecklistRow) => void;
   onOpenImage: (row: ChecklistRow) => void;
 }) {
@@ -767,7 +768,16 @@ function ChecklistRowItem({
 
   function handleAddGelClick(e: React.MouseEvent) {
     e.stopPropagation();
-    onAddGelClick(row.id, row.playerName);
+    onAddGelClick({
+      id:            row.id,
+      cardNumber:    row.cardNumber ?? "",
+      playerName:    row.playerName,
+      cardType:      row.cardType,
+      parallelType:  row.parallelType ?? null,
+      printRun:      row.printRun ?? null,
+      variationName: row.variationName ?? null,
+      team:          row.team ?? null,
+    });
   }
 
   const isOwned    = row.status === "Owned";

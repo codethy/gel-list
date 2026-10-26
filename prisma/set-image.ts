@@ -3,8 +3,15 @@
 // Sets (or replaces) the banner image for one CardSet. This is a developer-only
 // tool — there is no in-app upload control, by design (see SetHeader.tsx).
 //
-// The image is stored the same way gel photos already are in this app: as a
-// base64 data URL in the database, in CardSet.imageUrl.
+// The image is uploaded to UploadThing — the same storage every other image
+// in this app uses (gel photos, profile pictures, checklist-card images) —
+// and only the resulting URL is stored in CardSet.imageUrl. This used to
+// embed the image directly as a base64 data URL in the database instead,
+// which meant every query that listed sets (the home page, category pages,
+// the search dropdown, admin search) pulled the full image bytes through
+// the Postgres connection every time, even to render a 40x40 thumbnail —
+// see prisma/backfill-set-images.ts for the one-time migration of sets that
+// already had a base64 image.
 //
 // HOW TO RUN (from your project root):
 //   npx tsx prisma/set-image.ts <setId> <path-to-image-file>
@@ -25,11 +32,16 @@ import { extname }      from "path";
 import { Pool }          from "pg";
 import { PrismaPg }      from "@prisma/adapter-pg";
 import { PrismaClient }  from "@prisma/client";
+import { UTApi }         from "uploadthing/server";
 
 if (!process.env.DATABASE_URL) {
   console.error("\n❌ ERROR: DATABASE_URL was not found.");
   console.error("   Make sure .env.local exists at the project root and contains");
   console.error('   DATABASE_URL="postgresql://..."\n');
+  process.exit(1);
+}
+if (!process.env.UPLOADTHING_TOKEN) {
+  console.error("\n❌ ERROR: UPLOADTHING_TOKEN was not found in .env.local.\n");
   process.exit(1);
 }
 
@@ -51,6 +63,7 @@ const MIME_BY_EXT: Record<string, string> = {
 const pool    = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma  = new PrismaClient({ adapter } as any);
+const utapi   = new UTApi();
 
 async function main() {
   const ext  = extname(imagePath).toLowerCase();
@@ -74,15 +87,23 @@ async function main() {
   console.log(`\n🔍 Found set: ${set.name}`);
   console.log(`📷 Reading image from ${imagePath}...`);
 
-  const bytes    = readFileSync(imagePath);
-  const dataUrl  = `data:${mime};base64,${bytes.toString("base64")}`;
+  const bytes = readFileSync(imagePath);
+  const file  = new File([new Uint8Array(bytes)], `set-${setId}${ext}`, { type: mime });
+
+  console.log(`⬆️  Uploading to UploadThing (${(bytes.length / 1024).toFixed(1)} KB)...`);
+  const result = await utapi.uploadFiles(file);
+
+  if (result.error) {
+    console.error(`\n❌ Upload failed: ${result.error.message}\n`);
+    process.exit(1);
+  }
 
   await prisma.cardSet.update({
     where: { id: setId },
-    data:  { imageUrl: dataUrl },
+    data:  { imageUrl: result.data.ufsUrl },
   });
 
-  console.log(`✅ Set image updated for "${set.name}" (${(bytes.length / 1024).toFixed(1)} KB).\n`);
+  console.log(`✅ Set image updated for "${set.name}": ${result.data.ufsUrl}\n`);
 }
 
 main()

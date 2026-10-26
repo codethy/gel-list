@@ -39,10 +39,12 @@ interface AddGelModalProps {
   // "Search for a card" placeholder (vs. "Search for a player") and hiding
   // the Serial Number field (TCG cards aren't reliably serial-numbered).
   category: string;
-  templates: ChecklistCardOption[];
   products: ProductOption[];
-  preselectedChecklistCardId?: string | null;
-  preselectedPlayerName?: string | null;
+  // The full option — not just an id — since the modal no longer holds
+  // every checklist card in memory to look one up by id (see
+  // ChecklistCardSearch). Set when opened from a specific checklist row's
+  // "+" button.
+  preselectedCardOption?: ChecklistCardOption | null;
   // When set, the modal edits this existing gel instead of creating a new
   // one: the form prefills from it, the card selection is locked (you can't
   // reassign a logged gel to a different card), and submitting PATCHes
@@ -377,72 +379,56 @@ export function ImageUploadField({
   );
 }
 
-// Strips diacritics so a plain "Joao" matches "João" — mirrors the
-// unaccent() SQL used by the checklist table's own search (see
-// app/api/sets/[id]/checklist/route.ts) so both search boxes behave the
-// same way.
-function foldDiacritics(s: string): string {
-  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-// Matches player name, parallel, variation name, and team — plus print run
-// when the query is a bare number or "/99"-style, mirroring the checklist
-// table's own search (app/api/sets/[id]/checklist/route.ts) so both search
-// boxes behave the same way.
-// Splits the query on whitespace into keywords — every keyword must match
-// *somewhere* (different keywords can each match a different field), so
-// "Coco Gauff Tour" finds every parallel of her "Tour Relic Autographs"
-// insert, and "Coco Gauff /50" finds just her /50 copies.
-function matchesKeyword(t: ChecklistCardOption, keyword: string): boolean {
-  const q = foldDiacritics(keyword.toLowerCase());
-
-  if (foldDiacritics(t.playerName.toLowerCase()).includes(q)) return true;
-  if (t.cardNumber && t.cardNumber.toLowerCase().includes(q)) return true;
-  if (t.parallelType && foldDiacritics(t.parallelType.toLowerCase()).includes(q)) return true;
-  if (t.variationName && foldDiacritics(t.variationName.toLowerCase()).includes(q)) return true;
-  if (t.team && foldDiacritics(t.team.toLowerCase()).includes(q)) return true;
-
-  const qNumeric = q.replace(/^\//, "");
-  if (t.printRun != null && /^\d+$/.test(qNumeric) && String(t.printRun) === qNumeric) return true;
-
-  return false;
-}
-
-function matchesSearchQuery(t: ChecklistCardOption, rawQuery: string): boolean {
-  const keywords = rawQuery.trim().split(/\s+/).filter(Boolean);
-  return keywords.every((keyword) => matchesKeyword(t, keyword));
-}
-
-// ─── CHECKLIST CARD SEARCH ────────────────────────────────────────────────────
-
 // "208/204 Jasmine" — card number first so the dropdown reads in the same
 // order it's sorted (by card number), then the player/card name.
 function cardOptionTitle(t: ChecklistCardOption): string {
   return t.cardNumber ? `${t.cardNumber} ${t.playerName}` : t.playerName;
 }
 
+// Searches the server (GET /api/sets/[id]/checklist/search) instead of
+// filtering an in-memory list of every checklist card — a set can have
+// thousands of rows (one real set in this app has ~9,700), and the old
+// approach meant the set-detail page fetched and held all of them in
+// memory on every single load just to power this one search box.
 function ChecklistCardSearch({
-  templates,
-  selectedId,
+  setId,
+  selected,
   onSelect,
   isLocked,
   category,
 }: {
-  templates: ChecklistCardOption[];
-  selectedId: string;
-  onSelect: (id: string) => void;
+  setId: string;
+  selected: ChecklistCardOption | null;
+  onSelect: (option: ChecklistCardOption | null) => void;
   isLocked: boolean;
   category: string;
 }) {
-  const [query, setQuery]   = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef        = useRef<HTMLDivElement>(null);
+  const [query, setQuery]     = useState("");
+  const [isOpen, setIsOpen]   = useState(false);
+  const [filtered, setFiltered] = useState<ChecklistCardOption[]>([]);
+  const containerRef          = useRef<HTMLDivElement>(null);
 
-  const selected = templates.find((t) => t.id === selectedId);
+  // Fetches the first page (checklist order) as soon as the box is opened
+  // with nothing typed yet, then re-fetches as the user types.
+  useEffect(() => {
+    if (!isOpen) return;
+    const trimmed = query.trim();
 
-  const filtered = query.trim()
-    ? templates.filter((t) => matchesSearchQuery(t, query)).slice(0, 20)
-    : templates.slice(0, 20);
+    const handle = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ limit: "20" });
+        if (trimmed) params.set("q", trimmed);
+        const res = await fetch(`/api/sets/${setId}/checklist/search?${params.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setFiltered(data.options ?? []);
+      } catch {
+        setFiltered([]);
+      }
+    }, trimmed ? 250 : 0);
+
+    return () => clearTimeout(handle);
+  }, [query, isOpen, setId]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -476,7 +462,7 @@ function ChecklistCardSearch({
         }
         onChange={(e) => {
           setQuery(e.target.value);
-          onSelect("");
+          onSelect(null);
           setIsOpen(true);
         }}
         onFocus={() => setIsOpen(true)}
@@ -497,7 +483,7 @@ function ChecklistCardSearch({
                 key={t.id}
                 type="button"
                 onClick={() => {
-                  onSelect(t.id);
+                  onSelect(t);
                   setQuery("");
                   setIsOpen(false);
                 }}
@@ -524,12 +510,12 @@ export default function AddGelModal({
   onSuccess,
   setId,
   category,
-  templates,
   products,
-  preselectedChecklistCardId,
+  preselectedCardOption,
   editingGel,
 }: AddGelModalProps) {
   const [form, setForm]           = useState<FormState>(EMPTY_FORM);
+  const [selectedCardOption, setSelectedCardOption] = useState<ChecklistCardOption | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const modalRef                  = useRef<HTMLDivElement>(null);
@@ -576,13 +562,26 @@ export default function AddGelModal({
         seller:            editingGel.seller             ?? "",
         notes:             editingGel.notes               ?? "",
       });
+      // GelEntry.cardTemplate has no cardNumber (it's locked anyway, so the
+      // search box just won't show the "208/204" prefix in this one case).
+      setSelectedCardOption({
+        id:            editingGel.cardTemplateId,
+        cardNumber:    "",
+        playerName:    editingGel.cardTemplate.playerName,
+        cardType:      editingGel.cardTemplate.cardType,
+        parallelType:  editingGel.cardTemplate.parallelType  ?? null,
+        printRun:      editingGel.cardTemplate.printRun      ?? null,
+        variationName: editingGel.cardTemplate.variationName ?? null,
+        team:          editingGel.cardTemplate.team          ?? null,
+      });
     } else {
       setStep("choice");
       setLoggedFor("SELF");
-      setForm({ ...EMPTY_FORM, checklistCardId: preselectedChecklistCardId ?? "" });
+      setForm({ ...EMPTY_FORM, checklistCardId: preselectedCardOption?.id ?? "" });
+      setSelectedCardOption(preselectedCardOption ?? null);
     }
     setError(null);
-  }, [isOpen, editingGel, preselectedChecklistCardId, products]);
+  }, [isOpen, editingGel, preselectedCardOption, products]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -828,10 +827,13 @@ export default function AddGelModal({
               <div>
                 <Label>Card *</Label>
                 <ChecklistCardSearch
-                  templates={templates}
-                  selectedId={form.checklistCardId}
-                  onSelect={(id) => setForm((prev) => ({ ...prev, checklistCardId: id }))}
-                  isLocked={Boolean(preselectedChecklistCardId) || isEditing}
+                  setId={setId}
+                  selected={selectedCardOption}
+                  onSelect={(option) => {
+                    setForm((prev) => ({ ...prev, checklistCardId: option?.id ?? "" }));
+                    setSelectedCardOption(option);
+                  }}
+                  isLocked={Boolean(preselectedCardOption) || isEditing}
                   category={category}
                 />
               </div>

@@ -43,9 +43,6 @@ interface SetDetailClientProps {
   availableCategories: string[];   // ✅ NEW
   availableTiers: string[];
 
-  // All card templates for the Add Gel modal search
-  allTemplates: ChecklistCardOption[];
-
   // This set's admin-curated product catalog — powers "Which Product"
   products: ProductOption[];
 }
@@ -71,7 +68,6 @@ export default function SetDetailClient({
   availableTeams,
   availableCategories,   // ✅ NEW
   availableTiers,
-  allTemplates,
   products,
 }: SetDetailClientProps) {
 
@@ -91,17 +87,15 @@ export default function SetDetailClient({
   const [, startTransition]                     = useTransition();
 
   // ── Modal state ────────────────────────────────────────────────────────────
-  const [modalOpen, setModalOpen]                                     = useState(false);
-  const [preselectedChecklistCardId, setPreselectedChecklistCardId]   = useState<string | null>(null);
-  const [preselectedPlayerName, setPreselectedPlayerName]             = useState<string | null>(null);
-  const [editingGel, setEditingGel]                                   = useState<GelEntry | null>(null);
+  const [modalOpen, setModalOpen]                       = useState(false);
+  const [preselectedCardOption, setPreselectedCardOption] = useState<ChecklistCardOption | null>(null);
+  const [editingGel, setEditingGel]                     = useState<GelEntry | null>(null);
 
   // ── Open modal (create) ─────────────────────────────────────────────────────
   const handleAddGelClick = useCallback(
-    (checklistCardId?: string, playerName?: string) => {
+    (option?: ChecklistCardOption) => {
       setEditingGel(null);
-      setPreselectedChecklistCardId(checklistCardId ?? null);
-      setPreselectedPlayerName(playerName ?? null);
+      setPreselectedCardOption(option ?? null);
       setModalOpen(true);
     },
     []
@@ -110,16 +104,14 @@ export default function SetDetailClient({
   // ── Open modal (edit) ───────────────────────────────────────────────────────
   const handleEditGelClick = useCallback((gel: GelEntry) => {
     setEditingGel(gel);
-    setPreselectedChecklistCardId(null);
-    setPreselectedPlayerName(null);
+    setPreselectedCardOption(null);
     setModalOpen(true);
   }, []);
 
   // ── Close modal ────────────────────────────────────────────────────────────
   const handleModalClose = useCallback(() => {
     setModalOpen(false);
-    setPreselectedChecklistCardId(null);
-    setPreselectedPlayerName(null);
+    setPreselectedCardOption(null);
     setEditingGel(null);
   }, []);
 
@@ -279,10 +271,8 @@ export default function SetDetailClient({
         onSuccess={handleGelSuccess}
         setId={setId}
         category={category}
-        templates={allTemplates}
         products={products}
-        preselectedChecklistCardId={preselectedChecklistCardId}
-        preselectedPlayerName={preselectedPlayerName}
+        preselectedCardOption={preselectedCardOption}
         editingGel={editingGel}
       />
     </div>

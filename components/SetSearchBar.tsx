@@ -48,7 +48,7 @@ export default function SetSearchBar() {
     const timeout = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/sets?search=${encodeURIComponent(trimmed)}&limit=${DROPDOWN_LIMIT}`
+          `/api/sets?search=${encodeURIComponent(trimmed)}&limit=${DROPDOWN_LIMIT}&withPrintRun=false`
         );
         if (!res.ok) return;
         const data = await res.json();

@@ -67,7 +67,6 @@ export default async function SetDetailPage({ params }: PageProps) {
       availableTeams={data.availableTeams}
       availableCategories={data.availableCategories}
       availableTiers={data.availableTiers}
-      allTemplates={data.allTemplates}
       products={data.products}
     />
   );

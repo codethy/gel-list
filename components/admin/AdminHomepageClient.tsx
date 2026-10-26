@@ -86,7 +86,7 @@ export default function AdminHomepageClient() {
     const handle = setTimeout(async () => {
       setSearching(true);
       try {
-        const params = new URLSearchParams({ subcategories: childIds, search: trimmed, limit: "20" });
+        const params = new URLSearchParams({ subcategories: childIds, search: trimmed, limit: "20", withPrintRun: "false" });
         const res = await fetch(`/api/sets?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (res.ok) setResults(data.sets);

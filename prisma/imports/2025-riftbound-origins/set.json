@@ -1,0 +1,24 @@
+{
+  "fileName": "checklist.xlsx",
+  "sheetName": null,
+
+  "setName": "Riftbound - Origins",
+  "year": 2025,
+  "brand": "Riftbound",
+  "category": "TCG",
+  "subCategory": "RIFTBOUND",
+
+  "columns": {
+    "cardNumber": "cardNumber",
+    "playerName": "playerName",
+    "cardCategory": "cardCategory",
+    "cardTier": "cardTier",
+    "team": "team",
+    "parallel": "parallel",
+    "printRun": "printRun",
+    "variationName": "variationName",
+    "isHit": "isHit"
+  },
+
+  "batchSize": 100
+}
