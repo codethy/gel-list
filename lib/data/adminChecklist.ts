@@ -7,7 +7,7 @@
 // without having to delete and re-run the whole import.
 
 import { prisma } from "@/lib/prisma";
-import { CardCategory, CardTier } from "@prisma/client";
+import { CardCategory, CardTier, Prisma } from "@prisma/client";
 import { getProductLabel } from "@/lib/productTypes";
 
 export interface AdminChecklistSet {
@@ -240,11 +240,17 @@ export function parsePositionInstruction(
 }
 
 // Moves one card to sit directly above/below another, renumbering every
-// row in the set to its new 0-based index. Admin-triggered and infrequent
-// (not a page-load query), so an O(n) rewrite is an acceptable cost even
-// for this app's largest set (~9,700 rows) — simpler and more robust than
+// row in the set to its new 0-based index. Simpler and more robust than
 // trying to shift only the rows in between, especially since historical
 // deletes can leave gaps in the stored sortOrder values.
+//
+// Written as a single bulk UPDATE...FROM(VALUES...) statement rather than
+// one Prisma update per row: a $transaction([...]) of N sequential updates
+// used to do this, which for a set of any real size (hundreds+ rows) could
+// take longer than Prisma's default 5-second transaction timeout — the
+// request would fail (reported to the admin as a generic save error) after
+// already having rolled back every update, leaving the card unrepositioned.
+// One statement means one round trip regardless of how many rows move.
 export async function repositionChecklistCard(
   setId: string,
   cardId: string,
@@ -265,11 +271,17 @@ export async function repositionChecklistCard(
   const insertIndex = instruction.where === "above" ? anchorIndex : anchorIndex + 1;
   const newOrder = [...others.slice(0, insertIndex), cardId, ...others.slice(insertIndex)];
 
-  await prisma.$transaction(
-    newOrder.map((id, index) =>
-      prisma.checklistCard.update({ where: { id }, data: { sortOrder: index } })
-    )
+  const values = Prisma.join(
+    newOrder.map((id, index) => Prisma.sql`(${id}::text, ${index}::int)`),
+    ", "
   );
+
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE "ChecklistCard" AS c
+    SET "sortOrder" = v.pos
+    FROM (VALUES ${values}) AS v(id, pos)
+    WHERE c.id = v.id
+  `);
 
   return { error: null };
 }
