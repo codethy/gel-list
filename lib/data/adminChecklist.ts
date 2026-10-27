@@ -36,11 +36,22 @@ export interface AdminChecklistCard {
   notes:         string | null;
 }
 
+export interface AdminPackKind {
+  id:           string;
+  packsCount:   number;
+  cardsPerPack: number;
+}
+
 export interface AdminProductRow {
   id:               string;
   productType:      string;
   productTypeOther: string | null;
   label:            string;
+  packKinds:        AdminPackKind[];
+  // Sum of every pack kind's packsCount — 0 means no pack kinds have been
+  // configured yet (treated as 1 pack per unit elsewhere, for the "X
+  // Packs/Boxes Opened" calculation — see lib/data/productOpenings.ts).
+  packsPerUnit:     number;
 }
 
 export interface AdminChecklistSetDetail {
@@ -92,12 +103,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
   if (!cardSet) return null;
 
   const cards = await getAdminChecklistCards(setId);
-
-  const products = await prisma.setProduct.findMany({
-    where:   { cardSetId: setId },
-    orderBy: { createdAt: "asc" },
-    select:  { id: true, productType: true, productTypeOther: true },
-  });
+  const products = await getAdminProducts(setId);
 
   return {
     set: {
@@ -110,12 +116,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       description: cardSet.description,
     },
     cards,
-    products: products.map((p) => ({
-      id:               p.id,
-      productType:      String(p.productType),
-      productTypeOther: p.productTypeOther,
-      label:            getProductLabel(String(p.productType), p.productTypeOther),
-    })),
+    products,
   };
 }
 
@@ -324,5 +325,33 @@ export async function getAdminChecklistCards(setId: string): Promise<AdminCheckl
     sortOrder:     c.sortOrder,
     imageUrl:      c.imageUrl,
     notes:         c.notes,
+  }));
+}
+
+// Re-fetches one set's product catalog, including each product's pack
+// kinds — used after an add/remove/pack-kind edit so the client can just
+// replace its whole list.
+export async function getAdminProducts(setId: string): Promise<AdminProductRow[]> {
+  const products = await prisma.setProduct.findMany({
+    where:   { cardSetId: setId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id:               true,
+      productType:      true,
+      productTypeOther: true,
+      packKinds: {
+        orderBy: { sortOrder: "asc" },
+        select:  { id: true, packsCount: true, cardsPerPack: true },
+      },
+    },
+  });
+
+  return products.map((p) => ({
+    id:               p.id,
+    productType:      String(p.productType),
+    productTypeOther: p.productTypeOther,
+    label:            getProductLabel(String(p.productType), p.productTypeOther),
+    packKinds:        p.packKinds,
+    packsPerUnit:     p.packKinds.reduce((sum, k) => sum + k.packsCount, 0),
   }));
 }

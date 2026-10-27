@@ -21,6 +21,13 @@ interface SetHeaderProps {
   userGelCount: number;  // how many cards this user has gelled
   chasesPulled: number;  // set-wide: every confirmed-real pulled copy, across all users
   setImageUrl?: string | null;
+
+  // "X Packs/Boxes Opened" box + its two linked popups — see
+  // lib/data/productOpenings.ts.
+  packsOpenedValue: number;
+  packsOpenedLabel: string; // "Packs Opened" | "Boxes Opened"
+  onOpenBreakdown:  () => void;
+  onOpenLogOpenings: () => void;
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -90,6 +97,10 @@ export default function SetHeader({
   userGelCount,
   chasesPulled,
   setImageUrl,
+  packsOpenedValue,
+  packsOpenedLabel,
+  onOpenBreakdown,
+  onOpenLogOpenings,
 }: SetHeaderProps) {
   // TCG sets have no reliable print run to sum (or estimate a default for),
   // so their first stat box shows a plain checklist-row count instead, and
@@ -151,36 +162,72 @@ export default function SetHeader({
             </div>
           </div>
 
-          {/* ── Set Image ──────────────────────────────────────────────
-              Always rendered so every set's banner has the same shape.
-              Curated only by the developer, directly in the database —
-              see prisma/set-image.ts — there is no in-app upload control. */}
-          <div className="shrink-0 w-40 h-40 md:w-52 md:h-52 self-center md:self-start rounded-lg overflow-hidden border border-slate-600/50 shadow-lg shadow-black/40 bg-slate-900/60">
-            {setImageUrl ? (
-              <img
-                src={setImageUrl}
-                alt={`${setName} set image`}
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-slate-700/60 text-slate-600">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                  className="w-7 h-7"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="M21 15l-5-5L5 21" />
-                </svg>
-                <span className="text-[10px] uppercase tracking-wider font-medium">
-                  No Image
+          {/* ── Set Image + Packs Opened ───────────────────────────────── */}
+          <div className="shrink-0 flex flex-col sm:flex-row items-center sm:items-start gap-3 self-center md:self-start">
+            {/* Always rendered so every set's banner has the same shape.
+                Curated only by the developer, directly in the database —
+                see prisma/set-image.ts — there is no in-app upload control. */}
+            <div className="shrink-0 w-40 h-40 md:w-52 md:h-52 rounded-lg overflow-hidden border border-slate-600/50 shadow-lg shadow-black/40 bg-slate-900/60">
+              {setImageUrl ? (
+                <img
+                  src={setImageUrl}
+                  alt={`${setName} set image`}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-slate-700/60 text-slate-600">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                    className="w-7 h-7"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="M21 15l-5-5L5 21" />
+                  </svg>
+                  <span className="text-[10px] uppercase tracking-wider font-medium">
+                    No Image
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* "X Packs/Boxes Opened" + its two linked popups */}
+            <div className="flex flex-col items-center gap-2 w-40 md:w-44">
+              <div className="w-full flex flex-col items-center gap-0.5 px-3 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                <span className="text-xl font-bold text-white tabular-nums">
+                  {packsOpenedValue.toLocaleString()}
+                </span>
+                <span className="text-[11px] text-slate-400 uppercase tracking-wider font-medium text-center">
+                  {packsOpenedLabel}
                 </span>
               </div>
-            )}
+
+              <button
+                type="button"
+                onClick={onOpenBreakdown}
+                className="flex items-center gap-0.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors duration-150"
+              >
+                See full breakdown
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+
+              <p className="text-[11px] text-slate-500 text-center leading-snug">
+                Did you open this set?{" "}
+                <button
+                  type="button"
+                  onClick={onOpenLogOpenings}
+                  className="text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors"
+                >
+                  Log it here
+                </button>
+              </p>
+            </div>
           </div>
         </div>
       </div>

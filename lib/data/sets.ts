@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { CardHistoryEvent, LoggedGel } from "@/components/set-detail/ChecklistTable";
 import { getChecklistRowExtras } from "@/lib/data/checklistRowExtras";
 import { getProductLabel } from "@/lib/productTypes";
+import { getPacksOpenedSummary, type SetPacksOpenedSummary } from "@/lib/data/productOpenings";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,10 @@ export interface SetDetailData {
     productTypeOther: string | null;
     label:            string;
   }[];
+
+  // "X Packs/Boxes Opened" box + its breakdown/log modals — see
+  // lib/data/productOpenings.ts.
+  packsOpened: SetPacksOpenedSummary;
 }
 
 // ─── MAIN FETCH FUNCTION ──────────────────────────────────────────────────────
@@ -472,6 +477,9 @@ export async function getSetDetail(
   const totalPrintRunInSet =
     (printRunSum._sum.printRun ?? 0) + unlimitedPrintRunCount * DEFAULT_PRINT_RUN;
 
+  // ── 5e. "X Packs/Boxes Opened" summary ──────────────────────────────────
+  const packsOpened = await getPacksOpenedSummary(setId, userId);
+
   // ── 6. Return full payload ──────────────────────────────────────────────
   return {
     setId:                cardSet.id,
@@ -503,5 +511,6 @@ export async function getSetDetail(
       productTypeOther: p.productTypeOther,
       label:            getProductLabel(String(p.productType), p.productTypeOther),
     })),
+    packsOpened,
   };
 }

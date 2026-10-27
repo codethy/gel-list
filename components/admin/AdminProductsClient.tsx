@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import AdminAddProductModal, { type ProductSelection } from "./AdminAddProductModal";
+import AdminProductPacksModal from "./AdminProductPacksModal";
 import { getProductLabel } from "@/lib/productTypes";
 import type { AdminProductRow } from "@/lib/data/adminChecklist";
 
@@ -22,6 +23,25 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
   const [products, setProducts] = useState<AdminProductRow[]>(initialProducts);
   const [modalOpen, setModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [packsProduct, setPacksProduct] = useState<AdminProductRow | null>(null);
+
+  const handlePacksSubmit = async (
+    packKinds: { packsCount: number; cardsPerPack: number }[]
+  ): Promise<string | void> => {
+    if (!packsProduct) return;
+    const res = await fetch(`/api/admin/sets/${setId}/products/${packsProduct.id}/packs`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ packKinds }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return data.error ?? "Failed to save packs";
+
+    setProducts((prev) =>
+      prev.map((p) => (p.id === packsProduct.id ? { ...p, packKinds: data.product.packKinds, packsPerUnit: data.product.packsPerUnit } : p))
+    );
+    setPacksProduct(null);
+  };
 
   // Submits one fetch per checked product in parallel. On full success the
   // modal closes; on partial failure (e.g. a race with another admin
@@ -93,6 +113,7 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
           <thead>
             <tr className="bg-slate-800/60 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               <th className="px-4 py-3">Product</th>
+              <th className="px-4 py-3">Packs</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -100,20 +121,38 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
             {products.map((p) => (
               <tr key={p.id} className="border-t border-slate-800/60 hover:bg-slate-800/30">
                 <td className="px-4 py-3 text-slate-200">{p.label}</td>
+                <td className="px-4 py-3 text-slate-400">
+                  {p.packsPerUnit > 0 ? (
+                    <span>
+                      {p.packsPerUnit.toLocaleString()} pack{p.packsPerUnit === 1 ? "" : "s"}
+                      {p.packKinds.length > 1 && ` (${p.packKinds.length} kinds)`}
+                    </span>
+                  ) : (
+                    <span className="text-slate-600 italic">Not set</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => handleDelete(p)}
-                    disabled={deletingId === p.id}
-                    className="px-3 py-1.5 rounded-lg border border-red-900/50 text-xs text-red-400 hover:bg-red-950/40 transition-colors disabled:opacity-40"
-                  >
-                    {deletingId === p.id ? "Removing..." : "Remove"}
-                  </button>
+                  <div className="flex justify-end items-center gap-2">
+                    <button
+                      onClick={() => setPacksProduct(p)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-700/50 text-xs text-slate-300 hover:bg-slate-800/60 transition-colors"
+                    >
+                      Edit Packs
+                    </button>
+                    <button
+                      onClick={() => handleDelete(p)}
+                      disabled={deletingId === p.id}
+                      className="px-3 py-1.5 rounded-lg border border-red-900/50 text-xs text-red-400 hover:bg-red-950/40 transition-colors disabled:opacity-40"
+                    >
+                      {deletingId === p.id ? "Removing..." : "Remove"}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
             {products.length === 0 && (
               <tr>
-                <td colSpan={2} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
                   No products added yet.
                 </td>
               </tr>
@@ -127,6 +166,13 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
         onClose={() => setModalOpen(false)}
         onSubmit={handleAddMany}
         existingProductTypes={new Set(products.filter((p) => p.productType !== "OTHER").map((p) => p.productType))}
+      />
+
+      <AdminProductPacksModal
+        isOpen={packsProduct !== null}
+        onClose={() => setPacksProduct(null)}
+        onSubmit={handlePacksSubmit}
+        product={packsProduct}
       />
     </div>
   );

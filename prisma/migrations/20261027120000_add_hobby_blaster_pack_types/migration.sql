@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "ProductType" ADD VALUE 'HOBBY_PACK';
+ALTER TYPE "ProductType" ADD VALUE 'BLASTER_PACK';

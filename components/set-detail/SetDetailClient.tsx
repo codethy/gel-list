@@ -11,6 +11,9 @@ import ChecklistTable, {
   type ChecklistMeta,
 } from "./ChecklistTable";
 import AddGelModal, { type ChecklistCardOption, type ProductOption } from "./AddGelModal";
+import PacksOpenedBreakdownModal from "./PacksOpenedBreakdownModal";
+import LogProductOpeningsModal, { type OpeningEntry } from "./LogProductOpeningsModal";
+import type { SetPacksOpenedSummary } from "@/lib/data/productOpenings";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +48,9 @@ interface SetDetailClientProps {
 
   // This set's admin-curated product catalog — powers "Which Product"
   products: ProductOption[];
+
+  // "X Packs/Boxes Opened" box + its two linked popups
+  initialPacksOpened: SetPacksOpenedSummary;
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -69,6 +75,7 @@ export default function SetDetailClient({
   availableCategories,   // ✅ NEW
   availableTiers,
   products,
+  initialPacksOpened,
 }: SetDetailClientProps) {
 
   // ── Gel state ──────────────────────────────────────────────────────────────
@@ -90,6 +97,27 @@ export default function SetDetailClient({
   const [modalOpen, setModalOpen]                       = useState(false);
   const [preselectedCardOption, setPreselectedCardOption] = useState<ChecklistCardOption | null>(null);
   const [editingGel, setEditingGel]                     = useState<GelEntry | null>(null);
+
+  // ── "X Packs/Boxes Opened" state ────────────────────────────────────────────
+  const [packsOpened, setPacksOpened]     = useState<SetPacksOpenedSummary>(initialPacksOpened);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [logOpeningsOpen, setLogOpeningsOpen] = useState(false);
+
+  const handleLogOpeningsSubmit = useCallback(
+    async (entries: OpeningEntry[]): Promise<string | void> => {
+      const res = await fetch(`/api/sets/${setId}/openings`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ entries }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return data.error ?? "Failed to save your openings";
+
+      setPacksOpened(data.summary);
+      setLogOpeningsOpen(false);
+    },
+    [setId]
+  );
 
   // ── Open modal (create) ─────────────────────────────────────────────────────
   const handleAddGelClick = useCallback(
@@ -233,6 +261,10 @@ export default function SetDetailClient({
           userGelCount={userGelCount}
           chasesPulled={chasesPulled}
           setImageUrl={imageUrl}
+          packsOpenedValue={packsOpened.totalPacksOpened}
+          packsOpenedLabel={packsOpened.label}
+          onOpenBreakdown={() => setBreakdownOpen(true)}
+          onOpenLogOpenings={() => setLogOpeningsOpen(true)}
         />
 
         {/* ── Recent Pulls (all users, above Your Gels) ──────────────── */}
@@ -274,6 +306,19 @@ export default function SetDetailClient({
         products={products}
         preselectedCardOption={preselectedCardOption}
         editingGel={editingGel}
+      />
+
+      {/* ── 5. Packs Opened: breakdown + log-your-openings modals ──────── */}
+      <PacksOpenedBreakdownModal
+        isOpen={breakdownOpen}
+        onClose={() => setBreakdownOpen(false)}
+        summary={packsOpened}
+      />
+      <LogProductOpeningsModal
+        isOpen={logOpeningsOpen}
+        onClose={() => setLogOpeningsOpen(false)}
+        products={packsOpened.products}
+        onSubmit={handleLogOpeningsSubmit}
       />
     </div>
   );

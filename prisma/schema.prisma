@@ -94,6 +94,7 @@ model User {
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred from this user
   sentTransfers     CardTransfer[]  @relation("TransferSender")
   favoriteGels      FavoriteGel[]
+  productOpenings   ProductOpening[]
 }
 
 // ─── TAXONOMY ───────────────────────────────────────────────────────────────
@@ -172,11 +173,12 @@ model CardSet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  checklistCards ChecklistCard[]
-  portfolioCards PortfolioCard[]
-  ripSessions    RipSession[]
-  products       SetProduct[]
-  featuredOn     HomepageFeaturedSet[]
+  checklistCards   ChecklistCard[]
+  portfolioCards   PortfolioCard[]
+  ripSessions      RipSession[]
+  products         SetProduct[]
+  featuredOn       HomepageFeaturedSet[]
+  productOpenings  ProductOpening[]
 }
 
 // Admin-curated selection of sets shown on the home page for each category
@@ -320,7 +322,9 @@ enum CardTier {
 
 enum ProductType {
   HOBBY_BOX
+  HOBBY_PACK
   BLASTER_BOX
+  BLASTER_PACK
   JUMBO_BOX
   BREAKERS_DELIGHT_BOX
   HANGER_BOX
@@ -350,8 +354,54 @@ model SetProduct {
   productTypeOther String? // only meaningful when productType is OTHER
   createdAt        DateTime    @default(now())
 
-  cardSet CardSet @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  cardSet   CardSet           @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  packKinds ProductPackKind[]
+  openings  ProductOpening[]
 
+  @@index([cardSetId])
+}
+
+// One "kind" of pack bundled inside a unit of a SetProduct — most products
+// only ever need one (e.g. a Hobby Box holding 24 identical packs), but
+// some mix different pack types in one box (e.g. 20 base packs of 8 cards
+// + 4 bonus packs of 4 cards). packsCount is how many packs of this kind
+// come in a single unit of the product; summed across every kind, that's
+// the product's total packs-per-unit — see lib/data/productOpenings.ts.
+model ProductPackKind {
+  id           String @id @default(cuid())
+  setProductId String
+  packsCount   Int
+  cardsPerPack Int
+  sortOrder    Int    @default(0)
+
+  setProduct SetProduct @relation(fields: [setProductId], references: [id], onDelete: Cascade)
+
+  @@index([setProductId])
+}
+
+// One user's logged "I opened N of this product" count for a set — an
+// aggregate quantity, not an individual gel — powering the set page's
+// "X Packs/Boxes Opened" total and its per-product breakdown (see
+// lib/data/productOpenings.ts). isBreak flags whether this was opened as
+// a breaker (vs. for the user's own personal collection), kept as its own
+// column — rather than inferred from productType alone — so a future
+// "hits pulled by breakers" report can filter on it directly across every
+// product type, not just BREAKERS_DELIGHT_BOX.
+model ProductOpening {
+  id           String   @id @default(cuid())
+  userId       String
+  cardSetId    String
+  setProductId String
+  quantity     Int
+  isBreak      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardSet    CardSet    @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  setProduct SetProduct @relation(fields: [setProductId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, setProductId])
   @@index([cardSetId])
 }
 

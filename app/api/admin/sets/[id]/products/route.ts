@@ -72,14 +72,17 @@ export async function POST(
     },
   });
 
-  // Shaped the same way getAdminChecklistForSet() returns existing products
-  // — the raw Prisma row has no `label`, which is why a freshly-added row
-  // showed a blank "Product" cell until the next full page load.
+  // Shaped the same way getAdminProducts() returns existing products — the
+  // raw Prisma row has no `label`/`packKinds`/`packsPerUnit`, which is why
+  // a freshly-added row showed a blank "Product" cell until the next full
+  // page load.
   const product = {
     id:               created.id,
     productType:      String(created.productType),
     productTypeOther: created.productTypeOther,
     label:            getProductLabel(String(created.productType), created.productTypeOther),
+    packKinds:        [] as { id: string; packsCount: number; cardsPerPack: number }[],
+    packsPerUnit:     0,
   };
 
   return NextResponse.json({ product });

@@ -5,7 +5,9 @@
 
 export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "HOBBY_BOX", label: "Hobby Box" },
+  { value: "HOBBY_PACK", label: "Hobby Pack" },
   { value: "BLASTER_BOX", label: "Blaster Box" },
+  { value: "BLASTER_PACK", label: "Blaster Pack" },
   { value: "JUMBO_BOX", label: "Jumbo Box" },
   { value: "BREAKERS_DELIGHT_BOX", label: "Breakers Delight Box" },
   { value: "HANGER_BOX", label: "Hanger Box" },
@@ -33,4 +35,22 @@ export function getProductLabel(
     return productTypeOther.trim();
   }
   return PRODUCT_TYPE_LABELS[productType] ?? productType;
+}
+
+// "Hobby Box" -> "Hobby Boxes", "Booster Pack" -> "Booster Packs", "ETB" ->
+// "ETBs" — pluralizes just the last word of a product label, for the "X
+// Hobby Boxes Opened" rows in the packs-opened breakdown (see
+// lib/data/productOpenings.ts). Naive but handles every built-in label
+// (and most plausible "Other" custom labels) correctly.
+function pluralizeWord(word: string): string {
+  if (/(x|s|sh|ch)$/i.test(word)) return `${word}es`;
+  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
+  return `${word}s`;
+}
+
+export function pluralizeProductLabel(label: string): string {
+  const words = label.trim().split(/\s+/);
+  const last = words.pop();
+  if (!last) return label;
+  return [...words, pluralizeWord(last)].join(" ");
 }
