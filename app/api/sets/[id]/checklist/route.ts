@@ -86,9 +86,12 @@ export async function GET(
   // selected here (cheap even across ~10k rows); the lowest-sortOrder row
   // in each group is the page's "representative" row, and the rest are
   // fetched lazily when a group is expanded — see
-  // app/api/sets/[id]/checklist/variants/route.ts. totalPrintRun (the sum
-  // across every variant, null treated as 0) powers the Gels column's
-  // combined "owned/print run" fraction — see step 7 below.
+  // app/api/sets/[id]/checklist/variants/route.ts. knownPrintRunSum (the
+  // sum of every variant's *known* printRun) plus nullPrintRunCardIds (the
+  // variants with no fixed printRun, e.g. a card's unnumbered "base"
+  // version) together power the Gels column's combined "owned/print run"
+  // fraction — see step 6 below for why a null-printRun variant isn't just
+  // treated as contributing 0.
   const idsForGrouping = await prisma.checklistCard.findMany({
     where,
     orderBy: { sortOrder: "asc" },
@@ -98,21 +101,26 @@ export async function GET(
   const groupOrder: string[] = [];
   const groupsByCardNumber = new Map<
     string,
-    { representativeId: string; cardIds: string[]; variantCount: number; totalPrintRun: number }
+    { representativeId: string; cardIds: string[]; variantCount: number; knownPrintRunSum: number; nullPrintRunCardIds: string[] }
   >();
   for (const { id, cardNumber, printRun } of idsForGrouping) {
     const existing = groupsByCardNumber.get(cardNumber);
-    if (existing) {
-      existing.variantCount += 1;
-      existing.cardIds.push(id);
-      existing.totalPrintRun += printRun ?? 0;
+    const group = existing ?? {
+      representativeId: id,
+      cardIds: [] as string[],
+      variantCount: 0,
+      knownPrintRunSum: 0,
+      nullPrintRunCardIds: [] as string[],
+    };
+    group.variantCount += 1;
+    group.cardIds.push(id);
+    if (printRun != null) {
+      group.knownPrintRunSum += printRun;
     } else {
-      groupsByCardNumber.set(cardNumber, {
-        representativeId: id,
-        cardIds: [id],
-        variantCount: 1,
-        totalPrintRun: printRun ?? 0,
-      });
+      group.nullPrintRunCardIds.push(id);
+    }
+    if (!existing) {
+      groupsByCardNumber.set(cardNumber, group);
       groupOrder.push(cardNumber);
     }
   }
@@ -121,12 +129,18 @@ export async function GET(
   const pageCardNumbers = groupOrder.slice(skip, skip + pageSize);
   const pageGroups = pageCardNumbers.map((cn) => groupsByCardNumber.get(cn)!);
   const variantCountByRepId = new Map(pageGroups.map((g) => [g.representativeId, g.variantCount] as const));
-  const totalPrintRunByRepId = new Map(pageGroups.map((g) => [g.representativeId, g.totalPrintRun] as const));
   const representativeIds = pageGroups.map((g) => g.representativeId);
 
   // ── 6. Combined gels-logged count across every variant in each of this
   // page's groups (e.g. a gel logged against the Red Crystalline parallel
   // still counts toward its base card's total, not just that one row's).
+  // A variant with no fixed printRun (e.g. a "Base" version, which has no
+  // numbered ceiling) has no real print-run number to contribute — but
+  // each one actually logged is still a real physical copy that exists,
+  // so it contributes its own logged-gel count instead of 0 (e.g. SO-BS
+  // Ben Shelton Solus: a 1/1 contributes 1, and its unnumbered Base
+  // version, once a single copy of it is logged, contributes 1 too —
+  // "1/2" total, not "0/1").
   const allPageVariantIds = pageGroups.flatMap((g) => g.cardIds);
   const gelsCounts = await prisma.portfolioCard.groupBy({
     by:     ["checklistCardId"],
@@ -138,6 +152,12 @@ export async function GET(
     pageGroups.map((g) => [
       g.representativeId,
       g.cardIds.reduce((sum, id) => sum + (gelsCountByCardId.get(id) ?? 0), 0),
+    ] as const)
+  );
+  const totalPrintRunByRepId = new Map(
+    pageGroups.map((g) => [
+      g.representativeId,
+      g.knownPrintRunSum + g.nullPrintRunCardIds.reduce((sum, id) => sum + (gelsCountByCardId.get(id) ?? 0), 0),
     ] as const)
   );
 

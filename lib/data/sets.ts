@@ -163,8 +163,10 @@ export async function getSetDetail(
 
   // ── 1b. Group checklist rows by cardNumber for the first page — see the
   // identical logic (and rationale) in app/api/sets/[id]/checklist/route.ts.
-  // totalPrintRun (sum across every variant, null treated as 0) powers the
-  // Gels column's combined "owned/print run" fraction.
+  // knownPrintRunSum (sum of every variant's *known* printRun) plus
+  // nullPrintRunCardIds (variants with no fixed printRun, e.g. a card's
+  // unnumbered "base" version) together power the Gels column's combined
+  // "owned/print run" fraction.
   const idsForGrouping = await prisma.checklistCard.findMany({
     where:   { cardSetId: setId },
     orderBy: { sortOrder: "asc" },
@@ -174,21 +176,26 @@ export async function getSetDetail(
   const groupOrder: string[] = [];
   const groupsByCardNumber = new Map<
     string,
-    { representativeId: string; cardIds: string[]; variantCount: number; totalPrintRun: number }
+    { representativeId: string; cardIds: string[]; variantCount: number; knownPrintRunSum: number; nullPrintRunCardIds: string[] }
   >();
   for (const { id, cardNumber, printRun } of idsForGrouping) {
     const existing = groupsByCardNumber.get(cardNumber);
-    if (existing) {
-      existing.variantCount += 1;
-      existing.cardIds.push(id);
-      existing.totalPrintRun += printRun ?? 0;
+    const group = existing ?? {
+      representativeId: id,
+      cardIds: [] as string[],
+      variantCount: 0,
+      knownPrintRunSum: 0,
+      nullPrintRunCardIds: [] as string[],
+    };
+    group.variantCount += 1;
+    group.cardIds.push(id);
+    if (printRun != null) {
+      group.knownPrintRunSum += printRun;
     } else {
-      groupsByCardNumber.set(cardNumber, {
-        representativeId: id,
-        cardIds: [id],
-        variantCount: 1,
-        totalPrintRun: printRun ?? 0,
-      });
+      group.nullPrintRunCardIds.push(id);
+    }
+    if (!existing) {
+      groupsByCardNumber.set(cardNumber, group);
       groupOrder.push(cardNumber);
     }
   }
@@ -196,12 +203,15 @@ export async function getSetDetail(
   const totalCardGroups = groupOrder.length;
   const firstPageCardNumbers = groupOrder.slice(0, PAGE_SIZE);
   const firstPageGroups = firstPageCardNumbers.map((cn) => groupsByCardNumber.get(cn)!);
-  const variantCountByRepId   = new Map(firstPageGroups.map((g) => [g.representativeId, g.variantCount] as const));
-  const totalPrintRunByRepId  = new Map(firstPageGroups.map((g) => [g.representativeId, g.totalPrintRun] as const));
+  const variantCountByRepId = new Map(firstPageGroups.map((g) => [g.representativeId, g.variantCount] as const));
   const firstPageRepresentativeIds = firstPageGroups.map((g) => g.representativeId);
 
   // Combined gels-logged count across every variant in each group — a gel
   // logged against any one parallel counts toward its base card's total.
+  // A variant with no fixed printRun contributes its own logged-gel count
+  // instead of 0 — see the identical rationale in
+  // app/api/sets/[id]/checklist/route.ts (the SO-BS Ben Shelton Solus
+  // example).
   const firstPageAllVariantIds = firstPageGroups.flatMap((g) => g.cardIds);
   const firstPageGelsCounts = await prisma.portfolioCard.groupBy({
     by:     ["checklistCardId"],
@@ -213,6 +223,12 @@ export async function getSetDetail(
     firstPageGroups.map((g) => [
       g.representativeId,
       g.cardIds.reduce((sum, id) => sum + (firstPageGelsCountByCardId.get(id) ?? 0), 0),
+    ] as const)
+  );
+  const totalPrintRunByRepId = new Map(
+    firstPageGroups.map((g) => [
+      g.representativeId,
+      g.knownPrintRunSum + g.nullPrintRunCardIds.reduce((sum, id) => sum + (firstPageGelsCountByCardId.get(id) ?? 0), 0),
     ] as const)
   );
 
