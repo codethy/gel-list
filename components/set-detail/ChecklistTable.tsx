@@ -1,7 +1,7 @@
 // components/set-detail/ChecklistTable.tsx
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useEffect, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChecklistCardOption } from "./AddGelModal";
@@ -76,6 +76,12 @@ export interface ChecklistRow {
   notes?: string | null;
   cardHistory: CardHistoryEvent[];
   loggedGels: LoggedGel[];
+  // > 1 means other ChecklistCard rows share this row's cardNumber
+  // (parallels/variants of the same base card — e.g. 25 different
+  // refractor colors of the same player's #1) — see the grouping logic in
+  // app/api/sets/[id]/checklist/route.ts. The row renders collapsed with
+  // an expand affordance instead of one line per variant.
+  variantCount?: number;
 }
 
 export interface ChecklistMeta {
@@ -715,28 +721,18 @@ function Pagination({ meta, onPageChange }: { meta: ChecklistMeta; onPageChange:
   );
 }
 
-// ─── ROW ──────────────────────────────────────────────────────────────────────
+// ─── VARIANT SUB-ROW ──────────────────────────────────────────────────────────
+// One parallel/variant of a grouped checklist row, shown nested beneath it
+// once expanded. A trimmed-down version of ChecklistRowItem — no image
+// column (the group header's image stands in for all of them) and no
+// left-padding trick, since there's no Team column to align with.
 
-// The md+ grid template for both the header and each row — must stay
-// IDENTICAL between the two (see the module-level alignment note above) and
-// must switch in lockstep with whether the Team column is shown at all.
-// When Team is hidden (no checklist card in this set has a team — e.g.
-// Entertainment/TCG sets), its 1.3fr share folds into Player instead of
-// leaving a gap.
-function gridColsClass(showTeam: boolean): string {
-  return showTeam
-    ? "grid-cols-[30px_36px_90px_4fr_1fr_96px_40px] md:grid-cols-[30px_36px_90px_1.2fr_1.3fr_0.75fr_96px_40px_100px]"
-    : "grid-cols-[30px_36px_90px_4fr_1fr_96px_40px] md:grid-cols-[30px_36px_90px_1.8fr_0.75fr_96px_40px_100px]";
-}
-
-function ChecklistRowItem({
-  row, setId, index, showTeam, category, onAddGelClick, onOpenHistory, onOpenImage,
+function VariantSubRow({
+  row, setId, category, onAddGelClick, onOpenHistory, onOpenImage,
 }: {
   row: ChecklistRow;
   setId: string;
-  index: number;
-  showTeam: boolean;
-  category: string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
+  category: string;
   onAddGelClick: (option: ChecklistCardOption) => void;
   onOpenHistory: (row: ChecklistRow) => void;
   onOpenImage: (row: ChecklistRow) => void;
@@ -786,6 +782,208 @@ function ChecklistRowItem({
   const hasGels    = row.gelsPulled > 0;
 
   return (
+    <div
+      onClick={hasGels ? () => onOpenHistory(row) : undefined}
+      className={`
+        flex items-center gap-3 pl-[66px] pr-4 py-2
+        border-t border-slate-800/60
+        transition-colors duration-150 select-none
+        ${hasGels ? "cursor-pointer" : "cursor-default"}
+        ${isOwned    ? "bg-emerald-950/20 hover:bg-emerald-950/40" : ""}
+        ${isSurfaced ? "bg-amber-950/10 hover:bg-amber-950/20"     : ""}
+      `}
+    >
+      <HeartButton liked={liked} count={likeCount} onToggle={handleLikeToggle} isLoading={likeLoading} />
+
+      {row.imageUrl ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpenImage(row); }}
+          aria-label={`View card image for ${subtitle ?? row.playerName}`}
+          title="View image"
+          className="cursor-zoom-in shrink-0"
+        >
+          <img src={row.imageUrl} alt={row.playerName} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
+        </button>
+      ) : (
+        <div className="w-6 h-8 shrink-0" />
+      )}
+
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-slate-300 truncate">{subtitle ?? "—"}</p>
+      </div>
+
+      <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
+
+      <div className="flex items-center gap-1.5 w-16 justify-start">
+        <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleAddGelClick}
+        aria-label={`Add a gel for ${subtitle ?? row.playerName}`}
+        title="Log a Gel"
+        className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/50 hover:text-blue-300 active:scale-95 transition-all duration-150 shrink-0"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+// ─── VARIANTS DRAWER ──────────────────────────────────────────────────────────
+// Lazy-fetches and shows every row sharing the parent row's cardNumber —
+// reuses the same height-animation pattern as CardHistoryDrawer above
+// (plain inline AnimatePresence, no fixed-position modal) since that's the
+// pattern already proven to render reliably in this file.
+
+function VariantsDrawer({
+  row, setId, category, generation, onAddGelClick, onOpenHistory, onOpenImage,
+}: {
+  row: ChecklistRow;
+  setId: string;
+  category: string;
+  generation: number;
+  onAddGelClick: (option: ChecklistCardOption) => void;
+  onOpenHistory: (row: ChecklistRow) => void;
+  onOpenImage: (row: ChecklistRow) => void;
+}) {
+  const [variants, setVariants] = useState<ChecklistRow[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    (async () => {
+      try {
+        const params = new URLSearchParams({ cardNumber: row.cardNumber ?? "" });
+        const res = await fetch(`/api/sets/${setId}/checklist/variants?${params.toString()}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setVariants(data.rows ?? []);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // Re-fetches whenever `generation` bumps (any checklist row changed —
+    // e.g. a gel was just logged against one of these variants) so this
+    // stays accurate without requiring the row to be collapsed/reopened.
+  }, [row.cardNumber, setId, generation]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="overflow-hidden"
+    >
+      {isLoading && !variants ? (
+        <div className="py-3 pl-[66px] text-xs text-slate-500">Loading variants...</div>
+      ) : (
+        (variants ?? []).map((v) => (
+          <VariantSubRow
+            key={v.id}
+            row={v}
+            setId={setId}
+            category={category}
+            onAddGelClick={onAddGelClick}
+            onOpenHistory={onOpenHistory}
+            onOpenImage={onOpenImage}
+          />
+        ))
+      )}
+    </motion.div>
+  );
+}
+
+// ─── ROW ──────────────────────────────────────────────────────────────────────
+
+// The md+ grid template for both the header and each row — must stay
+// IDENTICAL between the two (see the module-level alignment note above) and
+// must switch in lockstep with whether the Team column is shown at all.
+// When Team is hidden (no checklist card in this set has a team — e.g.
+// Entertainment/TCG sets), its 1.3fr share folds into Player instead of
+// leaving a gap.
+function gridColsClass(showTeam: boolean): string {
+  return showTeam
+    ? "grid-cols-[30px_36px_90px_4fr_1fr_96px_40px] md:grid-cols-[30px_36px_90px_1.2fr_1.3fr_0.75fr_96px_40px_100px]"
+    : "grid-cols-[30px_36px_90px_4fr_1fr_96px_40px] md:grid-cols-[30px_36px_90px_1.8fr_0.75fr_96px_40px_100px]";
+}
+
+function ChecklistRowItem({
+  row, setId, index, showTeam, category, generation, onAddGelClick, onOpenHistory, onOpenImage,
+}: {
+  row: ChecklistRow;
+  setId: string;
+  index: number;
+  showTeam: boolean;
+  category: string; // "SPORTS" | "ENTERTAINMENT" | "TCG"
+  generation: number;
+  onAddGelClick: (option: ChecklistCardOption) => void;
+  onOpenHistory: (row: ChecklistRow) => void;
+  onOpenImage: (row: ChecklistRow) => void;
+}) {
+  const [liked, setLiked]             = useState(row.isLikedByUser);
+  const [likeCount, setLikeCount]     = useState(row.likeCount);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [variantsExpanded, setVariantsExpanded] = useState(false);
+
+  const variantCount = row.variantCount ?? 1;
+  const hasVariants   = variantCount > 1;
+
+  async function handleLikeToggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    const prevLiked = liked;
+    const prevCount = likeCount;
+    setLiked(!prevLiked);
+    setLikeCount(prevLiked ? Math.max(prevCount - 1, 0) : prevCount + 1);
+    setLikeLoading(true);
+    try {
+      const res = await fetch(`/api/sets/${setId}/cards/${row.id}/like`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setLiked(data.liked);
+      setLikeCount(data.likeCount);
+    } catch {
+      setLiked(prevLiked);
+      setLikeCount(prevCount);
+    } finally {
+      setLikeLoading(false);
+    }
+  }
+
+  function handleAddGelClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    // A grouped row has no single "the" variant to log a gel against —
+    // expand it so the specific parallel/variant can be picked from its
+    // own, already-working Add a Gel button instead.
+    if (hasVariants) {
+      setVariantsExpanded((prev) => !prev);
+      return;
+    }
+    onAddGelClick({
+      id:            row.id,
+      cardNumber:    row.cardNumber ?? "",
+      playerName:    row.playerName,
+      cardType:      row.cardType,
+      parallelType:  row.parallelType ?? null,
+      printRun:      row.printRun ?? null,
+      variationName: row.variationName ?? null,
+      team:          row.team ?? null,
+    });
+  }
+
+  const isOwned    = row.status === "Owned";
+  const isSurfaced = row.status === "Surfaced";
+  const subtitle   = playerSubtitle(row);
+  const hasGels    = row.gelsPulled > 0;
+
+  return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -800,15 +998,21 @@ function ChecklistRowItem({
         Medium+ (md+), !showTeam: Team's track is dropped; Player (1.8fr) | Type (0.75fr) instead
       */}
       <div
-        onClick={hasGels ? () => onOpenHistory(row) : undefined}
+        // row.gelsPulled/loggedGels are combined across every variant for a
+        // grouped row (see the Gels column note below), but row.loggedGels
+        // itself only ever holds this one representative row's own logged
+        // gels — opening its history modal here could look emptier than
+        // the shown count. Expand instead, so the actual gel is reached
+        // through whichever variant sub-row it really belongs to.
+        onClick={hasVariants ? () => setVariantsExpanded((prev) => !prev) : hasGels ? () => onOpenHistory(row) : undefined}
         className={`
           grid items-center gap-x-2 px-4 py-3
           ${gridColsClass(showTeam)}
           transition-colors duration-150 select-none
-          ${hasGels ? "cursor-pointer" : "cursor-default"}
+          ${hasGels || hasVariants ? "cursor-pointer" : "cursor-default"}
           ${isOwned    ? "hover:bg-emerald-950/40" : ""}
           ${isSurfaced ? "hover:bg-amber-950/20"   : ""}
-          ${!isOwned && !isSurfaced && hasGels ? "hover:bg-slate-800/60" : ""}
+          ${!isOwned && !isSurfaced && (hasGels || hasVariants) ? "hover:bg-slate-800/60" : ""}
         `}
       >
         {/* Likes */}
@@ -854,12 +1058,41 @@ function ChecklistRowItem({
         </div>
 
         {/* Player + Parallel — left padding shifts this column right, independent of the Player/Type track widths */}
-        <div className="min-w-0 pl-[54px]">
-          <p className="text-sm font-semibold text-slate-200 truncate leading-tight">
-            {row.playerName}
-          </p>
-          {subtitle && (
-            <p className="text-[10px] text-slate-500 italic truncate">{subtitle}</p>
+        <div className="min-w-0 pl-[54px] flex items-center gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-200 truncate leading-tight">
+              {row.playerName}
+            </p>
+            {/* A grouped row's full subtitle would just be whichever
+                variant happens to be the representative (e.g. its
+                highest-print parallel) — misleading as a label for the
+                whole group, so parallel/print-run are hidden here;
+                expanding shows every variant's own. The variation name
+                (e.g. "Clay Court Masters") is a property of the base card
+                itself, not any one parallel, so it still shows. */}
+            {hasVariants
+              ? row.variationName && (
+                  <p className="text-[10px] text-slate-500 italic truncate">{row.variationName}</p>
+                )
+              : subtitle && (
+                  <p className="text-[10px] text-slate-500 italic truncate">{subtitle}</p>
+                )}
+          </div>
+          {hasVariants && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setVariantsExpanded((prev) => !prev); }}
+              aria-label={variantsExpanded ? "Hide variants" : "Show variants"}
+              aria-expanded={variantsExpanded}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-700/50 border border-slate-600/50 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors duration-150 shrink-0"
+            >
+              {variantCount} variants
+              <motion.span animate={{ rotate: variantsExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </motion.span>
+            </button>
           )}
         </div>
 
@@ -909,6 +1142,21 @@ function ChecklistRowItem({
           </p>
         </div>
       </div>
+
+      <AnimatePresence>
+        {hasVariants && variantsExpanded && (
+          <VariantsDrawer
+            key="variants"
+            row={row}
+            setId={setId}
+            category={category}
+            generation={generation}
+            onAddGelClick={onAddGelClick}
+            onOpenHistory={onOpenHistory}
+            onOpenImage={onOpenImage}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -924,6 +1172,17 @@ export default function ChecklistTable({
   const [historyRow, setHistoryRow]     = useState<ChecklistRow | null>(null);
   const [imageTarget, setImageTarget]   = useState<CardImageTarget | null>(null);
   const [, startTransition]             = useTransition();
+
+  // Bumped every time `rows` changes identity — a filter/page change, or a
+  // gel successfully logged against any card in this set (SetDetailClient
+  // patches `rows` by id on success, which always produces a new array
+  // reference). An expanded row's VariantsDrawer depends on this to
+  // silently refetch its variants, so a newly-logged gel against one of
+  // them shows up without needing to collapse/re-expand the row.
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    setGeneration((g) => g + 1);
+  }, [rows]);
 
   // No checklist card in this set has a team at all (Entertainment/TCG sets
   // typically don't import one) — hide the whole column rather than show a
@@ -1052,6 +1311,7 @@ export default function ChecklistTable({
                   index={i}
                   showTeam={showTeam}
                   category={category}
+                  generation={generation}
                   onAddGelClick={onAddGelClick}
                   onOpenHistory={setHistoryRow}
                   onOpenImage={(row) => setImageTarget({

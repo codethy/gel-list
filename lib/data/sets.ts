@@ -104,6 +104,7 @@ export interface SetDetailData {
     gelsPulled:    number;
     cardHistory:   CardHistoryEvent[];
     loggedGels:    LoggedGel[];
+    variantCount:  number;
   }[];
 
   checklistMeta: {
@@ -160,10 +161,64 @@ export async function getSetDetail(
   const PAGE_SIZE = 50;
   const RECENT_PULLS_LIMIT = 12;
 
+  // ── 1b. Group checklist rows by cardNumber for the first page — see the
+  // identical logic (and rationale) in app/api/sets/[id]/checklist/route.ts.
+  // totalPrintRun (sum across every variant, null treated as 0) powers the
+  // Gels column's combined "owned/print run" fraction.
+  const idsForGrouping = await prisma.checklistCard.findMany({
+    where:   { cardSetId: setId },
+    orderBy: { sortOrder: "asc" },
+    select:  { id: true, cardNumber: true, printRun: true },
+  });
+
+  const groupOrder: string[] = [];
+  const groupsByCardNumber = new Map<
+    string,
+    { representativeId: string; cardIds: string[]; variantCount: number; totalPrintRun: number }
+  >();
+  for (const { id, cardNumber, printRun } of idsForGrouping) {
+    const existing = groupsByCardNumber.get(cardNumber);
+    if (existing) {
+      existing.variantCount += 1;
+      existing.cardIds.push(id);
+      existing.totalPrintRun += printRun ?? 0;
+    } else {
+      groupsByCardNumber.set(cardNumber, {
+        representativeId: id,
+        cardIds: [id],
+        variantCount: 1,
+        totalPrintRun: printRun ?? 0,
+      });
+      groupOrder.push(cardNumber);
+    }
+  }
+
+  const totalCardGroups = groupOrder.length;
+  const firstPageCardNumbers = groupOrder.slice(0, PAGE_SIZE);
+  const firstPageGroups = firstPageCardNumbers.map((cn) => groupsByCardNumber.get(cn)!);
+  const variantCountByRepId   = new Map(firstPageGroups.map((g) => [g.representativeId, g.variantCount] as const));
+  const totalPrintRunByRepId  = new Map(firstPageGroups.map((g) => [g.representativeId, g.totalPrintRun] as const));
+  const firstPageRepresentativeIds = firstPageGroups.map((g) => g.representativeId);
+
+  // Combined gels-logged count across every variant in each group — a gel
+  // logged against any one parallel counts toward its base card's total.
+  const firstPageAllVariantIds = firstPageGroups.flatMap((g) => g.cardIds);
+  const firstPageGelsCounts = await prisma.portfolioCard.groupBy({
+    by:     ["checklistCardId"],
+    where:  { checklistCardId: { in: firstPageAllVariantIds } },
+    _count: { _all: true },
+  });
+  const firstPageGelsCountByCardId = new Map(firstPageGelsCounts.map((g) => [g.checklistCardId, g._count._all]));
+  const totalGelsPulledByRepId = new Map(
+    firstPageGroups.map((g) => [
+      g.representativeId,
+      g.cardIds.reduce((sum, id) => sum + (firstPageGelsCountByCardId.get(id) ?? 0), 0),
+    ] as const)
+  );
+
   // ── 2. Run all queries in parallel ─────────────────────────────────────
     const [
-    totalCards,
-    firstPageCards,
+    firstPageCardsUnordered,
     userPortfolioCards,
     teamsRaw,
     categoriesRaw,          // ✅ NEW
@@ -175,17 +230,11 @@ export async function getSetDetail(
     recentPullsRaw,         // ✅ NEW
   ] = await Promise.all([
 
-    // ── 2a. Total count ──────────────────────────────────────────────────
-    prisma.checklistCard.count({
-      where: { cardSetId: setId },
-    }),
-
-    // ── 2b. First page ───────────────────────────────────────────────────
+    // ── 2b. First page — just this page's representative (grouped) cards,
+    // fetched by id (see 1b above for how they were chosen) rather than a
+    // plain offset query.
     prisma.checklistCard.findMany({
-      where:   { cardSetId: setId },
-      skip:    0,
-      take:    PAGE_SIZE,
-      orderBy: { sortOrder: "asc" }, // matches the source checklist file's row order
+      where:  { id: { in: firstPageRepresentativeIds } },
       select: {
         id:            true,
         cardNumber:    true,
@@ -426,11 +475,12 @@ export async function getSetDetail(
   // paginating fetches afterward.
   //   - imageUrl is still always null (field doesn't exist on ChecklistCard)
   //   - parallelType maps from `parallel` field
-  const firstPageCardIds = firstPageCards.map((c) => c.id);
-  const extrasByCard     = await getChecklistRowExtras(firstPageCardIds, userId);
+  const firstPageCardsById = new Map(firstPageCardsUnordered.map((c) => [c.id, c]));
+  const extrasByCard      = await getChecklistRowExtras(firstPageRepresentativeIds, userId);
 
-  const checklistRows = firstPageCards.map((c) => {
-    const extras = extrasByCard.get(c.id)!;
+  const checklistRows = firstPageRepresentativeIds.map((id) => {
+    const c      = firstPageCardsById.get(id)!;
+    const extras = extrasByCard.get(id)!;
     return {
       id:            c.id,
       cardNumber:    c.cardNumber   ?? null,
@@ -439,7 +489,10 @@ export async function getSetDetail(
       cardType:      String(c.cardCategory),   // output as cardType for UI compatibility
       cardTier:      String(c.cardTier),       // only shown for TCG sets, as "Rarity"
       parallelType:  c.parallel     ?? null,   // ChecklistCard.parallel → parallelType
-      printRun:      c.printRun     ?? null,
+      // The Gels column shows combined totals across every parallel/variant
+      // of this base card — see the identical logic (and rationale) in
+      // app/api/sets/[id]/checklist/route.ts.
+      printRun:      totalPrintRunByRepId.get(id) || null,
       variationName: c.variationName ?? null,
       // A real logged gel's own photo takes precedence; the admin-set
       // default image (ChecklistCard.imageUrl) only fills in until one exists.
@@ -452,9 +505,12 @@ export async function getSetDetail(
       notes:         c.notes ?? null,
       likeCount:     extras.likeCount,
       isLikedByUser: extras.isLikedByUser,
-      gelsPulled:    extras.gelsPulled,
+      gelsPulled:    totalGelsPulledByRepId.get(id) ?? extras.gelsPulled,
       cardHistory:   extras.cardHistory,
       loggedGels:    extras.loggedGels,
+      // > 1 means other ChecklistCard rows share this cardNumber (parallels/
+      // variants) — see 1b above.
+      variantCount:  variantCountByRepId.get(id) ?? 1,
     };
   });
 
@@ -497,10 +553,10 @@ export async function getSetDetail(
     recentPulls,
     checklistRows,
     checklistMeta: {
-      total:      totalCards,
+      total:      totalCardGroups,
       page:       1,
       pageSize:   PAGE_SIZE,
-      totalPages: Math.ceil(totalCards / PAGE_SIZE),
+      totalPages: Math.ceil(totalCardGroups / PAGE_SIZE),
     },
     availableTeams,
     availableCategories,   // ✅ NEW

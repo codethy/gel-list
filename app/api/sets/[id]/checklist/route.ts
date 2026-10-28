@@ -78,38 +78,96 @@ export async function GET(
     } : {}),
   };
 
-  // ── 5. Fetch data ─────────────────────────────────────────────────────────
-  const [total, cards] = await Promise.all([
-    prisma.checklistCard.count({ where }),
-    prisma.checklistCard.findMany({
-      where,
-      skip,
-      take:    pageSize,
-      orderBy: { sortOrder: "asc" }, // matches the source checklist file's row order
-      select: {
-        id:            true,
-        cardNumber:    true,
-        playerName:    true,
-        team:          true,
-        cardCategory:  true,
-        cardTier:      true,
-        parallel:      true,
-        printRun:      true,
-        variationName: true,
-        isHit:         true,
-        imageUrl:      true,
-        notes:         true,
-      },
-    }),
-  ]);
+  // ── 5. Group matching rows by cardNumber — a "page" means N distinct base
+  // cards, not N raw rows. Some cards (e.g. heavily-parallelled sports/
+  // entertainment sets) have dozens of ChecklistCard rows sharing one
+  // cardNumber (one per parallel/color variant) — without this, a single
+  // page could return thousands of rows. Only id/cardNumber/printRun are
+  // selected here (cheap even across ~10k rows); the lowest-sortOrder row
+  // in each group is the page's "representative" row, and the rest are
+  // fetched lazily when a group is expanded — see
+  // app/api/sets/[id]/checklist/variants/route.ts. totalPrintRun (the sum
+  // across every variant, null treated as 0) powers the Gels column's
+  // combined "owned/print run" fraction — see step 7 below.
+  const idsForGrouping = await prisma.checklistCard.findMany({
+    where,
+    orderBy: { sortOrder: "asc" },
+    select:  { id: true, cardNumber: true, printRun: true },
+  });
 
-  // ── 6. Fetch real likes + ownership history for this page of rows ────────
-  const cardIds       = cards.map((c) => c.id);
-  const extrasByCard  = await getChecklistRowExtras(cardIds, userId);
+  const groupOrder: string[] = [];
+  const groupsByCardNumber = new Map<
+    string,
+    { representativeId: string; cardIds: string[]; variantCount: number; totalPrintRun: number }
+  >();
+  for (const { id, cardNumber, printRun } of idsForGrouping) {
+    const existing = groupsByCardNumber.get(cardNumber);
+    if (existing) {
+      existing.variantCount += 1;
+      existing.cardIds.push(id);
+      existing.totalPrintRun += printRun ?? 0;
+    } else {
+      groupsByCardNumber.set(cardNumber, {
+        representativeId: id,
+        cardIds: [id],
+        variantCount: 1,
+        totalPrintRun: printRun ?? 0,
+      });
+      groupOrder.push(cardNumber);
+    }
+  }
 
-  // ── 7. Shape rows ─────────────────────────────────────────────────────────
-  const rows = cards.map((c) => {
-    const extras = extrasByCard.get(c.id)!;
+  const total = groupOrder.length;
+  const pageCardNumbers = groupOrder.slice(skip, skip + pageSize);
+  const pageGroups = pageCardNumbers.map((cn) => groupsByCardNumber.get(cn)!);
+  const variantCountByRepId = new Map(pageGroups.map((g) => [g.representativeId, g.variantCount] as const));
+  const totalPrintRunByRepId = new Map(pageGroups.map((g) => [g.representativeId, g.totalPrintRun] as const));
+  const representativeIds = pageGroups.map((g) => g.representativeId);
+
+  // ── 6. Combined gels-logged count across every variant in each of this
+  // page's groups (e.g. a gel logged against the Red Crystalline parallel
+  // still counts toward its base card's total, not just that one row's).
+  const allPageVariantIds = pageGroups.flatMap((g) => g.cardIds);
+  const gelsCounts = await prisma.portfolioCard.groupBy({
+    by:     ["checklistCardId"],
+    where:  { checklistCardId: { in: allPageVariantIds } },
+    _count: { _all: true },
+  });
+  const gelsCountByCardId = new Map(gelsCounts.map((g) => [g.checklistCardId, g._count._all]));
+  const totalGelsPulledByRepId = new Map(
+    pageGroups.map((g) => [
+      g.representativeId,
+      g.cardIds.reduce((sum, id) => sum + (gelsCountByCardId.get(id) ?? 0), 0),
+    ] as const)
+  );
+
+  // ── 7. Fetch full rows for just this page's representative cards ────────
+  const cards = await prisma.checklistCard.findMany({
+    where:  { id: { in: representativeIds } },
+    select: {
+      id:            true,
+      cardNumber:    true,
+      playerName:    true,
+      team:          true,
+      cardCategory:  true,
+      cardTier:      true,
+      parallel:      true,
+      printRun:      true,
+      variationName: true,
+      isHit:         true,
+      imageUrl:      true,
+      notes:         true,
+    },
+  });
+  const cardsById = new Map(cards.map((c) => [c.id, c]));
+
+  // ── 8. Fetch real likes + ownership history for this page of rows ────────
+  const extrasByCard = await getChecklistRowExtras(representativeIds, userId);
+
+  // ── 9. Shape rows, preserving pagination order ───────────────────────────
+  const rows = representativeIds.map((id) => {
+    const c      = cardsById.get(id)!;
+    const extras = extrasByCard.get(id)!;
     return {
       id:                c.id,
       cardNumber:        c.cardNumber  ?? null,
@@ -122,22 +180,31 @@ export async function GET(
       cardType:      String(c.cardCategory),  // cardCategory → cardType for UI
       cardTier:      String(c.cardTier),      // only shown for TCG sets, as "Rarity"
       parallelType:  c.parallel    ?? null,   // parallel → parallelType for UI
-      printRun:      c.printRun    ?? null,
+      // The Gels column shows combined totals across every parallel/variant
+      // of this base card, not just this one representative row — e.g. a
+      // card with a /50, /25, /10, and /1 parallel shows "owned/86", and a
+      // gel logged against any one of them counts toward that total. A
+      // printRun of 0 only happens when every variant's own printRun is
+      // null (unlimited/unspecified), so it's reported back as null too.
+      printRun:      totalPrintRunByRepId.get(id) || null,
       variationName: c.variationName ?? null,
       status:        extras.status,
       ownedGelId:    extras.ownedGelId,
       likeCount:     extras.likeCount,
       isLikedByUser: extras.isLikedByUser,
-      gelsPulled:    extras.gelsPulled,
+      gelsPulled:    totalGelsPulledByRepId.get(id) ?? extras.gelsPulled,
       // Admin-only note (ChecklistCard.notes) — a logged gel's own note
       // only ever appears in that gel's Card History now, not here.
       notes:         c.notes ?? null,
       cardHistory:   extras.cardHistory,
       loggedGels:    extras.loggedGels,
+      // > 1 means other ChecklistCard rows share this cardNumber (parallels/
+      // variants) — the UI shows an expand affordance and lazy-fetches them.
+      variantCount:  variantCountByRepId.get(id) ?? 1,
     };
   });
 
-  // ── 8. Return response ────────────────────────────────────────────────────
+  // ── 10. Return response ────────────────────────────────────────────────────
   return NextResponse.json({
     rows,
     meta: {
