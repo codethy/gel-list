@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { CardCategory, CardTier, Prisma } from "@prisma/client";
 import { getProductLabel } from "@/lib/productTypes";
+import { findMatchingChecklistCardIds } from "@/lib/data/checklistSearch";
 
 export interface AdminChecklistSet {
   id:          string;
@@ -54,6 +55,18 @@ export interface AdminProductRow {
   packsPerUnit:     number;
 }
 
+export interface AdminChecklistMeta {
+  total:      number;
+  page:       number;
+  pageSize:   number;
+  totalPages: number;
+}
+
+export interface AdminChecklistCardsPage {
+  cards: AdminChecklistCard[];
+  meta:  AdminChecklistMeta;
+}
+
 export interface AdminChecklistSetDetail {
   set: {
     id:          string;
@@ -64,8 +77,8 @@ export interface AdminChecklistSetDetail {
     subCategory: string;
     description: string | null;
   };
-  cards:    AdminChecklistCard[];
-  products: AdminProductRow[];
+  cardsPage: AdminChecklistCardsPage;
+  products:  AdminProductRow[];
 }
 
 // Every set, newest first, for the /admin/sets picker page.
@@ -94,7 +107,8 @@ export async function getAdminChecklistSets(): Promise<AdminChecklistSet[]> {
   }));
 }
 
-// One set's full checklist, in display order, for the edit table.
+// One set's first page of checklist rows (see getAdminChecklistCardsPage
+// below), for the edit table's initial server render.
 export async function getAdminChecklistForSet(setId: string): Promise<AdminChecklistSetDetail | null> {
   const cardSet = await prisma.cardSet.findUnique({
     where:  { id: setId },
@@ -102,7 +116,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
   });
   if (!cardSet) return null;
 
-  const cards = await getAdminChecklistCards(setId);
+  const cardsPage = await getAdminChecklistCardsPage(setId, {});
   const products = await getAdminProducts(setId);
 
   return {
@@ -115,7 +129,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       subCategory: cardSet.subCategory,
       description: cardSet.description,
     },
-    cards,
+    cardsPage,
     products,
   };
 }
@@ -287,31 +301,26 @@ export async function repositionChecklistCard(
   return { error: null };
 }
 
-// Re-fetches one set's full checklist in display order — used after a
-// create/edit (optionally including a reposition) so the client can just
-// replace its whole list rather than guess where a moved row landed.
-export async function getAdminChecklistCards(setId: string): Promise<AdminChecklistCard[]> {
-  const cards = await prisma.checklistCard.findMany({
-    where:   { cardSetId: setId },
-    orderBy: { sortOrder: "asc" },
-    select: {
-      id:            true,
-      cardNumber:    true,
-      playerName:    true,
-      team:          true,
-      cardCategory:  true,
-      cardTier:      true,
-      parallel:      true,
-      printRun:      true,
-      variationName: true,
-      isHit:         true,
-      sortOrder:     true,
-      imageUrl:      true,
-      notes:         true,
-    },
-  });
+const ADMIN_CHECKLIST_CARD_SELECT = {
+  id:            true,
+  cardNumber:    true,
+  playerName:    true,
+  team:          true,
+  cardCategory:  true,
+  cardTier:      true,
+  parallel:      true,
+  printRun:      true,
+  variationName: true,
+  isHit:         true,
+  sortOrder:     true,
+  imageUrl:      true,
+  notes:         true,
+} as const;
 
-  return cards.map((c) => ({
+type RawAdminChecklistCard = Prisma.ChecklistCardGetPayload<{ select: typeof ADMIN_CHECKLIST_CARD_SELECT }>;
+
+function toAdminChecklistCard(c: RawAdminChecklistCard): AdminChecklistCard {
+  return {
     id:            c.id,
     cardNumber:    c.cardNumber,
     playerName:    c.playerName,
@@ -325,7 +334,57 @@ export async function getAdminChecklistCards(setId: string): Promise<AdminCheckl
     sortOrder:     c.sortOrder,
     imageUrl:      c.imageUrl,
     notes:         c.notes,
-  }));
+  };
+}
+
+// Single-row shaping for the create/edit API routes, which only need to
+// hand back the one row they just changed, not the whole set.
+export function shapeAdminChecklistCard(c: RawAdminChecklistCard): AdminChecklistCard {
+  return toAdminChecklistCard(c);
+}
+
+export const adminChecklistCardSelect = ADMIN_CHECKLIST_CARD_SELECT;
+
+// One page of a set's checklist, in display order, optionally narrowed by
+// the same player/card-number/parallel/etc. search used elsewhere (see
+// lib/data/checklistSearch.ts). Replaces an earlier version that fetched
+// every ChecklistCard row for the set unconditionally — fine for a small
+// set, but a real set here has up to ~19,864 rows, all of which used to be
+// re-fetched and sent to the browser after adding or editing even one row.
+export async function getAdminChecklistCardsPage(
+  setId: string,
+  { page = 1, pageSize = 50, search = "" }: { page?: number; pageSize?: number; search?: string }
+): Promise<AdminChecklistCardsPage> {
+  const clampedPageSize = Math.min(100, Math.max(1, pageSize));
+  const clampedPage     = Math.max(1, page);
+  const skip            = (clampedPage - 1) * clampedPageSize;
+
+  const searchMatchedIds = await findMatchingChecklistCardIds(setId, search);
+  const where: Prisma.ChecklistCardWhereInput = {
+    cardSetId: setId,
+    ...(searchMatchedIds !== null ? { id: { in: searchMatchedIds } } : {}),
+  };
+
+  const [total, cards] = await Promise.all([
+    prisma.checklistCard.count({ where }),
+    prisma.checklistCard.findMany({
+      where,
+      orderBy: { sortOrder: "asc" },
+      skip,
+      take:    clampedPageSize,
+      select:  ADMIN_CHECKLIST_CARD_SELECT,
+    }),
+  ]);
+
+  return {
+    cards: cards.map(toAdminChecklistCard),
+    meta: {
+      total,
+      page:       clampedPage,
+      pageSize:   clampedPageSize,
+      totalPages: Math.ceil(total / clampedPageSize),
+    },
+  };
 }
 
 // Re-fetches one set's product catalog, including each product's pack

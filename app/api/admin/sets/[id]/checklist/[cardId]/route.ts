@@ -19,7 +19,8 @@ import {
   parseChecklistCardInput,
   parsePositionInstruction,
   repositionChecklistCard,
-  getAdminChecklistCards,
+  shapeAdminChecklistCard,
+  adminChecklistCardSelect,
   syncTotalCardsInSet,
   countChecklistCardReferences,
 } from "@/lib/data/adminChecklist";
@@ -62,17 +63,26 @@ export async function PATCH(
   }
 
   try {
-    await prisma.checklistCard.update({ where: { id: cardId }, data: data! });
+    let card = await prisma.checklistCard.update({
+      where:  { id: cardId },
+      data:   data!,
+      select: adminChecklistCardSelect,
+    });
 
     if (position) {
       const { error: repositionError } = await repositionChecklistCard(setId, cardId, position);
       if (repositionError) {
         return NextResponse.json({ error: repositionError }, { status: 400 });
       }
+      // sortOrder on `card` above is stale after a reposition — re-fetch
+      // just this one row for an accurate response.
+      card = await prisma.checklistCard.findUniqueOrThrow({
+        where:  { id: cardId },
+        select: adminChecklistCardSelect,
+      });
     }
 
-    const cards = await getAdminChecklistCards(setId);
-    return NextResponse.json({ cards });
+    return NextResponse.json({ card: shapeAdminChecklistCard(card) });
   } catch (e: any) {
     if (e.code === "P2002") {
       return NextResponse.json(

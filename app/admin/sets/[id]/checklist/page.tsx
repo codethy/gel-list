@@ -35,12 +35,13 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
           &larr; Admin
         </Link>
         <div className="mt-2">
-          <AdminSetHeader set={detail.set} cardCount={detail.cards.length} />
+          <AdminSetHeader set={detail.set} cardCount={detail.cardsPage.meta.total} />
         </div>
         <AdminChecklistClient
           setId={detail.set.id}
           category={detail.set.category}
-          initialCards={detail.cards}
+          initialCards={detail.cardsPage.cards}
+          initialMeta={detail.cardsPage.meta}
           cardCategoryOptions={VALID_CARD_CATEGORIES}
           cardTierOptions={VALID_CARD_TIERS}
         />
