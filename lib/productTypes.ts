@@ -9,8 +9,10 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "BLASTER_BOX", label: "Blaster Box" },
   { value: "BLASTER_PACK", label: "Blaster Pack" },
   { value: "JUMBO_BOX", label: "Jumbo Box" },
+  { value: "MEGA_BOX", label: "Mega Box" },
   { value: "BREAKERS_DELIGHT_BOX", label: "Breakers Delight Box" },
   { value: "HANGER_BOX", label: "Hanger Box" },
+  { value: "HANGER_PACK", label: "Hanger Pack" },
   { value: "BOOSTER_PACK", label: "Booster Pack" },
   { value: "ETB", label: "ETB" },
   { value: "BOOSTER_BUNDLE", label: "Booster Bundle" },
@@ -18,6 +20,10 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "SPC", label: "SPC" },
   { value: "BOOSTER_BOX", label: "Booster Box" },
   { value: "TROVE", label: "Trove" },
+  { value: "FDI", label: "FDI" },
+  { value: "FANATICS_FEST", label: "Fanatics Fest" },
+  { value: "HONG_BAO_BOX", label: "Hong Bao Box" },
+  { value: "LOGOFRACTOR", label: "Logofractor" },
   { value: "OTHER", label: "Other" },
 ];
 
