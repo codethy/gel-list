@@ -12,6 +12,7 @@ import ChecklistTable, {
   type ChecklistMeta,
 } from "./ChecklistTable";
 import AddGelModal, { type ChecklistCardOption, type ProductOption } from "./AddGelModal";
+import SignInRequiredModal from "@/components/SignInRequiredModal";
 import PacksOpenedBreakdownModal from "./PacksOpenedBreakdownModal";
 import LogProductOpeningsModal, { type OpeningEntry } from "./LogProductOpeningsModal";
 import type { SetPacksOpenedSummary } from "@/lib/data/productOpenings";
@@ -90,7 +91,7 @@ export default function SetDetailClient({
   userLastGelCity: initialUserLastGelCity,
   userLastGelCountry: initialUserLastGelCountry,
 }: SetDetailClientProps) {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
 
   // ── Gel state ──────────────────────────────────────────────────────────────
   const [gels, setGels] = useState<GelEntry[]>(initialGels);
@@ -121,6 +122,9 @@ export default function SetDetailClient({
   const [modalOpen, setModalOpen]                       = useState(false);
   const [preselectedCardOption, setPreselectedCardOption] = useState<ChecklistCardOption | null>(null);
   const [editingGel, setEditingGel]                     = useState<GelEntry | null>(null);
+  // Shown instead of AddGelModal when a signed-out visitor clicks "Add a
+  // Gel" — see handleAddGelClick below.
+  const [signInRequiredOpen, setSignInRequiredOpen]     = useState(false);
 
   // ── "X Packs/Boxes Opened" state ────────────────────────────────────────────
   const [packsOpened, setPacksOpened]     = useState<SetPacksOpenedSummary>(initialPacksOpened);
@@ -144,13 +148,22 @@ export default function SetDetailClient({
   );
 
   // ── Open modal (create) ─────────────────────────────────────────────────────
+  // Adding a gel always requires being signed in — a signed-out visitor
+  // gets SignInRequiredModal instead of the real Add Gel form. "loading"
+  // (the brief window before useSession resolves) is treated as signed-in
+  // here rather than flashing the sign-in prompt; the gels API route still
+  // rejects the request server-side in that rare race anyway.
   const handleAddGelClick = useCallback(
     (option?: ChecklistCardOption) => {
+      if (sessionStatus === "unauthenticated") {
+        setSignInRequiredOpen(true);
+        return;
+      }
       setEditingGel(null);
       setPreselectedCardOption(option ?? null);
       setModalOpen(true);
     },
-    []
+    [sessionStatus]
   );
 
   // ── Open modal (edit) ───────────────────────────────────────────────────────
@@ -376,6 +389,13 @@ export default function SetDetailClient({
         onClose={() => setLogOpeningsOpen(false)}
         products={packsOpened.products}
         onSubmit={handleLogOpeningsSubmit}
+      />
+
+      {/* ── 6. Sign-in required (signed-out visitor clicked Add a Gel) ──── */}
+      <SignInRequiredModal
+        isOpen={signInRequiredOpen}
+        onClose={() => setSignInRequiredOpen(false)}
+        callbackUrl={`/sets/${setId}`}
       />
     </div>
   );
