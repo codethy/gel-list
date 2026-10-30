@@ -149,3 +149,26 @@ export async function saveProductOpening(
     update: { quantity, isBreak },
   });
 }
+
+// This user's "Packs Opened" total across EVERY set — the profile page's
+// stat box equivalent of a single set's totalPacksOpened. Each
+// ProductOpening.quantity is in units of that product (e.g. "3 Hobby
+// Boxes"), not packs, so this still has to multiply through each product's
+// own packsPerUnit (from its ProductPackKind rows) rather than just
+// summing quantity directly — same convention as getPacksOpenedSummary.
+export async function getUserTotalPacksOpened(userId: string): Promise<number> {
+  const openings = await prisma.productOpening.findMany({
+    where:  { userId },
+    select: {
+      quantity:   true,
+      setProduct: { select: { packKinds: { select: { packsCount: true } } } },
+    },
+  });
+
+  return openings.reduce((sum, o) => {
+    const packsPerUnit = o.setProduct.packKinds.length > 0
+      ? o.setProduct.packKinds.reduce((s, k) => s + k.packsCount, 0)
+      : 1;
+    return sum + o.quantity * packsPerUnit;
+  }, 0);
+}

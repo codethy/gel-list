@@ -58,9 +58,9 @@ export default async function ProfilePage() {
 
           <div className="flex flex-col gap-3 w-full sm:w-[240px]">
             <StatBox className="flex-1" label="Sets Opened" value={stats.setsOpened} />
+            <StatBox className="flex-1" label="Packs Opened" value={stats.packsOpened} />
             <StatBox className="flex-1" label="Total Gels" value={stats.totalGels} />
             <StatBox className="flex-1" label="Total Contributions" value={stats.totalContributions} />
-            <StatBox className="flex-1" label="Likes Received" value={stats.likesReceived} />
           </div>
         </div>
 

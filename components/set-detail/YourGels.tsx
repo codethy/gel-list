@@ -45,6 +45,11 @@ export interface GelEntry {
   // handle at all (shouldn't normally happen — see generateUniqueHandle).
   loggedByHandle?: string | null;
   cardTemplate: {
+    // Only ever populated by the profile data layer (see shapeGelEntry in
+    // lib/data/profile.ts) — used by ManageFavoritesModal's search. Other
+    // sources of GelEntry (the set detail page's own gels/recent pulls)
+    // leave it undefined; nothing there currently needs it.
+    cardNumber?: string | null;
     playerName: string;
     cardType: string;
     parallelType?: string | null;

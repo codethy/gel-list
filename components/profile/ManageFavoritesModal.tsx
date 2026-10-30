@@ -8,6 +8,7 @@
 
 "use client";
 
+import { useState } from "react";
 import { playerSubtitle } from "@/components/set-detail/ChecklistTable";
 import type { UserGelEntry } from "@/lib/data/profile";
 import type { FavoriteGelEntry } from "@/lib/data/profile";
@@ -27,6 +28,37 @@ interface ManageFavoritesModalProps {
 function thumbLabel(gel: UserGelEntry | FavoriteGelEntry): string {
   const sub = playerSubtitle(gel.cardTemplate);
   return sub ? `${gel.cardTemplate.playerName} — ${sub}` : gel.cardTemplate.playerName;
+}
+
+// Matches the same fields as the set checklist's own search (see
+// lib/data/checklistSearch.ts's keywordSqlCondition) — player/card name,
+// card number, parallel, variation name, and team, plus an exact printRun
+// match when a keyword is a bare number or "/99"-style. Client-side (not a
+// server round trip) since every gel the user owns is already in memory
+// here. Every whitespace-separated keyword must match something for a gel
+// to pass, same AND-across-keywords behavior as the server-side version.
+function matchesSearch(gel: UserGelEntry, query: string): boolean {
+  const keywords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (keywords.length === 0) return true;
+
+  const haystack = [
+    gel.cardTemplate.cardNumber,
+    gel.cardTemplate.playerName,
+    gel.cardTemplate.parallelType,
+    gel.cardTemplate.variationName,
+    gel.cardTemplate.team,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return keywords.every((kw) => {
+    const numeric = kw.replace(/^\//, "");
+    if (/^\d+$/.test(numeric) && gel.cardTemplate.printRun === parseInt(numeric, 10)) {
+      return true;
+    }
+    return haystack.includes(kw);
+  });
 }
 
 function Thumb({ gel }: { gel: UserGelEntry | FavoriteGelEntry }) {
@@ -54,10 +86,13 @@ export default function ManageFavoritesModal({
   onRemove,
   onMove,
 }: ManageFavoritesModalProps) {
+  const [query, setQuery] = useState("");
+
   if (!isOpen) return null;
 
   const favoriteIds = new Set(favorites.map((f) => f.id));
-  const available = allGels.filter((g) => !favoriteIds.has(g.id));
+  const availableBeforeSearch = allGels.filter((g) => !favoriteIds.has(g.id));
+  const available = availableBeforeSearch.filter((g) => matchesSearch(g, query));
   const atLimit = favorites.length >= maxFavorites;
 
   return (
@@ -140,28 +175,47 @@ export default function ManageFavoritesModal({
             <p className="text-sm text-slate-500 italic">
               Log a gel first to be able to pick a favorite.
             </p>
-          ) : available.length === 0 ? (
+          ) : availableBeforeSearch.length === 0 ? (
             <p className="text-sm text-slate-500 italic">Every gel you own is already a favorite.</p>
           ) : (
-            <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
-              {available.map((gel) => (
-                <div
-                  key={gel.id}
-                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-slate-800/40 border border-slate-700/40"
-                >
-                  <Thumb gel={gel} />
-                  <span className="flex-1 min-w-0 text-sm text-slate-300 truncate">{thumbLabel(gel)}</span>
-                  <button
-                    type="button"
-                    onClick={() => onAdd(gel)}
-                    disabled={atLimit || busyId === gel.id}
-                    className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
-                  >
-                    + Add
-                  </button>
+            <>
+              <div className="relative mb-2">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.35-4.35" />
+                </svg>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by card number, name, variation..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150"
+                />
+              </div>
+              {available.length === 0 ? (
+                <p className="text-sm text-slate-500 italic">No gels match your search.</p>
+              ) : (
+                <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
+                  {available.map((gel) => (
+                    <div
+                      key={gel.id}
+                      className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-slate-800/40 border border-slate-700/40"
+                    >
+                      <Thumb gel={gel} />
+                      <span className="flex-1 min-w-0 text-sm text-slate-300 truncate">{thumbLabel(gel)}</span>
+                      <button
+                        type="button"
+                        onClick={() => onAdd(gel)}
+                        disabled={atLimit || busyId === gel.id}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
