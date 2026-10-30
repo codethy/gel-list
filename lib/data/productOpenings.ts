@@ -35,6 +35,12 @@ export interface SetPacksOpenedSummary {
   label:               "Packs Opened" | "Boxes Opened";
   products:            ProductBreakdownRow[];
   ownTotalPacksOpened: number;
+  // Every pack's own cardsPerPack multiplied through — shown as the
+  // "Cards Pulled" box next to "Packs Opened" in the breakdown modal. A
+  // product with no pack kinds configured yet contributes 0 here (unlike
+  // packsPerUnit's "default to 1 pack" convention, there's no sensible
+  // default for how many cards a pack of unknown size contains).
+  totalCardsPulled:    number;
 }
 
 export async function getPacksOpenedSummary(
@@ -48,12 +54,12 @@ export async function getPacksOpenedSummary(
       id:               true,
       productType:      true,
       productTypeOther: true,
-      packKinds:        { select: { packsCount: true } },
+      packKinds:        { select: { packsCount: true, cardsPerPack: true } },
     },
   });
 
   if (products.length === 0) {
-    return { totalPacksOpened: 0, label: "Packs Opened", products: [], ownTotalPacksOpened: 0 };
+    return { totalPacksOpened: 0, label: "Packs Opened", products: [], ownTotalPacksOpened: 0, totalCardsPulled: 0 };
   }
 
   const productIds = products.map((p) => p.id);
@@ -75,6 +81,17 @@ export async function getPacksOpenedSummary(
   const totalByProduct = new Map(totals.map((t) => [t.setProductId, t._sum.quantity ?? 0]));
   const ownByProduct   = new Map(own.map((o) => [o.setProductId, o]));
 
+  // A product's pack kinds can mix pack sizes (e.g. a box with both a
+  // 4-card-per-pack kind and a 6-card-per-pack kind) — cardsPerUnit sums
+  // each kind's own packsCount * cardsPerPack, not packsPerUnit times one
+  // shared cardsPerPack.
+  const cardsPerUnitByProductId = new Map(
+    products.map((p) => [
+      p.id,
+      p.packKinds.reduce((sum, k) => sum + k.packsCount * k.cardsPerPack, 0),
+    ])
+  );
+
   const productRows: ProductBreakdownRow[] = products.map((p) => {
     const packsPerUnit = p.packKinds.length > 0
       ? p.packKinds.reduce((sum, k) => sum + k.packsCount, 0)
@@ -95,6 +112,10 @@ export async function getPacksOpenedSummary(
 
   const totalPacksOpened    = productRows.reduce((sum, p) => sum + p.totalQuantity * p.packsPerUnit, 0);
   const ownTotalPacksOpened = productRows.reduce((sum, p) => sum + p.ownQuantity * p.packsPerUnit, 0);
+  const totalCardsPulled    = productRows.reduce(
+    (sum, p) => sum + p.totalQuantity * (cardsPerUnitByProductId.get(p.setProductId) ?? 0),
+    0
+  );
 
   const isSingleBoxSet = productRows.length === 1 && productRows[0].packsPerUnit === 1;
 
@@ -103,6 +124,7 @@ export async function getPacksOpenedSummary(
     label: isSingleBoxSet ? "Boxes Opened" : "Packs Opened",
     products: productRows,
     ownTotalPacksOpened,
+    totalCardsPulled,
   };
 }
 

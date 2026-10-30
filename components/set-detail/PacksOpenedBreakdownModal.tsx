@@ -15,6 +15,16 @@ interface PacksOpenedBreakdownModalProps {
   summary: SetPacksOpenedSummary;
 }
 
+// Every count shown in this modal uses this — once a number reaches 1000
+// it's shown as e.g. "1.5K" (at most one decimal place; a whole-number
+// result drops the trailing ".0").
+function formatCount(n: number): string {
+  if (n < 1000) return n.toLocaleString();
+  const scaled = (n / 1000).toFixed(1);
+  const trimmed = scaled.endsWith(".0") ? scaled.slice(0, -2) : scaled;
+  return `${trimmed}K`;
+}
+
 export default function PacksOpenedBreakdownModal({ isOpen, onClose, summary }: PacksOpenedBreakdownModalProps) {
   if (!isOpen) return null;
 
@@ -41,13 +51,23 @@ export default function PacksOpenedBreakdownModal({ isOpen, onClose, summary }: 
           </button>
         </div>
 
-        <div className="flex flex-col items-center gap-1 px-5 py-4 rounded-xl bg-slate-800/60 border border-slate-700/50 mb-5">
-          <span className="text-3xl font-bold text-white tabular-nums">
-            {summary.totalPacksOpened.toLocaleString()}
-          </span>
-          <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
-            {summary.label}
-          </span>
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="flex flex-col items-center gap-1 px-5 py-4 rounded-xl bg-slate-800/60 border border-slate-700/50">
+            <span className="text-3xl font-bold text-white tabular-nums">
+              {formatCount(summary.totalPacksOpened)}
+            </span>
+            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium text-center">
+              {summary.label}
+            </span>
+          </div>
+          <div className="flex flex-col items-center gap-1 px-5 py-4 rounded-xl bg-slate-800/60 border border-slate-700/50">
+            <span className="text-3xl font-bold text-white tabular-nums">
+              {formatCount(summary.totalCardsPulled)}
+            </span>
+            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium text-center">
+              Cards Pulled
+            </span>
+          </div>
         </div>
 
         {summary.products.length === 0 ? (
@@ -63,10 +83,10 @@ export default function PacksOpenedBreakdownModal({ isOpen, onClose, summary }: 
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white">
-                    {p.totalQuantity.toLocaleString()} {p.pluralLabel} Opened
+                    {formatCount(p.totalQuantity)} {p.pluralLabel} Opened
                   </p>
                   {p.ownQuantity > 0 && (
-                    <p className="text-xs text-slate-500 mt-0.5">You: {p.ownQuantity.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">You: {formatCount(p.ownQuantity)}</p>
                   )}
                 </div>
               </div>
@@ -78,7 +98,7 @@ export default function PacksOpenedBreakdownModal({ isOpen, onClose, summary }: 
           <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
             <span className="text-sm text-blue-300 font-medium">Your Total</span>
             <span className="text-sm font-bold text-white tabular-nums">
-              {summary.ownTotalPacksOpened.toLocaleString()} {summary.label}
+              {formatCount(summary.ownTotalPacksOpened)} {summary.label}
             </span>
           </div>
         )}
