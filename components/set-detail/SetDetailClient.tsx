@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, useCallback, useTransition } from "react";
+import { useSession } from "next-auth/react";
 import SetHeader from "./SetHeader";
 import YourGels, { type GelEntry } from "./YourGels";
 import RecentPulls from "./RecentPulls";
@@ -14,6 +15,11 @@ import AddGelModal, { type ChecklistCardOption, type ProductOption } from "./Add
 import PacksOpenedBreakdownModal from "./PacksOpenedBreakdownModal";
 import LogProductOpeningsModal, { type OpeningEntry } from "./LogProductOpeningsModal";
 import type { SetPacksOpenedSummary } from "@/lib/data/productOpenings";
+
+// Matches RECENT_PULLS_LIMIT in lib/data/sets.ts — keeps the client-side
+// feed from growing unbounded across a long session once new pulls are
+// prepended locally (see handleGelSuccess below).
+const RECENT_PULLS_LIMIT = 12;
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +57,11 @@ interface SetDetailClientProps {
 
   // "X Packs/Boxes Opened" box + its two linked popups
   initialPacksOpened: SetPacksOpenedSummary;
+
+  // Pre-fills "Log a Gel"'s City/Country fields (SELF flow only) — see
+  // lib/data/userGelDefaults.ts.
+  userLastGelCity:    string | null;
+  userLastGelCountry: string | null;
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -68,7 +79,7 @@ export default function SetDetailClient({
   totalChaseCardsInSet,
   imageUrl,
   initialGels,
-  recentPulls,
+  recentPulls: initialRecentPulls,
   initialRows,
   initialMeta,
   availableTeams,
@@ -76,10 +87,23 @@ export default function SetDetailClient({
   availableTiers,
   products,
   initialPacksOpened,
+  userLastGelCity: initialUserLastGelCity,
+  userLastGelCountry: initialUserLastGelCountry,
 }: SetDetailClientProps) {
+  const { data: session } = useSession();
 
   // ── Gel state ──────────────────────────────────────────────────────────────
   const [gels, setGels] = useState<GelEntry[]>(initialGels);
+  // Live feed across every user — lifted into state (rather than used
+  // straight from the prop) so a gel logged in this same session appears
+  // immediately instead of needing a page refresh to re-fetch it.
+  const [recentPulls, setRecentPulls] = useState<GelEntry[]>(initialRecentPulls);
+  // "Log a Gel"'s remembered City/Country defaults (SELF flow only) —
+  // lifted into state for the same reason: a value just submitted should
+  // pre-fill the next time the modal opens in this session, not only after
+  // a refresh re-fetches it from the user's stored lastGelCity/lastGelCountry.
+  const [lastGelCity, setLastGelCity]       = useState(initialUserLastGelCity);
+  const [lastGelCountry, setLastGelCountry] = useState(initialUserLastGelCountry);
   // Set-wide "Chases Pulled" total (see lib/data/sets.ts) — distinct from
   // gels.length, which is just this viewer's own collection. Bumped
   // optimistically only when the viewer logs their OWN gel for the first
@@ -154,6 +178,10 @@ export default function SetDetailClient({
     (gel: GelEntry) => {
       const isSurfaced = gel.isInHand === false;
       const newStatus: "Owned" | "Surfaced" = isSurfaced ? "Surfaced" : "Owned";
+      // `editingGel` (this component's own state, set when the modal was
+      // opened for an edit) is still the pre-close value here — handleSubmit
+      // calls onSuccess before the modal closes and resets it.
+      const isCreate = editingGel === null;
       let isNewGel = false;
 
       setGels((prev) => {
@@ -179,8 +207,34 @@ export default function SetDetailClient({
       if (isNewGel && !isSurfaced) {
         setChasesPulled((prev) => prev + 1);
       }
+
+      // "Recent Pulls" is a live feed across every user, both own gels and
+      // "someone else's gel" reports (see lib/data/sets.ts) — a freshly
+      // created gel is, by definition, now the most recent, so it goes
+      // straight to the front rather than waiting for a refresh to re-fetch
+      // it. An edit doesn't change a gel's original createdAt, so it
+      // wouldn't actually move on a real re-fetch — skipped here too.
+      if (isCreate) {
+        setRecentPulls((prev) => [
+          {
+            ...gel,
+            loggedByName:   session?.user?.name ?? session?.user?.handle ?? "You",
+            loggedByHandle: session?.user?.handle ?? null,
+          },
+          ...prev,
+        ].slice(0, RECENT_PULLS_LIMIT));
+      }
+
+      // "Log a Gel"'s remembered City/Country defaults — only "my own gel"
+      // submissions count, and only when a value was actually provided
+      // (mirrors rememberGelLocationDefaults' server-side rule so a blank
+      // field here never erases a previously remembered default).
+      if (!isSurfaced) {
+        if (gel.hitCity)    setLastGelCity(gel.hitCity);
+        if (gel.hitCountry) setLastGelCountry(gel.hitCountry);
+      }
     },
-    []
+    [editingGel, session]
   );
 
   // ── Delete a gel ─────────────────────────────────────────────────────────────
@@ -303,9 +357,12 @@ export default function SetDetailClient({
         onSuccess={handleGelSuccess}
         setId={setId}
         category={category}
+        setYear={year}
         products={products}
         preselectedCardOption={preselectedCardOption}
         editingGel={editingGel}
+        defaultHitCity={lastGelCity}
+        defaultHitCountry={lastGelCountry}
       />
 
       {/* ── 5. Packs Opened: breakdown + log-your-openings modals ──────── */}

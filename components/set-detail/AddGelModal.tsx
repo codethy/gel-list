@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { GelEntry } from "./YourGels";
 import { playerSubtitle } from "./ChecklistTable";
 import { useUploadThing } from "@/lib/uploadthing";
+import { COUNTRIES } from "@/lib/countries";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,9 @@ interface AddGelModalProps {
   // "Search for a card" placeholder (vs. "Search for a player") and hiding
   // the Serial Number field (TCG cards aren't reliably serial-numbered).
   category: string;
+  // This set's release year — the floor of the "Year Pulled" dropdown's
+  // range (through the current year).
+  setYear: number;
   products: ProductOption[];
   // The full option — not just an id — since the modal no longer holds
   // every checklist card in memory to look one up by id (see
@@ -50,6 +54,11 @@ interface AddGelModalProps {
   // reassign a logged gel to a different card), and submitting PATCHes
   // instead of POSTing.
   editingGel?: GelEntry | null;
+  // This user's own most recently submitted City/Country (SELF flow only)
+  // — see lib/data/userGelDefaults.ts. Pre-fills a fresh "My Own Gel" log,
+  // never "Someone Else's Gel".
+  defaultHitCity?:    string | null;
+  defaultHitCountry?: string | null;
 }
 
 // ─── LOGGED FOR ───────────────────────────────────────────────────────────────
@@ -502,6 +511,94 @@ function ChecklistCardSearch({
   );
 }
 
+// ─── COUNTRY SELECT ───────────────────────────────────────────────────────────
+// A searchable dropdown over the static COUNTRIES list (see lib/countries.ts)
+// — same search-then-pick interaction as ChecklistCardSearch above, but over
+// an in-memory list rather than a server fetch. Typing clears any previously
+// picked value (via onChange("")) until a list item is actually clicked, so
+// a submission can never carry a stale country the user typed over but never
+// re-selected.
+function CountrySelect({
+  value,
+  onChange,
+  placeholder = "Search for a country...",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Keeps the visible text in sync when `value` changes externally (e.g.
+  // the modal pre-filling a remembered default, or switching between
+  // editing/creating a gel).
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        // Revert any unselected typed text back to the real value.
+        setQuery(value);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [value]);
+
+  const trimmed = query.trim().toLowerCase();
+  const filtered = trimmed
+    ? COUNTRIES.filter((c) => c.toLowerCase().includes(trimmed))
+    : COUNTRIES;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          onChange("");
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150"
+      />
+      <AnimatePresence>
+        {isOpen && filtered.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full left-0 right-0 mt-1 z-50 rounded-xl bg-slate-900 border border-slate-700/60 shadow-xl shadow-black/40 overflow-hidden max-h-52 overflow-y-auto"
+          >
+            {filtered.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  onChange(c);
+                  setQuery(c);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm text-slate-200 font-medium hover:bg-slate-800/80 transition-colors duration-100 border-b border-slate-800/60 last:border-0"
+              >
+                {c}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function AddGelModal({
@@ -510,9 +607,12 @@ export default function AddGelModal({
   onSuccess,
   setId,
   category,
+  setYear,
   products,
   preselectedCardOption,
   editingGel,
+  defaultHitCity,
+  defaultHitCountry,
 }: AddGelModalProps) {
   const [form, setForm]           = useState<FormState>(EMPTY_FORM);
   const [selectedCardOption, setSelectedCardOption] = useState<ChecklistCardOption | null>(null);
@@ -528,6 +628,13 @@ export default function AddGelModal({
 
   const isEditing = Boolean(editingGel);
   const isOther   = loggedFor === "OTHER";
+
+  // "Year Pulled" options — from the set's release year through the
+  // current year, newest first (a card is almost always pulled the year
+  // it released or more recently).
+  const currentYear = new Date().getFullYear();
+  const yearOptions: number[] = [];
+  for (let y = currentYear; y >= setYear; y--) yearOptions.push(y);
 
   // ── Pre-fill when opened — from an existing gel (edit) or a checklist
   // row (create, with the card pre-picked) ──────────────────────────────────
@@ -746,7 +853,15 @@ export default function AddGelModal({
                     type="button"
                     onClick={() => {
                       setLoggedFor("SELF");
-                      setForm((prev) => ({ ...prev, acquisitionMethod: "", seller: "" }));
+                      // Only "My Own Gel" pre-fills City/Country from this
+                      // user's own remembered last submission.
+                      setForm((prev) => ({
+                        ...prev,
+                        acquisitionMethod: "",
+                        seller: "",
+                        hitCity:    defaultHitCity    ?? "",
+                        hitCountry: defaultHitCountry ?? "",
+                      }));
                       setStep("form");
                     }}
                     className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-blue-500/60 hover:bg-slate-800 text-left transition-all duration-150"
@@ -767,7 +882,16 @@ export default function AddGelModal({
                     type="button"
                     onClick={() => {
                       setLoggedFor("OTHER");
-                      setForm((prev) => ({ ...prev, acquisitionMethod: "", seller: "" }));
+                      // Someone else's gel never gets the SELF-only City/
+                      // Country defaults — clear them in case "My Own Gel"
+                      // was clicked first (prefilling them) before Back.
+                      setForm((prev) => ({
+                        ...prev,
+                        acquisitionMethod: "",
+                        seller: "",
+                        hitCity: "",
+                        hitCountry: "",
+                      }));
                       setStep("form");
                     }}
                     className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-orange-500/60 hover:bg-slate-800 text-left transition-all duration-150"
@@ -951,13 +1075,12 @@ export default function AddGelModal({
                 </div>
                 <div>
                   <Label>Year Pulled</Label>
-                  <Input
-                    type="number"
-                    value={form.hitYear}
-                    onChange={setField("hitYear")}
-                    min="1980"
-                    max={new Date().getFullYear()}
-                  />
+                  <Select value={form.hitYear} onChange={setField("hitYear")}>
+                    <option value="" className="bg-slate-900">Year...</option>
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y} className="bg-slate-900">{y}</option>
+                    ))}
+                  </Select>
                 </div>
               </div>
 
@@ -972,9 +1095,9 @@ export default function AddGelModal({
                 </div>
                 <div>
                   <Label>Country</Label>
-                  <Input
+                  <CountrySelect
                     value={form.hitCountry}
-                    onChange={setField("hitCountry")}
+                    onChange={(v) => setForm((prev) => ({ ...prev, hitCountry: v }))}
                   />
                 </div>
               </div>

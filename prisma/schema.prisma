@@ -81,6 +81,14 @@ model User {
   // review queue — see app/api/sets/[id]/gels/route.ts.
   isVerifiedUser Boolean @default(false)
 
+  // Remembered from this user's own most recent "Log a Gel" submission
+  // (loggedFor "SELF" only) — pre-fills the City/Country fields the next
+  // time they log a gel, since these rarely change between submissions.
+  // Only updated when a submission actually provides a non-empty value —
+  // see lib/data/userGelDefaults.ts.
+  lastGelCity    String?
+  lastGelCountry String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
 
 // ─── POST /api/sets/[id]/gels ─────────────────────────────────────────────────
 // Creates a new PortfolioCard (gel) for the current user.
@@ -220,6 +221,12 @@ export async function POST(
       },
     },
   });
+
+  // Only "my own gel" submissions update the remembered City/Country
+  // defaults — a "someone else's gel" report isn't this user's own location.
+  if (isInHand) {
+    await rememberGelLocationDefaults(userId, hitCity, hitCountry);
+  }
 
   // ── 6. Shape the response to match the GelEntry type ─────────────────────────
   // Field names here (cardTemplateId, cardTemplate.cardType/parallelType) are

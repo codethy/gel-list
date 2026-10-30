@@ -5,6 +5,7 @@ import type { CardHistoryEvent, LoggedGel } from "@/components/set-detail/Checkl
 import { getChecklistRowExtras } from "@/lib/data/checklistRowExtras";
 import { getProductLabel } from "@/lib/productTypes";
 import { getPacksOpenedSummary, type SetPacksOpenedSummary } from "@/lib/data/productOpenings";
+import { getUserGelDefaults } from "@/lib/data/userGelDefaults";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -131,6 +132,12 @@ export interface SetDetailData {
   // "X Packs/Boxes Opened" box + its breakdown/log modals — see
   // lib/data/productOpenings.ts.
   packsOpened: SetPacksOpenedSummary;
+
+  // Pre-fills the "Log a Gel" form's City/Country fields (SELF flow only)
+  // from this user's own most recent submission — see
+  // lib/data/userGelDefaults.ts. Both null when signed out or never set.
+  userLastGelCity:    string | null;
+  userLastGelCountry: string | null;
 }
 
 // ─── MAIN FETCH FUNCTION ──────────────────────────────────────────────────────
@@ -552,6 +559,11 @@ export async function getSetDetail(
   // ── 5e. "X Packs/Boxes Opened" summary ──────────────────────────────────
   const packsOpened = await getPacksOpenedSummary(setId, userId);
 
+  // ── 5f. Remembered City/Country defaults for "Log a Gel" ────────────────
+  const userGelDefaults = userId
+    ? await getUserGelDefaults(userId)
+    : { lastGelCity: null, lastGelCountry: null };
+
   // ── 6. Return full payload ──────────────────────────────────────────────
   return {
     setId:                cardSet.id,
@@ -584,5 +596,7 @@ export async function getSetDetail(
       label:            getProductLabel(String(p.productType), p.productTypeOther),
     })),
     packsOpened,
+    userLastGelCity:    userGelDefaults.lastGelCity,
+    userLastGelCountry: userGelDefaults.lastGelCountry,
   };
 }
