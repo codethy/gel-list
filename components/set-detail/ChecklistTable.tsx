@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useTransition, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChecklistCardOption } from "./AddGelModal";
 
@@ -246,12 +247,18 @@ export function VerificationBadge({ isVerified }: { isVerified: boolean }) {
 // ─── HEART BUTTON ─────────────────────────────────────────────────────────────
 
 function HeartButton({
-  liked, count, onToggle, isLoading,
+  liked, count, onToggle, isLoading, className = "",
 }: {
   liked: boolean;
   count: number;
   onToggle: (e: React.MouseEvent) => void;
   isLoading: boolean;
+  // Extra classes merged onto the button itself — lets a mobile-only call
+  // site add invisible tap-padding (e.g. "p-2 -m-2") to grow the real hit
+  // box without touching the icon's own visible size, since a wrapping
+  // <div> can't enlarge a <button>'s hit area the way padding on the
+  // button itself can.
+  className?: string;
 }) {
   return (
     <button
@@ -259,7 +266,7 @@ function HeartButton({
       onClick={onToggle}
       disabled={isLoading}
       aria-label={liked ? "Unlike this card" : "Like this card"}
-      className="flex items-center gap-1 group/heart disabled:opacity-50 disabled:cursor-not-allowed"
+      className={`flex items-center gap-1 group/heart disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       <motion.div animate={{ scale: liked ? [1, 1.3, 1] : 1 }} transition={{ duration: 0.25 }}>
         {liked ? (
@@ -460,9 +467,11 @@ function LoggedGelsModal({
                                 title="View image"
                                 className="cursor-zoom-in"
                               >
-                                <img
+                                <Image
                                   src={gel.cardFrontImageUrl ?? gel.cardBackImageUrl!}
                                   alt=""
+                                  width={32}
+                                  height={44}
                                   className="w-8 h-11 object-cover rounded-sm border border-slate-700/50 shadow-sm hover:opacity-80 hover:border-slate-500 transition-all duration-150"
                                 />
                               </button>
@@ -635,13 +644,20 @@ export function CardImageModal({
                 {target.imageUrl && (
                   <div>
                     <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Front</p>
-                    <img src={target.imageUrl} alt={`${target.title} card front`} className="w-full rounded-lg border border-slate-700/50" />
+                    {/* aspect-[5/7] — same standard trading-card proportions
+                        convention as GelCard in YourGels.tsx, since a user
+                        photo's real dimensions aren't known ahead of time. */}
+                    <div className="relative aspect-[5/7] rounded-lg border border-slate-700/50 overflow-hidden bg-slate-950">
+                      <Image src={target.imageUrl} alt={`${target.title} card front`} fill sizes="(max-width: 640px) 90vw, 400px" className="object-contain" />
+                    </div>
                   </div>
                 )}
                 {target.cardBackImageUrl && (
                   <div>
                     <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Back</p>
-                    <img src={target.cardBackImageUrl} alt={`${target.title} card back`} className="w-full rounded-lg border border-slate-700/50" />
+                    <div className="relative aspect-[5/7] rounded-lg border border-slate-700/50 overflow-hidden bg-slate-950">
+                      <Image src={target.cardBackImageUrl} alt={`${target.title} card back`} fill sizes="(max-width: 640px) 90vw, 400px" className="object-contain" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -700,7 +716,7 @@ function FilterSelect({ value, onChange, options, placeholder }: {
 function Pagination({ meta, onPageChange }: { meta: ChecklistMeta; onPageChange: (page: number) => void }) {
   if (meta.totalPages <= 1) return null;
   return (
-    <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t border-slate-700/50">
       <p className="text-xs text-slate-500 tabular-nums">
         Showing{" "}
         <span className="text-slate-300 font-medium">
@@ -782,55 +798,114 @@ function VariantSubRow({
   const hasGels    = row.gelsPulled > 0;
 
   return (
-    <div
-      onClick={hasGels ? () => onOpenHistory(row) : undefined}
-      className={`
-        flex items-center gap-3 pl-[66px] pr-4 py-2
-        border-t border-slate-800/60
-        transition-colors duration-150 select-none
-        ${hasGels ? "cursor-pointer" : "cursor-default"}
-        ${isOwned    ? "bg-emerald-950/20 hover:bg-emerald-950/40" : ""}
-        ${isSurfaced ? "bg-amber-950/10 hover:bg-amber-950/20"     : ""}
-      `}
-    >
-      <HeartButton liked={liked} count={likeCount} onToggle={handleLikeToggle} isLoading={likeLoading} />
+    <>
+      {/* Desktop — unchanged from before this file's mobile pass */}
+      <div
+        onClick={hasGels ? () => onOpenHistory(row) : undefined}
+        className={`
+          hidden md:flex items-center gap-3 pl-[66px] pr-4 py-2
+          border-t border-slate-800/60
+          transition-colors duration-150 select-none
+          ${hasGels ? "cursor-pointer" : "cursor-default"}
+          ${isOwned    ? "bg-emerald-950/20 hover:bg-emerald-950/40" : ""}
+          ${isSurfaced ? "bg-amber-950/10 hover:bg-amber-950/20"     : ""}
+        `}
+      >
+        <HeartButton liked={liked} count={likeCount} onToggle={handleLikeToggle} isLoading={likeLoading} />
 
-      {row.imageUrl ? (
+        {row.imageUrl ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onOpenImage(row); }}
+            aria-label={`View card image for ${subtitle ?? row.playerName}`}
+            title="View image"
+            className="cursor-zoom-in shrink-0"
+          >
+            <Image src={row.imageUrl} alt={row.playerName} width={24} height={32} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
+          </button>
+        ) : (
+          <div className="w-6 h-8 shrink-0" />
+        )}
+
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-slate-300 truncate">{subtitle ?? "—"}</p>
+        </div>
+
+        <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
+
+        <div className="flex items-center gap-1.5 w-16 justify-start">
+          <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+        </div>
+
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onOpenImage(row); }}
-          aria-label={`View card image for ${subtitle ?? row.playerName}`}
-          title="View image"
-          className="cursor-zoom-in shrink-0"
+          onClick={handleAddGelClick}
+          aria-label={`Add a gel for ${subtitle ?? row.playerName}`}
+          title="Log a Gel"
+          className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/50 hover:text-blue-300 active:scale-95 transition-all duration-150 shrink-0"
         >
-          <img src={row.imageUrl} alt={row.playerName} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
         </button>
-      ) : (
-        <div className="w-6 h-8 shrink-0" />
-      )}
-
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-slate-300 truncate">{subtitle ?? "—"}</p>
       </div>
 
-      <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
-
-      <div className="flex items-center gap-1.5 w-16 justify-start">
-        <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
-      </div>
-
-      <button
-        type="button"
-        onClick={handleAddGelClick}
-        aria-label={`Add a gel for ${subtitle ?? row.playerName}`}
-        title="Log a Gel"
-        className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/50 hover:text-blue-300 active:scale-95 transition-all duration-150 shrink-0"
+      {/* Mobile — condensed sub-card, border-left accent instead of the
+          desktop pl-[66px] trick to read as nested under its parent card */}
+      <div
+        onClick={hasGels ? () => onOpenHistory(row) : undefined}
+        className={`
+          md:hidden flex items-center gap-2.5 ml-4 pl-3 pr-2 py-2 mt-1.5
+          border-l-2 border-slate-700/50 rounded-r-lg
+          transition-colors duration-150 select-none
+          ${hasGels ? "cursor-pointer" : "cursor-default"}
+          ${isOwned    ? "bg-emerald-950/20" : ""}
+          ${isSurfaced ? "bg-amber-950/10"   : ""}
+        `}
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
-    </div>
+        <HeartButton
+          liked={liked}
+          count={likeCount}
+          onToggle={handleLikeToggle}
+          isLoading={likeLoading}
+          className="p-1.5 -m-1.5"
+        />
+
+        {row.imageUrl ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onOpenImage(row); }}
+            aria-label={`View card image for ${subtitle ?? row.playerName}`}
+            title="View image"
+            className="cursor-zoom-in shrink-0"
+          >
+            <Image src={row.imageUrl} alt={row.playerName} width={24} height={32} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
+          </button>
+        ) : (
+          <div className="w-6 h-8 shrink-0" />
+        )}
+
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-slate-300 truncate">{subtitle ?? "—"}</p>
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+            <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
+            <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAddGelClick}
+          aria-label={`Add a gel for ${subtitle ?? row.playerName}`}
+          title="Log a Gel"
+          className="flex items-center justify-center w-10 h-10 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 active:scale-95 transition-all duration-150 shrink-0"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -883,7 +958,7 @@ function VariantsDrawer({
       className="overflow-hidden"
     >
       {isLoading && !variants ? (
-        <div className="py-3 pl-[66px] text-xs text-slate-500">Loading variants...</div>
+        <div className="py-3 pl-3 md:pl-[66px] text-xs text-slate-500">Loading variants...</div>
       ) : (
         (variants ?? []).map((v) => (
           <VariantSubRow
@@ -1006,7 +1081,7 @@ function ChecklistRowItem({
         // through whichever variant sub-row it really belongs to.
         onClick={hasVariants ? () => setVariantsExpanded((prev) => !prev) : hasGels ? () => onOpenHistory(row) : undefined}
         className={`
-          grid items-center gap-x-2 px-4 py-3
+          hidden md:grid items-center gap-x-2 px-4 py-3
           ${gridColsClass(showTeam)}
           transition-colors duration-150 select-none
           ${hasGels || hasVariants ? "cursor-pointer" : "cursor-default"}
@@ -1033,9 +1108,11 @@ function ChecklistRowItem({
               title="View image"
               className="cursor-zoom-in"
             >
-              <img
+              <Image
                 src={row.imageUrl}
                 alt={row.playerName}
+                width={28}
+                height={36}
                 className="w-7 h-9 object-cover rounded-sm border border-slate-700/50 shadow-sm hover:opacity-80 hover:border-slate-500 transition-all duration-150"
               />
             </button>
@@ -1140,6 +1217,107 @@ function ChecklistRowItem({
           <p className="text-[10px] text-slate-500 italic truncate" title={row.notes ?? ""}>
             {row.notes ? row.notes : "—"}
           </p>
+        </div>
+      </div>
+
+      {/* Mobile card — Team/Notes are no longer hidden here since vertical
+          space is cheap; the actual mobile constraint was horizontal width,
+          not information density. Same tap-to-expand/open-history logic as
+          the desktop grid row above, just laid out as a stacked card. */}
+      <div
+        onClick={hasVariants ? () => setVariantsExpanded((prev) => !prev) : hasGels ? () => onOpenHistory(row) : undefined}
+        className={`
+          md:hidden rounded-xl border border-slate-700/50 px-3 py-3
+          transition-colors duration-150 select-none
+          ${hasGels || hasVariants ? "cursor-pointer active:bg-slate-800/60" : "cursor-default"}
+          ${isOwned    ? "bg-emerald-950/20" : ""}
+          ${isSurfaced ? "bg-amber-950/10"   : ""}
+        `}
+      >
+        <div className="flex items-start gap-3">
+          {row.imageUrl ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenImage(row); }}
+              aria-label={`View card image for ${row.playerName}`}
+              title="View image"
+              className="cursor-zoom-in shrink-0"
+            >
+              <Image src={row.imageUrl} alt={row.playerName} width={40} height={52} className="w-10 h-[52px] object-cover rounded-sm border border-slate-700/50 shadow-sm" />
+            </button>
+          ) : (
+            <div className="w-10 h-[52px] shrink-0 rounded-sm border border-slate-700/40 bg-slate-800/60 flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-slate-400 tabular-nums font-mono">{row.cardNumber ?? "—"}</p>
+                <p className="text-sm font-semibold text-slate-200 truncate leading-tight">{row.playerName}</p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <HeartButton liked={liked} count={likeCount} onToggle={handleLikeToggle} isLoading={likeLoading} className="p-2 -m-2" />
+                <button
+                  type="button"
+                  onClick={handleAddGelClick}
+                  aria-label={`Add a gel for ${row.playerName}`}
+                  title="Log a Gel"
+                  className="flex items-center justify-center w-10 h-10 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 active:scale-95 transition-all duration-150 shrink-0"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {(hasVariants ? row.variationName : subtitle) || (showTeam && row.team) ? (
+              <p className="text-[11px] text-slate-500 italic truncate mt-0.5">
+                {[hasVariants ? row.variationName : subtitle, showTeam ? row.team : null].filter(Boolean).join(" · ")}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+              <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
+              <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+              {hasVariants ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setVariantsExpanded((prev) => !prev); }}
+                  aria-label={variantsExpanded ? "Hide variants" : "Show variants"}
+                  aria-expanded={variantsExpanded}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-700/50 border border-slate-600/50 text-[11px] font-semibold text-slate-300 active:bg-slate-700 transition-colors duration-150"
+                >
+                  {variantCount} variants
+                  <motion.span animate={{ rotate: variantsExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </motion.span>
+                </button>
+              ) : hasGels ? (
+                // No hover state on touch — a static chevron is the only
+                // cue this card opens its logged-gels history when tapped.
+                <span className="text-slate-500" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+              ) : null}
+            </div>
+
+            {row.notes && (
+              <p className="text-[10px] text-slate-500 italic truncate mt-1.5" title={row.notes}>
+                {row.notes}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1262,8 +1440,11 @@ export default function ChecklistTable({
         )}
       </div>
 
-      {/* Table — overflow-x-auto allows horizontal scroll on narrow screens */}
-      <div className="relative rounded-xl border border-slate-700/50 overflow-hidden">
+      {/* Table — overflow-x-auto allows horizontal scroll on narrow screens
+          (desktop only now; below md this renders as a bare stack of
+          individually-bordered cards instead, matching GelCard's gallery
+          convention, so there's no enclosing box to draw here). */}
+      <div className="relative md:rounded-xl md:border md:border-slate-700/50 overflow-hidden">
         <AnimatePresence>
           {isLoading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-10 flex items-center justify-center">
@@ -1279,9 +1460,9 @@ export default function ChecklistTable({
             min-w-[1000px] ensures it doesn't collapse on wider screens, forcing scroll on narrow ones.
           */}
           <div className={`
-            grid items-center gap-x-2 px-4 py-2.5
+            hidden md:grid items-center gap-x-2 px-4 py-2.5
             bg-slate-800/80 border-b border-slate-700/50
-            min-w-[1000px]
+            md:min-w-[1000px]
             ${gridColsClass(showTeam)}
           `}>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Likes</div> {/* Changed from "Like" to "Likes" */}
@@ -1298,8 +1479,9 @@ export default function ChecklistTable({
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:block pl-3">Notes</div> {/* Reintroduced Notes heading */}
           </div>
 
-          {/* Rows */}
-          <div className="divide-y divide-slate-700/30 min-w-[1000px]"> {/* min-w also on rows container — must match the header's min-w */}
+          {/* Rows — mobile: gap-separated individually-bordered cards, no
+              divider line; desktop (md:): unchanged divide-y table rows. */}
+          <div className="space-y-2 md:space-y-0 md:divide-y md:divide-slate-700/30 md:min-w-[1000px]">
             {rows.length === 0 ? (
               <div className="py-12 text-center text-slate-500 text-sm">No cards match your filters.</div>
             ) : (

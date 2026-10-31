@@ -10,6 +10,7 @@ import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { ProductType } from "@prisma/client";
 import { PRODUCT_TYPE_OPTIONS, getProductLabel } from "@/lib/productTypes";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 const VALID_VALUES = new Set(PRODUCT_TYPE_OPTIONS.map((o) => o.value));
 
@@ -84,6 +85,8 @@ export async function POST(
     packKinds:        [] as { id: string; packsCount: number; cardsPerPack: number }[],
     packsPerUnit:     0,
   };
+
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({ product });
 }

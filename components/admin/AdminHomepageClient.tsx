@@ -9,6 +9,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { TAXONOMY } from "@/lib/taxonomy";
 
 interface FeaturedSet {
@@ -29,8 +30,7 @@ function Thumb({ set }: { set: { imageUrl: string | null; name: string } }) {
   return (
     <div className="w-10 h-10 rounded-md bg-slate-900/60 border border-slate-700/50 overflow-hidden shrink-0 flex items-center justify-center">
       {set.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={set.imageUrl} alt="" className="w-full h-full object-contain" />
+        <Image src={set.imageUrl} alt="" width={40} height={40} className="w-full h-full object-contain" />
       ) : (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-600">
           <rect x="3" y="3" width="18" height="18" rx="2" />

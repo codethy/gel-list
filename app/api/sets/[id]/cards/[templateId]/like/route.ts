@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 // ─── POST /api/sets/[id]/cards/[templateId]/like ──────────────────────────────
 // Toggles a like on a checklist card for the current user.
@@ -72,6 +73,9 @@ export async function POST(
   const likeCount = await prisma.checklistCardLike.count({
     where: { checklistCardId: templateId },
   });
+
+  // likeCount is part of the cached global checklist-row payload.
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({
     liked: !existing,

@@ -9,6 +9,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { playerSubtitle } from "@/components/set-detail/ChecklistTable";
 import type { UserGelEntry } from "@/lib/data/profile";
 import type { FavoriteGelEntry } from "@/lib/data/profile";
@@ -65,7 +66,7 @@ function Thumb({ gel }: { gel: UserGelEntry | FavoriteGelEntry }) {
   return (
     <div className="w-10 h-10 rounded-md bg-slate-900/60 border border-slate-700/50 overflow-hidden shrink-0 flex items-center justify-center">
       {gel.cardFrontImageUrl ? (
-        <img src={gel.cardFrontImageUrl} alt="" className="w-full h-full object-cover" />
+        <Image src={gel.cardFrontImageUrl} alt="" width={40} height={40} className="w-full h-full object-cover" />
       ) : (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-600">
           <rect x="3" y="3" width="18" height="18" rx="2" />

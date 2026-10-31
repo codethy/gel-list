@@ -680,3 +680,19 @@ model ChecklistCard {
   @@unique([cardSetId, cardNumber, parallel])
   @@index([cardSetId, sortOrder])
 }
+
+// ─── RATE LIMITING ──────────────────────────────────────────────────────────
+// Fixed-window request counter for proxy.ts's basic abuse protection on
+// mutation routes (gel creation, likes, admin actions, etc). One row per
+// key (currently just a client IP); `count` resets whenever a request
+// lands outside the current window instead of needing a cron job to prune
+// old windows. The table itself can still grow by one row per distinct IP
+// ever seen — proxy.ts opportunistically deletes rows well outside the
+// window on a small fraction of requests to keep this bounded.
+model RateLimitCounter {
+  key         String   @id
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@index([windowStart])
+}

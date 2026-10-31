@@ -3,6 +3,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -167,12 +168,15 @@ export default function SetHeader({
             {/* Always rendered so every set's banner has the same shape.
                 Curated only by the developer, directly in the database —
                 see prisma/set-image.ts — there is no in-app upload control. */}
-            <div className="shrink-0 w-40 h-40 md:w-52 md:h-52 rounded-lg overflow-hidden border border-slate-600/50 shadow-lg shadow-black/40 bg-slate-900/60">
+            <div className="relative shrink-0 w-40 h-40 md:w-52 md:h-52 rounded-lg overflow-hidden border border-slate-600/50 shadow-lg shadow-black/40 bg-slate-900/60">
               {setImageUrl ? (
-                <img
+                <Image
                   src={setImageUrl}
                   alt={`${setName} set image`}
-                  className="w-full h-full object-contain"
+                  fill
+                  sizes="(max-width: 768px) 160px, 208px"
+                  preload
+                  className="object-contain"
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-slate-700/60 text-slate-600">

@@ -2,6 +2,7 @@
 
 import { useSession, signOut, signIn } from "next-auth/react";
 import Link from "next/link";
+import Image from "next/image";
 import SetSearchBar from "./SetSearchBar";
 import { getInitials } from "@/lib/initials";
 
@@ -38,10 +39,11 @@ export default function Navbar() {
               className="flex items-center gap-2"
             >
               {session.user.profileImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={session.user.profileImage}
                   alt=""
+                  width={32}
+                  height={32}
                   className="w-8 h-8 rounded-full border border-zinc-700 object-cover shrink-0"
                 />
               ) : (

@@ -9,6 +9,7 @@ import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { Category } from "@prisma/client";
 import { resolveSubCategory, SUBCATEGORY_TO_CATEGORY } from "@/lib/taxonomy";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 function parseString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -66,6 +67,8 @@ export async function PATCH(
     data:  { name, brand, year, category, subCategory, description },
     select: { id: true, name: true, year: true, brand: true, category: true, subCategory: true, description: true },
   });
+
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({
     set: { ...set, category: String(set.category) },

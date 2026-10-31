@@ -12,6 +12,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useUploadThing } from "@/lib/uploadthing";
 import { isHeicFile, convertHeicToJpeg } from "@/components/set-detail/AddGelModal";
@@ -235,9 +236,11 @@ export default function ProfileAccountCard({
                 title="View image"
                 className="block cursor-zoom-in"
               >
-                <img
+                <Image
                   src={avatarSrc}
                   alt=""
+                  width={126}
+                  height={126}
                   className="w-[126px] h-[126px] rounded-full border border-slate-600/50 object-cover"
                 />
               </button>
@@ -402,11 +405,12 @@ export default function ProfileAccountCard({
           >
             Close ✕
           </button>
-          <img
-            src={avatarSrc}
-            alt=""
-            className="w-full rounded-2xl border border-slate-700/60 shadow-2xl shadow-black/60"
-          />
+          {/* aspect-square — Google profile pics and this app's own upload
+              flow are both square; the 126px thumbnail above assumes the
+              same. */}
+          <div className="relative aspect-square w-full rounded-2xl border border-slate-700/60 shadow-2xl shadow-black/60 overflow-hidden">
+            <Image src={avatarSrc} alt="" fill sizes="384px" className="object-cover" />
+          </div>
         </div>
       </div>
     )}

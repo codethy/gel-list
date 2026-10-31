@@ -22,6 +22,7 @@ import {
   adminChecklistCardSelect,
   syncTotalCardsInSet,
 } from "@/lib/data/adminChecklist";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 export async function GET(
   req: NextRequest,
@@ -99,6 +100,8 @@ export async function POST(
         select: adminChecklistCardSelect,
       });
     }
+
+    revalidateSetDetailCache(setId);
 
     return NextResponse.json({ card: shapeAdminChecklistCard(card) });
   } catch (e: any) {

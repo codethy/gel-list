@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface SetSearchResult {
@@ -142,9 +143,11 @@ export default function SetSearchBar() {
                   >
                     <div className="w-10 h-10 rounded-md bg-[#1a1a1a] border border-[#2a2a2a] overflow-hidden shrink-0 flex items-center justify-center">
                       {set.imageUrl ? (
-                        <img
+                        <Image
                           src={set.imageUrl}
                           alt=""
+                          width={40}
+                          height={40}
                           className="w-full h-full object-cover"
                         />
                       ) : (

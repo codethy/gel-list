@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { getPacksOpenedSummary, saveProductOpening } from "@/lib/data/productOpenings";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 export async function POST(
   req: NextRequest,
@@ -57,6 +58,11 @@ export async function POST(
 
     await saveProductOpening(user.id, setId, setProductId, Math.round(quantity), isBreak);
   }
+
+  // totalPacksOpened/totalCardsPulled/each product's totalQuantity are
+  // part of the cached global packsOpened half — every other viewer's
+  // next load needs this too, not just this request's own response.
+  revalidateSetDetailCache(setId);
 
   const summary = await getPacksOpenedSummary(setId, user.id);
   return NextResponse.json({ summary });

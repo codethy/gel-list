@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 // ─── POST /api/sets/[id]/gels ─────────────────────────────────────────────────
 // Creates a new PortfolioCard (gel) for the current user.
@@ -227,6 +228,11 @@ export async function POST(
   if (isInHand) {
     await rememberGelLocationDefaults(userId, hitCity, hitCountry);
   }
+
+  // A new gel changes this set's cached checklist-row status/gelsPulled/
+  // cardHistory and chasesPulledInSet — invalidate the shared cache so
+  // every other viewer's next load reflects it immediately.
+  revalidateSetDetailCache(setId);
 
   // ── 6. Shape the response to match the GelEntry type ─────────────────────────
   // Field names here (cardTemplateId, cardTemplate.cardType/parallelType) are

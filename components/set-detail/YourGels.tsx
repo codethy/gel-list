@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget } from "./ChecklistTable";
 import { getProductLabel } from "@/lib/productTypes";
@@ -189,10 +190,12 @@ export function GelCard({
             title="View image"
             className="absolute inset-0 w-full h-full cursor-zoom-in"
           >
-            <img
+            <Image
               src={gel.cardFrontImageUrl!}
               alt={`${gel.cardTemplate.playerName} card`}
-              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+              className="object-contain group-hover:scale-105 transition-transform duration-300"
             />
           </button>
         ) : (

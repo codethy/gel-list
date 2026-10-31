@@ -7,6 +7,7 @@
 // (the home page, the subcategory infinite-scroll grid).
 
 import Link from "next/link";
+import Image from "next/image";
 
 export interface SetItem {
   id:                 string;
@@ -43,13 +44,14 @@ export function SetCard({ set }: { set: SetItem }) {
       className="bg-[#111111] border border-[#222222] rounded-xl p-3 flex flex-col gap-3 hover:border-zinc-600 hover:bg-[#161616] transition-all duration-200 cursor-pointer group"
     >
       {/* Image */}
-      <div className="w-full aspect-square bg-[#1a1a1a] rounded-lg flex items-center justify-center border border-[#2a2a2a] group-hover:border-zinc-600 transition-colors overflow-hidden">
+      <div className="relative w-full aspect-square bg-[#1a1a1a] rounded-lg flex items-center justify-center border border-[#2a2a2a] group-hover:border-zinc-600 transition-colors overflow-hidden">
         {set.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={set.imageUrl}
             alt={set.name}
-            className="w-full h-full object-contain"
+            fill
+            sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 180px"
+            className="object-contain"
           />
         ) : (
           <svg

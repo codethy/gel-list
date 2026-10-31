@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 export async function PATCH(
   req: NextRequest,
@@ -69,6 +70,8 @@ export async function PATCH(
       packKinds: { orderBy: { sortOrder: "asc" }, select: { id: true, packsCount: true, cardsPerPack: true } },
     },
   });
+
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({
     product: {

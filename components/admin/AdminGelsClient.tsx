@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Image from "next/image";
 import { playerSubtitle } from "@/components/set-detail/ChecklistTable";
 import type { AdminSetGroup, AdminGelEntry } from "@/lib/data/adminGels";
 import AdminEditGelModal from "./AdminEditGelModal";
@@ -42,7 +43,7 @@ function GelRow({
     <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
       <div className="shrink-0">
         {image ? (
-          <img src={image} alt="" className="w-10 h-14 object-cover rounded-sm border border-slate-700/50" />
+          <Image src={image} alt="" width={40} height={56} className="w-10 h-14 object-cover rounded-sm border border-slate-700/50" />
         ) : (
           <div className="w-10 h-14 rounded-sm border border-slate-700/40 bg-slate-800/60" />
         )}

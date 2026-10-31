@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import type { GelEntry } from "./YourGels";
 import { playerSubtitle } from "./ChecklistTable";
@@ -328,9 +329,11 @@ export function ImageUploadField({
       {value ? (
         // ── Preview state ──────────────────────────────────────────────────
         <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50">
-          <img
+          <Image
             src={value}
             alt="Card preview"
+            width={48}
+            height={64}
             className="w-12 h-16 object-cover rounded-md border border-slate-700/50 shadow-sm shrink-0"
           />
           <div className="flex-1 min-w-0">

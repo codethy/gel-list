@@ -43,10 +43,21 @@ export interface SetPacksOpenedSummary {
   totalCardsPulled:    number;
 }
 
-export async function getPacksOpenedSummary(
-  setId: string,
-  userId: string | null
-): Promise<SetPacksOpenedSummary> {
+// Everything in this result is identical for every viewer of the set — no
+// userId involved anywhere — which is what makes it safe for
+// lib/data/sets.ts to wrap in unstable_cache. Each product row's
+// own-viewer fields (ownQuantity/ownIsBreak) are deliberately absent here;
+// see getUserPacksOpenedOwn below for those.
+export type GlobalProductBreakdownRow = Omit<ProductBreakdownRow, "ownQuantity" | "ownIsBreak">;
+
+export interface GlobalPacksOpenedSummary {
+  totalPacksOpened: number;
+  label:            "Packs Opened" | "Boxes Opened";
+  products:         GlobalProductBreakdownRow[];
+  totalCardsPulled: number;
+}
+
+export async function getPacksOpenedGlobal(setId: string): Promise<GlobalPacksOpenedSummary> {
   const products = await prisma.setProduct.findMany({
     where:   { cardSetId: setId },
     orderBy: { createdAt: "asc" },
@@ -59,27 +70,18 @@ export async function getPacksOpenedSummary(
   });
 
   if (products.length === 0) {
-    return { totalPacksOpened: 0, label: "Packs Opened", products: [], ownTotalPacksOpened: 0, totalCardsPulled: 0 };
+    return { totalPacksOpened: 0, label: "Packs Opened", products: [], totalCardsPulled: 0 };
   }
 
   const productIds = products.map((p) => p.id);
 
-  const [totals, own] = await Promise.all([
-    prisma.productOpening.groupBy({
-      by:     ["setProductId"],
-      where:  { setProductId: { in: productIds } },
-      _sum:   { quantity: true },
-    }),
-    userId
-      ? prisma.productOpening.findMany({
-          where:  { userId, setProductId: { in: productIds } },
-          select: { setProductId: true, quantity: true, isBreak: true },
-        })
-      : Promise.resolve([]),
-  ]);
+  const totals = await prisma.productOpening.groupBy({
+    by:    ["setProductId"],
+    where: { setProductId: { in: productIds } },
+    _sum:  { quantity: true },
+  });
 
   const totalByProduct = new Map(totals.map((t) => [t.setProductId, t._sum.quantity ?? 0]));
-  const ownByProduct   = new Map(own.map((o) => [o.setProductId, o]));
 
   // A product's pack kinds can mix pack sizes (e.g. a box with both a
   // 4-card-per-pack kind and a 6-card-per-pack kind) — cardsPerUnit sums
@@ -92,12 +94,11 @@ export async function getPacksOpenedSummary(
     ])
   );
 
-  const productRows: ProductBreakdownRow[] = products.map((p) => {
+  const productRows: GlobalProductBreakdownRow[] = products.map((p) => {
     const packsPerUnit = p.packKinds.length > 0
       ? p.packKinds.reduce((sum, k) => sum + k.packsCount, 0)
       : 1;
     const label = getProductLabel(String(p.productType), p.productTypeOther);
-    const ownEntry = ownByProduct.get(p.id);
 
     return {
       setProductId:  p.id,
@@ -105,14 +106,11 @@ export async function getPacksOpenedSummary(
       pluralLabel:   pluralizeProductLabel(label),
       packsPerUnit,
       totalQuantity: totalByProduct.get(p.id) ?? 0,
-      ownQuantity:   ownEntry?.quantity ?? 0,
-      ownIsBreak:    ownEntry?.isBreak ?? false,
     };
   });
 
-  const totalPacksOpened    = productRows.reduce((sum, p) => sum + p.totalQuantity * p.packsPerUnit, 0);
-  const ownTotalPacksOpened = productRows.reduce((sum, p) => sum + p.ownQuantity * p.packsPerUnit, 0);
-  const totalCardsPulled    = productRows.reduce(
+  const totalPacksOpened = productRows.reduce((sum, p) => sum + p.totalQuantity * p.packsPerUnit, 0);
+  const totalCardsPulled = productRows.reduce(
     (sum, p) => sum + p.totalQuantity * (cardsPerUnitByProductId.get(p.setProductId) ?? 0),
     0
   );
@@ -123,8 +121,76 @@ export async function getPacksOpenedSummary(
     totalPacksOpened,
     label: isSingleBoxSet ? "Boxes Opened" : "Packs Opened",
     products: productRows,
-    ownTotalPacksOpened,
     totalCardsPulled,
+  };
+}
+
+export interface UserPacksOpenedOwn {
+  ownByProductId:      Map<string, { ownQuantity: number; ownIsBreak: boolean }>;
+  ownTotalPacksOpened: number;
+}
+
+// The small per-viewer slice of the breakdown — deliberately independent
+// of getPacksOpenedGlobal (re-fetches the tiny product/pack-kind catalog
+// itself rather than requiring it be threaded in) so the two stay
+// separately callable: the global half is cacheable, this half never is.
+export async function getUserPacksOpenedOwn(
+  setId: string,
+  userId: string | null
+): Promise<UserPacksOpenedOwn> {
+  if (!userId) return { ownByProductId: new Map(), ownTotalPacksOpened: 0 };
+
+  const products = await prisma.setProduct.findMany({
+    where:  { cardSetId: setId },
+    select: { id: true, packKinds: { select: { packsCount: true } } },
+  });
+  if (products.length === 0) return { ownByProductId: new Map(), ownTotalPacksOpened: 0 };
+
+  const packsPerUnitByProductId = new Map(
+    products.map((p) => [
+      p.id,
+      p.packKinds.length > 0 ? p.packKinds.reduce((sum, k) => sum + k.packsCount, 0) : 1,
+    ])
+  );
+
+  const own = await prisma.productOpening.findMany({
+    where:  { userId, setProductId: { in: products.map((p) => p.id) } },
+    select: { setProductId: true, quantity: true, isBreak: true },
+  });
+
+  const ownByProductId = new Map(
+    own.map((o) => [o.setProductId, { ownQuantity: o.quantity, ownIsBreak: o.isBreak }])
+  );
+  const ownTotalPacksOpened = own.reduce(
+    (sum, o) => sum + o.quantity * (packsPerUnitByProductId.get(o.setProductId) ?? 1),
+    0
+  );
+
+  return { ownByProductId, ownTotalPacksOpened };
+}
+
+// Thin wrapper composing the two halves above into the full shape every
+// existing caller (the "Log it here" openings route) already expects — no
+// changes needed at those call sites.
+export async function getPacksOpenedSummary(
+  setId: string,
+  userId: string | null
+): Promise<SetPacksOpenedSummary> {
+  const [global, own] = await Promise.all([
+    getPacksOpenedGlobal(setId),
+    getUserPacksOpenedOwn(setId, userId),
+  ]);
+
+  return {
+    totalPacksOpened: global.totalPacksOpened,
+    label:            global.label,
+    totalCardsPulled: global.totalCardsPulled,
+    ownTotalPacksOpened: own.ownTotalPacksOpened,
+    products: global.products.map((p) => ({
+      ...p,
+      ownQuantity: own.ownByProductId.get(p.setProductId)?.ownQuantity ?? 0,
+      ownIsBreak:  own.ownByProductId.get(p.setProductId)?.ownIsBreak  ?? false,
+    })),
   };
 }
 

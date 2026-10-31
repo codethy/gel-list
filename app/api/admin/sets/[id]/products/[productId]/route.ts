@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 export async function DELETE(
   _req: NextRequest,
@@ -29,6 +30,7 @@ export async function DELETE(
   }
 
   await prisma.setProduct.delete({ where: { id: productId } });
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({ success: true });
 }

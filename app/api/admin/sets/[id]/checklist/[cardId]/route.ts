@@ -1,9 +1,9 @@
 // app/api/admin/sets/[id]/checklist/[cardId]/route.ts
 //
 // PATCH  — edits any field on one ChecklistCard row (fixing a wrong parallel,
-//          a typo, etc.). Safe in every case: every stat the set page shows
-//          (print-run totals, checklist rows) is computed live from
-//          ChecklistCard, nothing caches a copy of these fields elsewhere.
+//          a typo, etc.). The public set-detail page caches a copy of these
+//          fields (see lib/data/sets.ts), so this route calls
+//          revalidateSetDetailCache after writing to keep that in sync.
 // DELETE — removes one ChecklistCard row, but only if no gel has ever been
 //          logged against it. PortfolioCard (and the dormant CardTransfer /
 //          UnverifiedHit tables) all have a required, non-cascading foreign
@@ -24,6 +24,7 @@ import {
   syncTotalCardsInSet,
   countChecklistCardReferences,
 } from "@/lib/data/adminChecklist";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 async function requireCardInSet(setId: string, cardId: string) {
   const card = await prisma.checklistCard.findUnique({
@@ -82,6 +83,8 @@ export async function PATCH(
       });
     }
 
+    revalidateSetDetailCache(setId);
+
     return NextResponse.json({ card: shapeAdminChecklistCard(card) });
   } catch (e: any) {
     if (e.code === "P2002") {
@@ -121,6 +124,7 @@ export async function DELETE(
 
   await prisma.checklistCard.delete({ where: { id: cardId } });
   await syncTotalCardsInSet(setId);
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({ success: true });
 }

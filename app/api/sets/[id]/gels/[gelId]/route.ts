@@ -13,6 +13,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
   return prisma.portfolioCard.findFirst({
@@ -168,6 +169,8 @@ export async function PATCH(
     await rememberGelLocationDefaults(userId, hitCity, hitCountry);
   }
 
+  revalidateSetDetailCache(setId);
+
   // Same field-name compatibility note as POST — see that route for why.
   const gel = {
     id:                portfolioCard.id,
@@ -233,6 +236,8 @@ export async function DELETE(
     }
     throw error;
   }
+
+  revalidateSetDetailCache(setId);
 
   return NextResponse.json({ success: true });
 }

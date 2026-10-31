@@ -6,6 +6,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import AdminChecklistCardModal, {
   type ChecklistCardFormValues,
 } from "./AdminChecklistCardModal";
@@ -235,7 +236,7 @@ export default function AdminChecklistClient({
                     title="Set default image"
                   >
                     {c.imageUrl ? (
-                      <img src={c.imageUrl} alt="" className="w-full h-full object-cover" />
+                      <Image src={c.imageUrl} alt="" width={40} height={40} className="w-full h-full object-cover" />
                     ) : (
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-600">
                         <rect x="3" y="3" width="18" height="18" rx="2" />
