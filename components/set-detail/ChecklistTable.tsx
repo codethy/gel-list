@@ -50,6 +50,7 @@ export interface LoggedGel {
   cardFrontImageUrl: string | null;
   cardBackImageUrl: string | null;
   isVerified: boolean;
+  duplicateFlag: DuplicateFlag;
   username: string;
   displayName: string | null;
   cardHistory: CardHistoryEvent[];
@@ -232,15 +233,43 @@ function CardTypeBadge({ type }: { type: string }) {
 // Every logged gel is reviewed by the developer at /admin/gels before it's
 // trusted — this reflects that review state wherever a logged gel is shown.
 
-export function VerificationBadge({ isVerified }: { isVerified: boolean }) {
-  return isVerified ? (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/15 text-emerald-300 border-emerald-500/30 whitespace-nowrap">
-      Verified
-    </span>
-  ) : (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-amber-500/15 text-amber-300 border-amber-500/30 whitespace-nowrap">
-      Not Verified
-    </span>
+export type DuplicateFlag = "NONE" | "PENDING" | "VERIFIED_DUPLICATE";
+
+export function VerificationBadge({
+  isVerified,
+  duplicateFlag,
+}: {
+  isVerified: boolean;
+  // A DuplicateGelFile is open or resolved against this gel — see
+  // prisma/schema.prisma's DuplicateGelFile. "VERIFIED_DUPLICATE" replaces
+  // the normal badge entirely; "PENDING" adds a second tag alongside it.
+  duplicateFlag?: DuplicateFlag;
+}) {
+  if (duplicateFlag === "VERIFIED_DUPLICATE") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/30 whitespace-nowrap">
+        Verified Duplicate
+      </span>
+    );
+  }
+
+  return (
+    <>
+      {isVerified ? (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/15 text-emerald-300 border-emerald-500/30 whitespace-nowrap">
+          Verified
+        </span>
+      ) : (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-amber-500/15 text-amber-300 border-amber-500/30 whitespace-nowrap">
+          Not Verified
+        </span>
+      )}
+      {duplicateFlag === "PENDING" && (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-orange-500/15 text-orange-300 border-orange-500/30 whitespace-nowrap">
+          Possible Duplicate
+        </span>
+      )}
+    </>
   );
 }
 
@@ -492,7 +521,7 @@ function LoggedGelsModal({
                             <p className="text-xs text-slate-500 truncate">{gel.displayName ?? gel.username}</p>
                           </div>
 
-                          <VerificationBadge isVerified={gel.isVerified} />
+                          <VerificationBadge isVerified={gel.isVerified} duplicateFlag={gel.duplicateFlag} />
 
                           <motion.span
                             animate={{ rotate: isExpanded ? 180 : 0 }}

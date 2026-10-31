@@ -37,6 +37,7 @@ export interface SetDetailData {
     cardTemplateId:    string;
     isInHand:          boolean;
     isVerified:        boolean;
+    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE";
     acquisitionMethod: string | null;
     serialNumber:      number | null;
     hitYear:           number | null;
@@ -67,6 +68,7 @@ export interface SetDetailData {
     cardTemplateId:    string;
     isInHand:          boolean;
     isVerified:        boolean;
+    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE";
     acquisitionMethod: string | null;
     serialNumber:      number | null;
     hitYear:           number | null;
@@ -519,6 +521,7 @@ export async function getSetDetail(
         id:                true,
         isInHand:          true,
         isVerified:        true,
+        duplicateFlag:     true,
         acquisitionMethod: true,
         serialNumber:      true,
         hitYear:           true,
@@ -557,6 +560,7 @@ export async function getSetDetail(
         id:                true,
         isInHand:          true,
         isVerified:        true,
+        duplicateFlag:     true,
         acquisitionMethod: true,
         serialNumber:      true,
         hitYear:           true,
@@ -603,6 +607,7 @@ export async function getSetDetail(
     cardTemplateId:    pc.checklistCard.id,
     isInHand:          pc.isInHand,
     isVerified:        pc.isVerified,
+    duplicateFlag:     pc.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE",
     acquisitionMethod: pc.acquisitionMethod != null ? String(pc.acquisitionMethod) : null,
     serialNumber:      pc.serialNumber      ?? null,
     hitYear:           pc.hitYear           ?? null,
@@ -631,6 +636,7 @@ export async function getSetDetail(
     cardTemplateId:    pc.checklistCard.id,
     isInHand:          pc.isInHand,
     isVerified:        pc.isVerified,
+    duplicateFlag:     pc.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE",
     acquisitionMethod: pc.acquisitionMethod != null ? String(pc.acquisitionMethod) : null,
     serialNumber:      pc.serialNumber      ?? null,
     hitYear:           pc.hitYear           ?? null,

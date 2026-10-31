@@ -45,6 +45,14 @@ export default async function AdminHomePage() {
         </Link>
 
         <Link
+          href="/admin/duplicate-gels"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
+        >
+          <p className="font-semibold text-white">Duplicate Gel Files</p>
+          <p className="text-sm text-slate-400">Review and resolve cases where two users logged the same serialized card.</p>
+        </Link>
+
+        <Link
           href="/admin/homepage"
           className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
         >

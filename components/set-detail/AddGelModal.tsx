@@ -623,6 +623,18 @@ export default function AddGelModal({
   const [error, setError]         = useState<string | null>(null);
   const modalRef                  = useRef<HTMLDivElement>(null);
 
+  // Set when the server detects a same-checklistCard+serialNumber match on
+  // submit — see handleSubmit's 409 handling below. "SELF": this user
+  // already logged this exact card (offer to replace it in place).
+  // "OTHER": a different user already logged it (offer to file a
+  // duplicate case for the developer to review).
+  const [duplicatePrompt, setDuplicatePrompt] = useState<
+    | { kind: "SELF"; existingGel: { id: string; createdAt: string; serialNumber: number | null; cardFrontImageUrl: string | null } }
+    | { kind: "OTHER"; existingGel: { id: string; createdAt: string; serialNumber: number | null; cardFrontImageUrl: string | null; loggedByName: string; loggedByHandle: string | null } }
+    | null
+  >(null);
+  const [isResolvingDuplicate, setIsResolvingDuplicate] = useState(false);
+
   // "choice": the "are you logging your own gel or someone else's?" screen —
   // shown first for every fresh (non-edit) open. "form": the actual log
   // form, in either its SELF or OTHER variant depending on loggedFor.
@@ -691,6 +703,7 @@ export default function AddGelModal({
       setSelectedCardOption(preselectedCardOption ?? null);
     }
     setError(null);
+    setDuplicatePrompt(null);
   }, [isOpen, editingGel, preselectedCardOption, products]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
@@ -720,6 +733,44 @@ export default function AddGelModal({
     []
   );
 
+  // ── Body shared by every write this form can make: the initial POST/PATCH,
+  // the "File a Duplicate" re-POST, and the "Replace" PATCH onto the
+  // pre-existing gel — all send the exact same fields. `extra` layers on
+  // whatever distinguishes the specific request (e.g. acknowledgeDuplicate).
+  function buildBody(extra?: Record<string, unknown>) {
+    // "Which Product" only ever applies to the "my own gel, pulled it"
+    // case — resolve the chosen ProductOption's id back to the raw
+    // productType/productTypeOther pair the server stores.
+    const selectedProduct =
+      !isOther && form.acquisitionMethod === "PULLED"
+        ? products.find((p) => p.id === form.productOptionId)
+        : undefined;
+
+    return {
+      // Wire field name stays "cardTemplateId" to match what
+      // app/api/sets/[id]/gels/route.ts expects — that field name is a
+      // leftover from the removed CardTemplate model, kept there
+      // intentionally rather than renamed everywhere. Ignored by the
+      // PATCH route — editing a gel never reassigns its card.
+      cardTemplateId:    form.checklistCardId,
+      loggedFor:         loggedFor,
+      acquisitionMethod: form.acquisitionMethod || null,
+      productType:       selectedProduct?.productType ?? null,
+      productTypeOther:  selectedProduct?.productTypeOther ?? null,
+      serialNumber:      form.serialNumber ? parseInt(form.serialNumber) : null,
+      hitYear:           form.hitYear   ? parseInt(form.hitYear)   : null,
+      hitMonth:          form.hitMonth  ? parseInt(form.hitMonth)  : null,
+      hitCity:           form.hitCity   || null,
+      hitCountry:        form.hitCountry || null,
+      // These hold UploadThing URLs, or null if no image was chosen
+      cardFrontImageUrl: form.cardFrontImageUrl || null,
+      cardBackImageUrl:  form.cardBackImageUrl  || null,
+      seller:            form.seller || null,
+      notes:             form.notes  || null,
+      ...extra,
+    };
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -747,44 +798,23 @@ export default function AddGelModal({
         ? `/api/sets/${setId}/gels/${editingGel!.id}`
         : `/api/sets/${setId}/gels`;
 
-      // "Which Product" only ever applies to the "my own gel, pulled it"
-      // case — resolve the chosen ProductOption's id back to the raw
-      // productType/productTypeOther pair the server stores.
-      const selectedProduct =
-        !isOther && form.acquisitionMethod === "PULLED"
-          ? products.find((p) => p.id === form.productOptionId)
-          : undefined;
-
       const res = await fetch(url, {
         method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Wire field name stays "cardTemplateId" to match what
-          // app/api/sets/[id]/gels/route.ts expects — that field name is a
-          // leftover from the removed CardTemplate model, kept there
-          // intentionally rather than renamed everywhere. Ignored by the
-          // PATCH route — editing a gel never reassigns its card.
-          cardTemplateId:    form.checklistCardId,
-          loggedFor:         loggedFor,
-          acquisitionMethod: form.acquisitionMethod || null,
-          productType:       selectedProduct?.productType ?? null,
-          productTypeOther:  selectedProduct?.productTypeOther ?? null,
-          serialNumber:      form.serialNumber ? parseInt(form.serialNumber) : null,
-          hitYear:           form.hitYear   ? parseInt(form.hitYear)   : null,
-          hitMonth:          form.hitMonth  ? parseInt(form.hitMonth)  : null,
-          hitCity:           form.hitCity   || null,
-          hitCountry:        form.hitCountry || null,
-          // These hold UploadThing URLs, or null if no image was chosen
-          cardFrontImageUrl: form.cardFrontImageUrl || null,
-          cardBackImageUrl:  form.cardBackImageUrl  || null,
-          seller:            form.seller || null,
-          notes:             form.notes  || null,
-        }),
+        body: JSON.stringify(buildBody()),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        // A fresh (non-edit) log can collide with an existing serialized
+        // gel — see app/api/sets/[id]/gels/route.ts. Editing never hits
+        // this (duplicate-checking is create-only), so isEditing is never
+        // true here in practice.
+        if (res.status === 409 && (data.duplicateKind === "SELF" || data.duplicateKind === "OTHER")) {
+          setDuplicatePrompt({ kind: data.duplicateKind, existingGel: data.existingGel });
+          return;
+        }
         setError(data.error ?? "Something went wrong. Please try again.");
         return;
       }
@@ -798,7 +828,63 @@ export default function AddGelModal({
     }
   }
 
+  // ── Resolve the "you already logged this" prompt: replace the existing
+  // gel in place via the same PATCH an edit would use. ──────────────────────
+  async function handleReplaceExisting() {
+    if (!duplicatePrompt || duplicatePrompt.kind !== "SELF") return;
+    setIsResolvingDuplicate(true);
+    try {
+      const res = await fetch(`/api/sets/${setId}/gels/${duplicatePrompt.existingGel.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody()),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        setDuplicatePrompt(null);
+        return;
+      }
+      onSuccess(data.gel as GelEntry);
+      onClose();
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setDuplicatePrompt(null);
+    } finally {
+      setIsResolvingDuplicate(false);
+    }
+  }
+
+  // ── Resolve the "someone else already logged this" prompt: proceed with
+  // logging anyway, flagging the gel (and the pre-existing one) as a
+  // possible duplicate for the developer to review. ─────────────────────────
+  async function handleFileDuplicate() {
+    if (!duplicatePrompt || duplicatePrompt.kind !== "OTHER") return;
+    setIsResolvingDuplicate(true);
+    try {
+      const res = await fetch(`/api/sets/${setId}/gels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody({ acknowledgeDuplicate: true })),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        setDuplicatePrompt(null);
+        return;
+      }
+      onSuccess(data.gel as GelEntry);
+      onClose();
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setDuplicatePrompt(null);
+    } finally {
+      setIsResolvingDuplicate(false);
+    }
+  }
+
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <>
@@ -1170,5 +1256,92 @@ export default function AddGelModal({
         </>
       )}
     </AnimatePresence>
+
+    {/* ── Duplicate-gel confirm dialog — sits above the form, which stays
+        mounted underneath until this is resolved ─────────────────────────── */}
+    <AnimatePresence>
+      {duplicatePrompt && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm"
+            aria-hidden="true"
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.97 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-[70] w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Possible duplicate gel"
+          >
+            <div className={`h-1 w-full rounded-t-2xl ${duplicatePrompt.kind === "SELF" ? "bg-blue-500" : "bg-amber-500"}`} />
+            <div className="p-5 space-y-4">
+              {duplicatePrompt.kind === "SELF" ? (
+                <>
+                  <h2 className="text-base font-bold text-white">You&apos;ve already logged this gel</h2>
+                  <p className="text-sm text-slate-400">
+                    You logged serial #{duplicatePrompt.existingGel.serialNumber} for this card on{" "}
+                    {new Date(duplicatePrompt.existingGel.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
+                    Would you like to replace that entry with these details?
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-base font-bold text-white">Someone else already logged this card</h2>
+                  <p className="text-sm text-slate-400">
+                    <span className="text-slate-200 font-semibold">{duplicatePrompt.existingGel.loggedByName}</span> already
+                    logged serial #{duplicatePrompt.existingGel.serialNumber} for this card on{" "}
+                    {new Date(duplicatePrompt.existingGel.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
+                    Please double check your info — including the serial number and parallel — before continuing.
+                  </p>
+                </>
+              )}
+
+              {duplicatePrompt.existingGel.cardFrontImageUrl && (
+                <div className="flex justify-center">
+                  <Image
+                    src={duplicatePrompt.existingGel.cardFrontImageUrl}
+                    alt=""
+                    width={64}
+                    height={88}
+                    className="w-16 h-[88px] object-cover rounded-sm border border-slate-700/50"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  disabled={isResolvingDuplicate}
+                  onClick={() => setDuplicatePrompt(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 disabled:opacity-40 transition-colors duration-150"
+                >
+                  {duplicatePrompt.kind === "SELF" ? "Cancel" : "Back"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isResolvingDuplicate}
+                  onClick={duplicatePrompt.kind === "SELF" ? handleReplaceExisting : handleFileDuplicate}
+                  className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-40 transition-colors duration-150 shadow-lg ${
+                    duplicatePrompt.kind === "SELF"
+                      ? "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
+                      : "bg-amber-600 hover:bg-amber-500 shadow-amber-900/30"
+                  }`}
+                >
+                  {isResolvingDuplicate ? "Saving..." : duplicatePrompt.kind === "SELF" ? "Replace" : "File a Duplicate"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+    </>
   );
 }

@@ -39,6 +39,25 @@ import { revalidateSetDetailCache } from "@/lib/data/sets";
 //   seller             — optional string
 //   notes              — optional for "SELF", required for "OTHER" (it's
 //                        where the user records where/who they saw pull it)
+//   acknowledgeDuplicate — optional boolean. Only meaningful when another
+//                        user already logged a gel with the same
+//                        checklistCardId + serialNumber (see step 4a below)
+//                        — set true once the user has seen that warning and
+//                        clicked "File a Duplicate" to proceed anyway.
+//
+// Duplicate handling (serialized cards only — a null serialNumber never
+// triggers this): if checklistCardId + serialNumber matches an existing
+// PortfolioCard —
+//   - same user, no confirmation yet  → 409 { duplicateKind: "SELF", ... }
+//     without creating anything. The frontend's resolution is to PATCH the
+//     existing gel instead of POSTing again (see
+//     app/api/sets/[id]/gels/[gelId]/route.ts) — no "confirm" flag needed
+//     here since that path never re-POSTs.
+//   - different user, no acknowledgeDuplicate → 409 { duplicateKind: "OTHER", ... }
+//     without creating anything, so the user can double check their info.
+//   - different user, acknowledgeDuplicate: true → creates the gel as
+//     usual (forced unverified) AND opens a DuplicateGelFile for the
+//     developer to review at /admin/duplicate-gels.
 
 export async function POST(
   req: NextRequest,
@@ -84,6 +103,7 @@ export async function POST(
     cardBackImageUrl,
     seller,
     notes,
+    acknowledgeDuplicate,
   } = body;
 
   // isInHand is derived server-side from loggedFor, rather than trusting a
@@ -132,14 +152,73 @@ export async function POST(
     );
   }
 
+  // ── 4b. Duplicate check (serialized cards only) ───────────────────────────────
+  // Two PortfolioCards sharing a checklistCardId + serialNumber means either
+  // this user double-logged their own card, or two different users are
+  // claiming the same numbered copy — see the doc comment above.
+  const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
+  let duplicateMatch: { id: string; userId: string; createdAt: Date; serialNumber: number | null; cardFrontImageUrl: string | null; user: { name: string | null; username: string | null; handle: string | null } } | null = null;
+
+  if (validSerialNumber !== null) {
+    duplicateMatch = await prisma.portfolioCard.findFirst({
+      where:   { checklistCardId, serialNumber: validSerialNumber },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id:                true,
+        userId:            true,
+        createdAt:         true,
+        serialNumber:      true,
+        cardFrontImageUrl: true,
+        user: { select: { name: true, username: true, handle: true } },
+      },
+    });
+  }
+
+  if (duplicateMatch && duplicateMatch.userId === userId) {
+    return NextResponse.json(
+      {
+        error: "You've already logged this exact gel.",
+        duplicateKind: "SELF",
+        existingGel: {
+          id:                duplicateMatch.id,
+          createdAt:         duplicateMatch.createdAt.toISOString(),
+          serialNumber:      duplicateMatch.serialNumber,
+          cardFrontImageUrl: duplicateMatch.cardFrontImageUrl,
+        },
+      },
+      { status: 409 }
+    );
+  }
+
+  if (duplicateMatch && duplicateMatch.userId !== userId && acknowledgeDuplicate !== true) {
+    return NextResponse.json(
+      {
+        error: "Someone else has already logged this exact card.",
+        duplicateKind: "OTHER",
+        existingGel: {
+          id:                duplicateMatch.id,
+          createdAt:         duplicateMatch.createdAt.toISOString(),
+          serialNumber:      duplicateMatch.serialNumber,
+          cardFrontImageUrl: duplicateMatch.cardFrontImageUrl,
+          loggedByName:      duplicateMatch.user.name ?? duplicateMatch.user.username ?? "A user",
+          loggedByHandle:    duplicateMatch.user.handle,
+        },
+      },
+      { status: 409 }
+    );
+  }
+
+  const isFilingDuplicate = duplicateMatch !== null && duplicateMatch.userId !== userId && acknowledgeDuplicate === true;
+
   // Trusted users (5+ gels already verified by the developer) skip the
   // review queue entirely — see app/api/admin/gels/[gelId]/verify/route.ts
-  // for where that trust is granted.
+  // for where that trust is granted. Filing a duplicate always forces
+  // unverified regardless of trust level.
   const loggingUser = await prisma.user.findUnique({
     where:  { id: userId },
     select: { isVerifiedUser: true },
   });
-  const isVerified = loggingUser?.isVerifiedUser ?? false;
+  const isVerified = isFilingDuplicate ? false : (loggingUser?.isVerifiedUser ?? false);
 
   // ── 5. Create the PortfolioCard ──────────────────────────────────────────────
   const portfolioCard = await prisma.portfolioCard.create({
@@ -157,9 +236,10 @@ export async function POST(
       checklistCard: {
         connect: { id: checklistCardId },
       },
-      isInHand:   isInHand,
-      isHit:      true,
-      isVerified: isVerified,
+      isInHand:      isInHand,
+      isHit:         true,
+      isVerified:    isVerified,
+      duplicateFlag: isFilingDuplicate ? "PENDING" : "NONE",
       acquisitionMethod:
         typeof acquisitionMethod === "string"
           ? (acquisitionMethod as never)
@@ -198,6 +278,7 @@ export async function POST(
       checklistCardId:   true,
       isInHand:          true,
       isVerified:        true,
+      duplicateFlag:     true,
       acquisitionMethod: true,
       productType:       true,
       productTypeOther:  true,
@@ -229,6 +310,24 @@ export async function POST(
     await rememberGelLocationDefaults(userId, hitCity, hitCountry);
   }
 
+  // Filing a duplicate: flag the pre-existing gel too (it keeps its own
+  // isVerified as-is — only the "Possible Duplicate" tag is new for it) and
+  // open the case file for the developer to review at /admin/duplicate-gels.
+  if (isFilingDuplicate && duplicateMatch) {
+    await prisma.portfolioCard.update({
+      where: { id: duplicateMatch.id },
+      data:  { duplicateFlag: "PENDING" },
+    });
+    await prisma.duplicateGelFile.create({
+      data: {
+        checklistCard: { connect: { id: checklistCardId } },
+        filedByUser:   { connect: { id: userId } },
+        filedGel:      { connect: { id: portfolioCard.id } },
+        existingGel:   { connect: { id: duplicateMatch.id } },
+      },
+    });
+  }
+
   // A new gel changes this set's cached checklist-row status/gelsPulled/
   // cardHistory and chasesPulledInSet — invalidate the shared cache so
   // every other viewer's next load reflects it immediately.
@@ -243,6 +342,7 @@ export async function POST(
     cardTemplateId:    portfolioCard.checklistCardId,
     isInHand:          portfolioCard.isInHand,
     isVerified:        portfolioCard.isVerified,
+    duplicateFlag:     String(portfolioCard.duplicateFlag),
     acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
     productType:       portfolioCard.productType ? String(portfolioCard.productType) : null,
     productTypeOther:  portfolioCard.productTypeOther  ?? null,

@@ -6,7 +6,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget } from "./ChecklistTable";
+import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget, type DuplicateFlag } from "./ChecklistTable";
 import { getProductLabel } from "@/lib/productTypes";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -23,6 +23,10 @@ export interface GelEntry {
   isInHand?: boolean;
   // Whether the developer has verified this gel yet — see /admin/gels.
   isVerified?: boolean;
+  // Set when a DuplicateGelFile is open or resolved against this gel — see
+  // prisma/schema.prisma and components/set-detail/ChecklistTable.tsx's
+  // VerificationBadge for how this changes the badge shown below.
+  duplicateFlag?: DuplicateFlag;
   serialNumber?: number | null;
   hitYear?: number | null;
   hitMonth?: number | null;
@@ -373,7 +377,7 @@ export function GelCard({
             </p>
           )}
           <div className="pt-1 flex items-center gap-1.5 flex-wrap">
-            <VerificationBadge isVerified={gel.isVerified ?? false} />
+            <VerificationBadge isVerified={gel.isVerified ?? false} duplicateFlag={gel.duplicateFlag} />
             {/* "Recent Pulls" only — who logged it. Links to their public
                 profile (own profile, if it's the viewer's own tag — see
                 app/u/[handle]/page.tsx's own-handle redirect). */}

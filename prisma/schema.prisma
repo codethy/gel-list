@@ -92,17 +92,18 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts          Account[]
-  sessions          Session[]
-  portfolioCards    PortfolioCard[]
-  ripSessions       RipSession[]
-  unverifiedHits    UnverifiedHit[]
+  accounts            Account[]
+  sessions            Session[]
+  portfolioCards      PortfolioCard[]
+  ripSessions         RipSession[]
+  unverifiedHits      UnverifiedHit[]
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred to this user
-  receivedTransfers CardTransfer[]  @relation("TransferReceiver")
+  receivedTransfers   CardTransfer[]     @relation("TransferReceiver")
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred from this user
-  sentTransfers     CardTransfer[]  @relation("TransferSender")
-  favoriteGels      FavoriteGel[]
-  productOpenings   ProductOpening[]
+  sentTransfers       CardTransfer[]     @relation("TransferSender")
+  favoriteGels        FavoriteGel[]
+  productOpenings     ProductOpening[]
+  filedDuplicateFiles DuplicateGelFile[] @relation("DuplicateFiledBy")
 }
 
 // ─── TAXONOMY ───────────────────────────────────────────────────────────────
@@ -181,12 +182,12 @@ model CardSet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  checklistCards   ChecklistCard[]
-  portfolioCards   PortfolioCard[]
-  ripSessions      RipSession[]
-  products         SetProduct[]
-  featuredOn       HomepageFeaturedSet[]
-  productOpenings  ProductOpening[]
+  checklistCards  ChecklistCard[]
+  portfolioCards  PortfolioCard[]
+  ripSessions     RipSession[]
+  products        SetProduct[]
+  featuredOn      HomepageFeaturedSet[]
+  productOpenings ProductOpening[]
 }
 
 // Admin-curated selection of sets shown on the home page for each category
@@ -489,24 +490,84 @@ model PortfolioCard {
 
   notes String? @db.Text
 
-  isDuplicate Boolean @default(false)
-
   // Every logged gel starts unverified and sits in the developer's /admin/gels
   // review queue — see app/api/admin/gels/[gelId]/verify/route.ts — unless the
   // logging user has already crossed the 5-verified-gels threshold
   // (User.isVerifiedUser), in which case it's auto-verified at creation time.
   isVerified Boolean @default(false)
 
+  // Set when this gel shares a checklistCardId + serialNumber with another
+  // PortfolioCard — see DuplicateGelFile below and
+  // app/api/sets/[id]/gels/route.ts for how this gets set. Deliberately
+  // separate from isVerified: a PENDING gel keeps its own isVerified as-is
+  // (just gains a "Possible Duplicate" tag alongside it), and
+  // VERIFIED_DUPLICATE overrides the badge shown to the user entirely
+  // rather than changing isVerified.
+  duplicateFlag DuplicateFlag @default(NONE)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  checklistCard ChecklistCard  @relation(fields: [checklistCardId], references: [id])
-  cardSet       CardSet        @relation(fields: [cardSetId], references: [id])
-  ripSession    RipSession?    @relation(fields: [ripSessionId], references: [id])
+  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checklistCard           ChecklistCard     @relation(fields: [checklistCardId], references: [id])
+  cardSet                 CardSet           @relation(fields: [cardSetId], references: [id])
+  ripSession              RipSession?       @relation(fields: [ripSessionId], references: [id])
   // ✅ NEW: chain of custody transfers originating from this portfolio entry
-  transfers     CardTransfer[]
-  favoritedBy   FavoriteGel[]
+  transfers               CardTransfer[]
+  favoritedBy             FavoriteGel[]
+  duplicateFileAsFiled    DuplicateGelFile? @relation("DuplicateFiledGel")
+  duplicateFileAsExisting DuplicateGelFile? @relation("DuplicateExistingGel")
+}
+
+enum DuplicateFlag {
+  NONE
+  PENDING
+  VERIFIED_DUPLICATE
+}
+
+// ─── DUPLICATE GEL FILE ───────────────────────────────────────────────────────
+// Opened when a user logs a serialized card (same checklistCardId +
+// serialNumber) that someone ELSE has already logged — the "File a
+// Duplicate" action in AddGelModal. Reviewed by the developer at
+// /admin/duplicate-gels.
+model DuplicateGelFile {
+  id              String @id @default(cuid())
+  // Auto-assigned, starting at 1 — shown to the admin as "Case #N".
+  fileNumber      Int    @unique @default(autoincrement())
+  checklistCardId String
+  filedByUserId   String
+
+  // Nullable + onDelete: SetNull — if the admin later deletes one of the
+  // two gels from the file view, the file survives for audit with that
+  // slot empty instead of being destroyed.
+  filedGelId    String? @unique
+  existingGelId String? @unique
+
+  // Pure admin housekeeping — independent of decision below, reopenable.
+  status   DuplicateFileStatus   @default(OPEN)
+  // The developer's call on whether this is a real duplicate (e.g. a
+  // genuine manufacturer misprint of the same serial twice) or not (one
+  // side made a mistake, handled via the normal edit/verify flow instead).
+  decision DuplicateFileDecision @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checklistCard ChecklistCard  @relation(fields: [checklistCardId], references: [id])
+  filedByUser   User           @relation("DuplicateFiledBy", fields: [filedByUserId], references: [id])
+  filedGel      PortfolioCard? @relation("DuplicateFiledGel", fields: [filedGelId], references: [id], onDelete: SetNull)
+  existingGel   PortfolioCard? @relation("DuplicateExistingGel", fields: [existingGelId], references: [id], onDelete: SetNull)
+}
+
+enum DuplicateFileStatus {
+  OPEN
+  CLOSED
+}
+
+enum DuplicateFileDecision {
+  PENDING
+  CONFIRMED_DUPLICATE
+  NOT_DUPLICATE
 }
 
 // ─── FAVORITE GEL ─────────────────────────────────────────────────────────────
@@ -676,6 +737,7 @@ model ChecklistCard {
   likes          ChecklistCardLike[]
   transfers      CardTransfer[]
   unverifiedHits UnverifiedHit[]
+  duplicateFiles DuplicateGelFile[]
 
   @@unique([cardSetId, cardNumber, parallel])
   @@index([cardSetId, sortOrder])

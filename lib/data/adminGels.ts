@@ -12,6 +12,7 @@ export interface AdminGelEntry {
   id:                 string;
   isInHand:           boolean;
   isVerified:         boolean;
+  duplicateFlag:      string;
   acquisitionMethod:  string | null;
   serialNumber:       number | null;
   hitYear:            number | null;
@@ -50,6 +51,7 @@ export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
       id:                true,
       isInHand:          true,
       isVerified:        true,
+      duplicateFlag:     true,
       acquisitionMethod: true,
       serialNumber:      true,
       hitYear:           true,
@@ -98,6 +100,7 @@ export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
       id:                  pc.id,
       isInHand:            pc.isInHand,
       isVerified:          pc.isVerified,
+      duplicateFlag:       String(pc.duplicateFlag),
       acquisitionMethod:   pc.acquisitionMethod ?? null,
       serialNumber:        pc.serialNumber      ?? null,
       hitYear:             pc.hitYear           ?? null,
