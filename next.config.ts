@@ -7,6 +7,11 @@ import type { NextConfig } from "next";
 // restricts which origins images/scripts/connections can come from, and
 // blocks <object>/<embed>, at the cost of 'unsafe-inline' for scripts/styles
 // (Next.js's own hydration/inline styles need this without nonces).
+// connect-src allows UploadThing's ingest host: the client SDK (see
+// node_modules/uploadthing/client/index.js) uploads files via a direct
+// browser XHR/fetch straight to https://<region>.ingest.uploadthing.com,
+// not through our own /api/uploadthing route — without this, every upload
+// fails with a CSP violation ("Could not upload this image").
 const isDev = process.env.NODE_ENV === "development";
 const cspHeader = `
   default-src 'self';
@@ -14,7 +19,7 @@ const cspHeader = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https://lh3.googleusercontent.com https://*.ufs.sh;
   font-src 'self';
-  connect-src 'self';
+  connect-src 'self' https://*.ingest.uploadthing.com;
   object-src 'none';
   base-uri 'self';
   form-action 'self';
