@@ -86,6 +86,7 @@ export interface CreateGelRowInput {
   cardFrontImageUrl: string | null;
   cardBackImageUrl:  string | null;
   seller:            string | null;
+  breakerName:       string | null;
   notes:             string | null;
 }
 
@@ -106,10 +107,12 @@ export interface ShapedGel {
   cardFrontImageUrl: string | null;
   cardBackImageUrl:  string | null;
   seller:            string | null;
+  breakerName:       string | null;
   notes:             string | null;
   cardTemplate: {
     playerName:    string;
     cardType:      string;
+    cardTier:      string;
     parallelType:  string | null;
     printRun:      number | null;
     variationName: string | null;
@@ -142,6 +145,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardFrontImageUrl: input.cardFrontImageUrl,
       cardBackImageUrl:  input.cardBackImageUrl,
       seller:            input.seller,
+      breakerName:       input.breakerName,
       notes:             input.notes,
     },
     select: {
@@ -161,11 +165,13 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardFrontImageUrl: true,
       cardBackImageUrl:  true,
       seller:            true,
+      breakerName:       true,
       notes:             true,
       checklistCard: {
         select: {
           playerName:    true,
           cardCategory:  true,
+          cardTier:      true,
           parallel:      true,
           printRun:      true,
           variationName: true,
@@ -192,10 +198,12 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
     cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
+    breakerName:       portfolioCard.breakerName        ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {
       playerName:    portfolioCard.checklistCard.playerName,
       cardType:      String(portfolioCard.checklistCard.cardCategory),
+      cardTier:      String(portfolioCard.checklistCard.cardTier),
       parallelType:  portfolioCard.checklistCard.parallel ?? null,
       printRun:      portfolioCard.checklistCard.printRun ?? null,
       variationName: portfolioCard.checklistCard.variationName ?? null,

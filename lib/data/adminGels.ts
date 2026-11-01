@@ -22,6 +22,7 @@ export interface AdminGelEntry {
   cardFrontImageUrl:  string | null;
   cardBackImageUrl:   string | null;
   seller:             string | null;
+  breakerName:        string | null;
   notes:              string | null;
   createdAt:          string;
   loggedByUsername:   string;
@@ -30,6 +31,7 @@ export interface AdminGelEntry {
     id:            string;
     playerName:    string;
     cardType:      string;
+    cardTier:      string;
     parallelType:  string | null;
     printRun:      number | null;
     variationName: string | null;
@@ -61,6 +63,7 @@ export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
       cardFrontImageUrl: true,
       cardBackImageUrl:  true,
       seller:            true,
+      breakerName:       true,
       notes:             true,
       createdAt:         true,
       user: {
@@ -74,6 +77,7 @@ export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
           id:            true,
           playerName:    true,
           cardCategory:  true,
+          cardTier:      true,
           parallel:      true,
           printRun:      true,
           variationName: true,
@@ -110,6 +114,7 @@ export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
       cardFrontImageUrl:   pc.cardFrontImageUrl ?? null,
       cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
       seller:              pc.seller            ?? null,
+      breakerName:         pc.breakerName        ?? null,
       notes:               pc.notes             ?? null,
       createdAt:           pc.createdAt.toISOString(),
       loggedByUsername:    pc.user.username ?? pc.user.name ?? "user",
@@ -118,6 +123,7 @@ export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
         id:            pc.checklistCard.id,
         playerName:    pc.checklistCard.playerName,
         cardType:      String(pc.checklistCard.cardCategory),
+        cardTier:      String(pc.checklistCard.cardTier),
         parallelType:  pc.checklistCard.parallel ?? null,
         printRun:      pc.checklistCard.printRun ?? null,
         variationName: pc.checklistCard.variationName ?? null,

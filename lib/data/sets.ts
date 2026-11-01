@@ -47,12 +47,14 @@ export interface SetDetailData {
     cardFrontImageUrl: string | null;
     cardBackImageUrl:  string | null;
     seller:            string | null;
+    breakerName:       string | null;
     notes:             string | null;
     productType:       string | null;
     productTypeOther:  string | null;
     cardTemplate: {
       playerName:    string;
       cardType:      string;
+      cardTier:      string;
       parallelType:  string | null;
       printRun:      number | null;
       variationName: string | null;
@@ -78,6 +80,7 @@ export interface SetDetailData {
     cardFrontImageUrl: string | null;
     cardBackImageUrl:  string | null;
     seller:            string | null;
+    breakerName:       string | null;
     notes:             string | null;
     productType:       string | null;
     productTypeOther:  string | null;
@@ -86,6 +89,7 @@ export interface SetDetailData {
     cardTemplate: {
       playerName:    string;
       cardType:      string;
+      cardTier:      string;
       parallelType:  string | null;
       printRun:      number | null;
       variationName: string | null;
@@ -531,6 +535,7 @@ export async function getSetDetail(
         cardFrontImageUrl: true,
         cardBackImageUrl:  true,
         seller:            true,
+        breakerName:       true,
         notes:             true,
         productType:       true,
         productTypeOther:  true,
@@ -539,6 +544,7 @@ export async function getSetDetail(
             id:            true,
             playerName:    true,
             cardCategory:  true,
+            cardTier:      true,
             parallel:      true,
             printRun:      true,
             variationName: true,
@@ -570,6 +576,7 @@ export async function getSetDetail(
         cardFrontImageUrl: true,
         cardBackImageUrl:  true,
         seller:            true,
+        breakerName:       true,
         notes:             true,
         productType:       true,
         productTypeOther:  true,
@@ -579,6 +586,7 @@ export async function getSetDetail(
             id:            true,
             playerName:    true,
             cardCategory:  true,
+            cardTier:      true,
             parallel:      true,
             printRun:      true,
             variationName: true,
@@ -617,12 +625,14 @@ export async function getSetDetail(
     cardFrontImageUrl: pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
+    breakerName:       pc.breakerName        ?? null,
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
     productTypeOther:  pc.productTypeOther  ?? null,
     cardTemplate: {
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),
+      cardTier:      String(pc.checklistCard.cardTier),
       parallelType:  pc.checklistCard.parallel ?? null,
       printRun:      pc.checklistCard.printRun ?? null,
       variationName: pc.checklistCard.variationName ?? null,
@@ -646,6 +656,7 @@ export async function getSetDetail(
     cardFrontImageUrl: pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
+    breakerName:       pc.breakerName        ?? null,
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
     productTypeOther:  pc.productTypeOther  ?? null,
@@ -654,6 +665,7 @@ export async function getSetDetail(
     cardTemplate: {
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),
+      cardTier:      String(pc.checklistCard.cardTier),
       parallelType:  pc.checklistCard.parallel ?? null,
       printRun:      pc.checklistCard.printRun ?? null,
       variationName: pc.checklistCard.variationName ?? null,

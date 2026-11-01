@@ -467,6 +467,11 @@ model PortfolioCard {
   // ✅ NEW: Seller field — required by "Your Card" modal path
   seller String? @db.VarChar(255)
 
+  // Who the breaker was — only meaningful when acquisitionMethod is
+  // BREAKER. Shown in this gel's card history and its own display card
+  // alongside seller, same pattern.
+  breakerName String? @db.VarChar(150)
+
   // Product info
   productType           ProductType?
   productTypeOther      String?      @db.VarChar(150)

@@ -62,6 +62,7 @@ const gelSelect = {
   cardFrontImageUrl: true,
   cardBackImageUrl:  true,
   seller:            true,
+  breakerName:       true,
   notes:             true,
   createdAt:         true,
   user:              { select: userSelect },
@@ -70,6 +71,7 @@ const gelSelect = {
       id:            true,
       playerName:    true,
       cardCategory:  true,
+      cardTier:      true,
       parallel:      true,
       printRun:      true,
       variationName: true,
@@ -87,9 +89,9 @@ function shapeGel(pc: {
   acquisitionMethod: unknown; serialNumber: number | null; hitYear: number | null;
   hitMonth: number | null; hitCity: string | null; hitCountry: string | null;
   cardFrontImageUrl: string | null; cardBackImageUrl: string | null;
-  seller: string | null; notes: string | null; createdAt: Date;
+  seller: string | null; breakerName: string | null; notes: string | null; createdAt: Date;
   user: { id: string; username: string | null; handle: string | null; email: string | null; name: string | null };
-  checklistCard: { id: string; playerName: string; cardCategory: unknown; parallel: string | null; printRun: number | null; variationName: string | null; team: string | null };
+  checklistCard: { id: string; playerName: string; cardCategory: unknown; cardTier: unknown; parallel: string | null; printRun: number | null; variationName: string | null; team: string | null };
 }): DuplicateFileGel {
   return {
     id:                  pc.id,
@@ -105,6 +107,7 @@ function shapeGel(pc: {
     cardFrontImageUrl:   pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
     seller:              pc.seller ?? null,
+    breakerName:         pc.breakerName ?? null,
     notes:               pc.notes  ?? null,
     createdAt:           pc.createdAt.toISOString(),
     loggedByUsername:    pc.user.username ?? pc.user.name ?? "user",
@@ -114,6 +117,7 @@ function shapeGel(pc: {
       id:            pc.checklistCard.id,
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),
+      cardTier:      String(pc.checklistCard.cardTier),
       parallelType:  pc.checklistCard.parallel ?? null,
       printRun:      pc.checklistCard.printRun ?? null,
       variationName: pc.checklistCard.variationName ?? null,

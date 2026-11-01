@@ -17,8 +17,8 @@ import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
   return prisma.portfolioCard.findFirst({
-    where: { id: gelId, cardSetId: setId, userId },
-    select: { id: true },
+    where:  { id: gelId, cardSetId: setId, userId },
+    select: { id: true, checklistCard: { select: { cardTier: true } } },
   });
 }
 
@@ -66,15 +66,16 @@ export async function PATCH(
     cardFrontImageUrl,
     cardBackImageUrl,
     seller,
+    breakerName,
     notes,
   } = body;
 
   const isInHand = loggedFor !== "OTHER";
 
-  // "Which Product" only ever applies to "my own gel, pulled it" — re-derived
-  // server-side rather than trusting the client honored the form's
-  // enabled/disabled state.
-  const productApplies = isInHand && acquisitionMethod === "PULLED";
+  // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
+  // flow) — re-derived server-side rather than trusting the client honored
+  // the form's enabled/disabled state.
+  const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
 
   if (typeof cardFrontImageUrl !== "string" || !cardFrontImageUrl) {
     return NextResponse.json(
@@ -86,6 +87,28 @@ export async function PATCH(
   if (!isInHand && (typeof notes !== "string" || !notes.trim())) {
     return NextResponse.json(
       { error: "Please add a note describing where you saw this card pulled" },
+      { status: 400 }
+    );
+  }
+
+  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
+    return NextResponse.json(
+      { error: "Please select how you got this card" },
+      { status: 400 }
+    );
+  }
+
+  if (productApplies && (typeof productType !== "string" || !productType)) {
+    return NextResponse.json(
+      { error: "Please select which product this came from" },
+      { status: 400 }
+    );
+  }
+
+  const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
+  if (owned.checklistCard.cardTier === "NUMBERED" && validSerialNumber === null) {
+    return NextResponse.json(
+      { error: "This card is numbered — please fill in the serial number" },
       { status: 400 }
     );
   }
@@ -116,8 +139,7 @@ export async function PATCH(
         productApplies && typeof productTypeOther === "string"
           ? productTypeOther
           : null,
-      serialNumber:
-        typeof serialNumber === "number" ? serialNumber : null,
+      serialNumber: validSerialNumber,
       hitYear:
         typeof hitYear === "number" ? hitYear : null,
       hitMonth:
@@ -132,6 +154,8 @@ export async function PATCH(
         typeof cardBackImageUrl === "string" ? cardBackImageUrl : null,
       seller:
         typeof seller === "string" ? seller : null,
+      breakerName:
+        typeof breakerName === "string" ? breakerName : null,
       notes:
         typeof notes === "string" ? notes : null,
     },
@@ -140,6 +164,7 @@ export async function PATCH(
       checklistCardId:   true,
       isInHand:          true,
       isVerified:        true,
+      duplicateFlag:     true,
       acquisitionMethod: true,
       productType:       true,
       productTypeOther:  true,
@@ -151,11 +176,13 @@ export async function PATCH(
       cardFrontImageUrl: true,
       cardBackImageUrl:  true,
       seller:            true,
+      breakerName:       true,
       notes:             true,
       checklistCard: {
         select: {
           playerName:    true,
           cardCategory:  true,
+          cardTier:      true,
           parallel:      true,
           printRun:      true,
           variationName: true,
@@ -177,6 +204,7 @@ export async function PATCH(
     cardTemplateId:    portfolioCard.checklistCardId,
     isInHand:          portfolioCard.isInHand,
     isVerified:        portfolioCard.isVerified,
+    duplicateFlag:     String(portfolioCard.duplicateFlag),
     acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
     productType:       portfolioCard.productType ? String(portfolioCard.productType) : null,
     productTypeOther:  portfolioCard.productTypeOther  ?? null,
@@ -188,10 +216,12 @@ export async function PATCH(
     cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
+    breakerName:       portfolioCard.breakerName        ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {
       playerName:    portfolioCard.checklistCard.playerName,
       cardType:      String(portfolioCard.checklistCard.cardCategory),
+      cardTier:      String(portfolioCard.checklistCard.cardTier),
       parallelType:  portfolioCard.checklistCard.parallel ?? null,
       printRun:      portfolioCard.checklistCard.printRun ?? null,
       variationName: portfolioCard.checklistCard.variationName ?? null,

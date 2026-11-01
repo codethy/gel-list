@@ -25,6 +25,10 @@ export interface CardHistoryEvent {
     | "FRIEND"
     | "SOCIAL_MEDIA"
     | "OTHER"
+    // "Acquired this myself some other way" — the SELF-flow's "Other"
+    // option. Distinct from OTHER below (a sighting reported some other
+    // way) for the same reason BREAKER_OWNED is distinct from BREAKER.
+    | "OTHER_OWNED"
     | "TRANSFERRED_OUT"
     | "TRANSFERRED_IN"
     | "CURRENTLY_OWNS";
@@ -36,6 +40,9 @@ export interface CardHistoryEvent {
   // transfer and ownership events have no hit-context data to show.
   location?: string | null;
   product?: string | null;
+  // Only meaningful when the acquisition was via a breaker (BREAKER/
+  // BREAKER_OWNED) — who the breaker was.
+  breakerName?: string | null;
 }
 
 export type CardStatus = "Available" | "Owned" | "Surfaced";
@@ -163,6 +170,7 @@ const EVENT_META: Record<
   PULLED:          { label: "Pulled",               color: "text-blue-300",    dotColor: "bg-blue-500"    },
   BOUGHT:          { label: "Purchased",             color: "text-violet-300",  dotColor: "bg-violet-500"  },
   BREAKER_OWNED:   { label: "Pulled from a break",    color: "text-blue-300",    dotColor: "bg-blue-500"    },
+  OTHER_OWNED:     { label: "Acquired another way",    color: "text-blue-300",    dotColor: "bg-blue-500"    },
   // "Someone else's gel" sources — reported sightings, not owned copies.
   BREAKER:         { label: "Seen from a breaker",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
   EBAY:            { label: "Seen on eBay",            color: "text-orange-300",  dotColor: "bg-orange-500"  },
@@ -359,6 +367,11 @@ function CardHistoryDrawer({ history }: { history: CardHistoryEvent[] }) {
                       {event.product && (
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           <span className="font-bold text-white">Product:</span> {event.product}
+                        </p>
+                      )}
+                      {event.breakerName && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          <span className="font-bold text-white">Breaker:</span> {event.breakerName}
                         </p>
                       )}
                     </div>
@@ -814,6 +827,7 @@ function VariantSubRow({
       cardNumber:    row.cardNumber ?? "",
       playerName:    row.playerName,
       cardType:      row.cardType,
+      cardTier:      row.cardTier,
       parallelType:  row.parallelType ?? null,
       printRun:      row.printRun ?? null,
       variationName: row.variationName ?? null,
@@ -1075,6 +1089,7 @@ function ChecklistRowItem({
       cardNumber:    row.cardNumber ?? "",
       playerName:    row.playerName,
       cardType:      row.cardType,
+      cardTier:      row.cardTier,
       parallelType:  row.parallelType ?? null,
       printRun:      row.printRun ?? null,
       variationName: row.variationName ?? null,

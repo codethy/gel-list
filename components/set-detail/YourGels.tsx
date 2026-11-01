@@ -36,6 +36,9 @@ export interface GelEntry {
   cardBackImageUrl?: string | null;
   acquisitionMethod?: string | null;
   seller?: string | null;
+  // Only meaningful when acquisitionMethod is "BREAKER" — who the breaker
+  // was, shown alongside seller in the acquisition line below.
+  breakerName?: string | null;
   notes?: string | null;
   productType?: string | null;
   productTypeOther?: string | null;
@@ -57,6 +60,9 @@ export interface GelEntry {
     cardNumber?: string | null;
     playerName: string;
     cardType: string;
+    // Used by AddGelModal to decide whether Serial Number is mandatory
+    // (cardTier === "NUMBERED") when reopening an existing gel to edit.
+    cardTier?: string;
     parallelType?: string | null;
     printRun?: number | null;
     variationName?: string | null;
@@ -369,6 +375,7 @@ export function GelCard({
             <p className="text-[11px] text-slate-500 capitalize">
               {gel.acquisitionMethod.toLowerCase()}
               {gel.seller ? ` from ${gel.seller}` : ""}
+              {gel.breakerName ? ` — ${gel.breakerName}` : ""}
             </p>
           )}
           {gel.notes && (

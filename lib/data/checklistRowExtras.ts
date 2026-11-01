@@ -91,6 +91,7 @@ export async function getChecklistRowExtras(
         hitCountry:        true,
         productType:       true,
         productTypeOther:  true,
+        breakerName:       true,
         user:              { select: userSelect },
       },
     }),
@@ -166,13 +167,16 @@ export async function getChecklistRowExtras(
       const originalHolder = cardTransfers[0]?.fromUser ?? pc.user;
       const { username, displayName } = nameFor(originalHolder);
       const locationParts = [pc.hitCity, pc.hitCountry].filter(Boolean);
-      // BREAKER means two different things depending on isInHand: "I paid
-      // into a break and this is genuinely mine" (SELF flow's "From a
-      // Break") vs. "I saw someone else pull this from a breaker" (OTHER
-      // flow's sighting report) — same AcquisitionMethod value, but shown
-      // with owned-gel styling only in the first case.
+      // BREAKER and OTHER each mean two different things depending on
+      // isInHand: "I paid into a break and this is genuinely mine" / "I
+      // acquired it myself some other way" (SELF flow) vs. "I saw someone
+      // else's card from a breaker" / "seen some other way" (OTHER flow's
+      // sighting report) — same AcquisitionMethod value, but shown with
+      // owned-gel styling only in the first case.
       const eventType = pc.isInHand && pc.acquisitionMethod === "BREAKER"
         ? ("BREAKER_OWNED" as const)
+        : pc.isInHand && pc.acquisitionMethod === "OTHER"
+        ? ("OTHER_OWNED" as const)
         : pc.acquisitionMethod;
       events.push({
         id:         `${pc.id}-acquired`,
@@ -183,6 +187,7 @@ export async function getChecklistRowExtras(
         note:       pc.notes,
         location:   locationParts.length > 0 ? locationParts.join(", ") : null,
         product:    pc.productType ? getProductLabel(String(pc.productType), pc.productTypeOther) : null,
+        breakerName: pc.breakerName ?? null,
       });
     }
 

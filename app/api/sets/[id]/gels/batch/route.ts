@@ -67,6 +67,7 @@ export async function POST(
     productType,
     productTypeOther,
     seller,
+    breakerName,
     hitYear,
     hitMonth,
     hitCity,
@@ -75,7 +76,17 @@ export async function POST(
   } = body;
 
   const isInHand = loggedFor !== "OTHER";
-  const productApplies = isInHand && acquisitionMethod === "PULLED";
+  // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
+  // flow) — re-derived server-side rather than trusting the client.
+  const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+
+  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
+    return NextResponse.json({ error: "Please select how you got these cards" }, { status: 400 });
+  }
+
+  if (productApplies && (typeof productType !== "string" || !productType)) {
+    return NextResponse.json({ error: "Please select which product these cards came from" }, { status: 400 });
+  }
 
   if (!Array.isArray(rawCards) || rawCards.length === 0) {
     return NextResponse.json({ error: "At least one card is required" }, { status: 400 });
@@ -111,10 +122,21 @@ export async function POST(
   const distinctCardIds = [...new Set(cards.map((c) => c.cardTemplateId))];
   const matchingCards = await prisma.checklistCard.findMany({
     where:  { id: { in: distinctCardIds }, cardSetId: setId },
-    select: { id: true },
+    select: { id: true, cardTier: true },
   });
   if (matchingCards.length !== distinctCardIds.length) {
     return NextResponse.json({ error: "One or more cards were not found in this set" }, { status: 404 });
+  }
+
+  // ── Numbered cards require a serial number ────────────────────────────────
+  const cardTierById = new Map(matchingCards.map((c) => [c.id, c.cardTier]));
+  for (let i = 0; i < cards.length; i++) {
+    if (cardTierById.get(cards[i].cardTemplateId) === "NUMBERED" && cards[i].serialNumber === null) {
+      return NextResponse.json(
+        { error: "This card is numbered — please fill in the serial number", cardIndex: i },
+        { status: 400 }
+      );
+    }
   }
 
   // ── Reject in-batch collisions (two entries claiming the same serialized
@@ -176,6 +198,7 @@ export async function POST(
     hitCity:           typeof hitCity    === "string" ? hitCity    : null,
     hitCountry:        typeof hitCountry === "string" ? hitCountry : null,
     seller:            typeof seller     === "string" ? seller     : null,
+    breakerName:       typeof breakerName === "string" ? breakerName : null,
   };
 
   const gels = await Promise.all(

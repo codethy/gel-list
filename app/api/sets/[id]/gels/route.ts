@@ -40,6 +40,8 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //   cardFrontImageUrl  — required (every logged gel needs a front image)
 //   cardBackImageUrl   — optional string
 //   seller             — optional string
+//   breakerName        — optional string, meaningful when acquisitionMethod
+//                        is "BREAKER"
 //   notes              — optional for "SELF", required for "OTHER" (it's
 //                        where the user records where/who they saw pull it)
 //   acknowledgeDuplicate — optional boolean. Only meaningful when another
@@ -105,6 +107,7 @@ export async function POST(
     cardFrontImageUrl,
     cardBackImageUrl,
     seller,
+    breakerName,
     notes,
     acknowledgeDuplicate,
   } = body;
@@ -114,10 +117,11 @@ export async function POST(
   // what counts as "this user's own gel" vs. "a reported sighting."
   const isInHand = loggedFor !== "OTHER";
 
-  // "Which Product" only ever applies to "my own gel, pulled it" — re-derived
-  // server-side rather than trusting the client honored the form's
-  // enabled/disabled state.
-  const productApplies = isInHand && acquisitionMethod === "PULLED";
+  // "Which Product" applies to "Pulled" (SELF only — OTHER never sends this
+  // value) and "Breaker" (either flow, since a break can be either an
+  // owned pull or a reported sighting) — re-derived server-side rather
+  // than trusting the client honored the form's enabled/disabled state.
+  const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
 
   // ── 3. Validate required fields ──────────────────────────────────────────────
   if (!checklistCardId || typeof checklistCardId !== "string") {
@@ -141,11 +145,25 @@ export async function POST(
     );
   }
 
+  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
+    return NextResponse.json(
+      { error: "Please select how you got this card" },
+      { status: 400 }
+    );
+  }
+
+  if (productApplies && (typeof productType !== "string" || !productType)) {
+    return NextResponse.json(
+      { error: "Please select which product this came from" },
+      { status: 400 }
+    );
+  }
+
   // ── 4. Confirm the checklist card belongs to this set ─────────────────────────
   // Security check — prevents attaching a card from a different set.
   const checklistCard = await prisma.checklistCard.findFirst({
     where: { id: checklistCardId, cardSetId: setId },
-    select: { id: true },
+    select: { id: true, cardTier: true },
   });
 
   if (!checklistCard) {
@@ -155,8 +173,15 @@ export async function POST(
     );
   }
 
-  // ── 4b. Duplicate check (serialized cards only) ───────────────────────────────
   const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
+  if (checklistCard.cardTier === "NUMBERED" && validSerialNumber === null) {
+    return NextResponse.json(
+      { error: "This card is numbered — please fill in the serial number" },
+      { status: 400 }
+    );
+  }
+
+  // ── 4b. Duplicate check (serialized cards only) ───────────────────────────────
   const duplicateMatch = await findDuplicateMatch(checklistCardId, validSerialNumber);
 
   if (duplicateMatch && duplicateMatch.userId === userId) {
@@ -206,6 +231,7 @@ export async function POST(
     cardFrontImageUrl: typeof cardFrontImageUrl === "string" ? cardFrontImageUrl : null,
     cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
     seller:            typeof seller === "string" ? seller : null,
+    breakerName:       typeof breakerName === "string" ? breakerName : null,
     notes:             typeof notes  === "string" ? notes  : null,
   });
 

@@ -16,6 +16,9 @@ export interface ChecklistCardOption {
   cardNumber: string;
   playerName: string;
   cardType: string;
+  // Drives the mandatory-Serial-Number rule below — a "NUMBERED" card
+  // can't be logged without one.
+  cardTier?: string;
   parallelType?: string | null;
   printRun?: number | null;
   variationName?: string | null;
@@ -90,6 +93,9 @@ interface FormState {
   cardFrontImageUrl: string;
   cardBackImageUrl: string;
   seller: string;
+  // Only meaningful when acquisitionMethod is "BREAKER" — shared across
+  // every card in the Multiple Gels flow, same as acquisitionMethod itself.
+  breakerName: string;
   notes: string;
 }
 
@@ -105,6 +111,7 @@ const EMPTY_FORM: FormState = {
   cardFrontImageUrl: "",
   cardBackImageUrl:  "",
   seller:            "",
+  breakerName:       "",
   notes:             "",
 };
 
@@ -671,7 +678,9 @@ function MultiCardBlock({
 
       {category !== "TCG" && (
         <div>
-          <Label>Serial Number</Label>
+          <Label>
+            Serial Number{entry.selectedCardOption?.cardTier === "NUMBERED" ? " *" : ""} (if card is numbered 8/10, fill in 8 below)
+          </Label>
           <Input
             type="number"
             value={entry.serialNumber}
@@ -767,6 +776,11 @@ export default function AddGelModal({
 
   const isEditing = Boolean(editingGel);
   const isOther   = loggedFor === "OTHER";
+  // "Which Product" applies to "Pulled" (SELF only — OTHER never offers
+  // it) and "Breaker" (either flow, since a break can be an owned pull or
+  // a reported sighting) — shared by the single-flow fields, the
+  // multi-flow shared fields, and buildBody/handleMultiSubmit below.
+  const productApplies = form.acquisitionMethod === "PULLED" || form.acquisitionMethod === "BREAKER";
 
   // "Year Pulled" options — from the set's release year through the
   // current year, newest first (a card is almost always pulled the year
@@ -808,6 +822,7 @@ export default function AddGelModal({
         cardFrontImageUrl: editingGel.cardFrontImageUrl  ?? "",
         cardBackImageUrl:  editingGel.cardBackImageUrl   ?? "",
         seller:            editingGel.seller             ?? "",
+        breakerName:       editingGel.breakerName         ?? "",
         notes:             editingGel.notes               ?? "",
       });
       // GelEntry.cardTemplate has no cardNumber (it's locked anyway, so the
@@ -817,6 +832,7 @@ export default function AddGelModal({
         cardNumber:    "",
         playerName:    editingGel.cardTemplate.playerName,
         cardType:      editingGel.cardTemplate.cardType,
+        cardTier:      editingGel.cardTemplate.cardTier,
         parallelType:  editingGel.cardTemplate.parallelType  ?? null,
         printRun:      editingGel.cardTemplate.printRun      ?? null,
         variationName: editingGel.cardTemplate.variationName ?? null,
@@ -877,13 +893,12 @@ export default function AddGelModal({
   // pre-existing gel — all send the exact same fields. `extra` layers on
   // whatever distinguishes the specific request (e.g. acknowledgeDuplicate).
   function buildBody(extra?: Record<string, unknown>) {
-    // "Which Product" only ever applies to the "my own gel, pulled it"
-    // case — resolve the chosen ProductOption's id back to the raw
-    // productType/productTypeOther pair the server stores.
-    const selectedProduct =
-      !isOther && form.acquisitionMethod === "PULLED"
-        ? products.find((p) => p.id === form.productOptionId)
-        : undefined;
+    // "Which Product" applies to "Pulled" (SELF only) and "Breaker"
+    // (either flow) — resolve the chosen ProductOption's id back to the
+    // raw productType/productTypeOther pair the server stores.
+    const selectedProduct = productApplies
+      ? products.find((p) => p.id === form.productOptionId)
+      : undefined;
 
     return {
       // Wire field name stays "cardTemplateId" to match what
@@ -905,6 +920,7 @@ export default function AddGelModal({
       cardFrontImageUrl: form.cardFrontImageUrl || null,
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
+      breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
       notes:             form.notes  || null,
       ...extra,
     };
@@ -927,6 +943,21 @@ export default function AddGelModal({
 
     if (isOther && !form.notes.trim()) {
       setError("Please add a note describing where you saw this card pulled.");
+      return;
+    }
+
+    if (!form.acquisitionMethod) {
+      setError("Please select how you got this card.");
+      return;
+    }
+
+    if (productApplies && !form.productOptionId) {
+      setError("Please select which product this came from.");
+      return;
+    }
+
+    if (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber) {
+      setError("This card is numbered — please fill in the serial number.");
       return;
     }
 
@@ -1030,6 +1061,16 @@ export default function AddGelModal({
     e.preventDefault();
     setError(null);
 
+    if (!form.acquisitionMethod) {
+      setError("Please select how you got these cards.");
+      return;
+    }
+
+    if (productApplies && !form.productOptionId) {
+      setError("Please select which product these cards came from.");
+      return;
+    }
+
     for (let i = 0; i < multiCards.length; i++) {
       const c = multiCards[i];
       if (!c.checklistCardId) {
@@ -1044,14 +1085,17 @@ export default function AddGelModal({
         setError(`Please add a note for entry #${i + 1} describing where you saw this card pulled.`);
         return;
       }
+      if (category !== "TCG" && c.selectedCardOption?.cardTier === "NUMBERED" && !c.serialNumber) {
+        setError(`Entry #${i + 1}: this card is numbered — please fill in the serial number.`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
     try {
-      const selectedProduct =
-        !isOther && form.acquisitionMethod === "PULLED"
-          ? products.find((p) => p.id === form.productOptionId)
-          : undefined;
+      const selectedProduct = productApplies
+        ? products.find((p) => p.id === form.productOptionId)
+        : undefined;
 
       const res = await fetch(`/api/sets/${setId}/gels/batch`, {
         method: "POST",
@@ -1066,6 +1110,7 @@ export default function AddGelModal({
           hitCity:    form.hitCity   || null,
           hitCountry: form.hitCountry || null,
           seller:     form.seller || null,
+          breakerName: form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
           cards: multiCards.map((c) => ({
             cardTemplateId:    c.checklistCardId,
             serialNumber:      c.serialNumber ? parseInt(c.serialNumber) : null,
@@ -1099,8 +1144,15 @@ export default function AddGelModal({
   }
 
   const canSubmitMulti =
+    Boolean(form.acquisitionMethod) &&
+    (!productApplies || Boolean(form.productOptionId)) &&
     multiCards.length > 0 &&
-    multiCards.every((c) => c.checklistCardId && c.cardFrontImageUrl && (!isOther || c.notes.trim()));
+    multiCards.every((c) =>
+      c.checklistCardId &&
+      c.cardFrontImageUrl &&
+      (!isOther || c.notes.trim()) &&
+      (category === "TCG" || c.selectedCardOption?.cardTier !== "NUMBERED" || c.serialNumber)
+    );
 
   return (
     <>
@@ -1360,7 +1412,9 @@ export default function AddGelModal({
                       hidden entirely for TCG sets (both SELF and OTHER). ── */}
                   {category !== "TCG" && (
                     <div>
-                      <Label>Serial Number</Label>
+                      <Label>
+                        Serial Number{selectedCardOption?.cardTier === "NUMBERED" ? " *" : ""} (if card is numbered 8/10, fill in 8 below)
+                      </Label>
                       <Input
                         type="number"
                         value={form.serialNumber}
@@ -1373,7 +1427,7 @@ export default function AddGelModal({
 
                   {/* ── Acquisition Method ───────────────────────────────── */}
                   <div>
-                    <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
+                    <Label>{isOther ? "Who pulled it? *" : "How did you get it? *"}</Label>
                     <Select
                       value={form.acquisitionMethod}
                       onChange={(e) => {
@@ -1381,9 +1435,9 @@ export default function AddGelModal({
                         setForm((prev) => ({
                           ...prev,
                           acquisitionMethod: value,
-                          // "Which Product" only applies to "Pulled" — clear
-                          // any selection made while it was briefly enabled.
-                          productOptionId: value === "PULLED" ? prev.productOptionId : "",
+                          // "Which Product" applies to "Pulled"/"Breaker" —
+                          // clear any selection made while it was briefly enabled.
+                          productOptionId: value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
                         }));
                       }}
                     >
@@ -1402,23 +1456,46 @@ export default function AddGelModal({
                           <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
                           <option value="BOUGHT" className="bg-slate-900">Bought</option>
                           <option value="BREAKER" className="bg-slate-900">From a Break</option>
+                          <option value="OTHER" className="bg-slate-900">Other</option>
                         </>
                       )}
                     </Select>
                   </div>
 
-                  {/* ── Which Product (SELF flow only, enabled only once
-                      "Pulled" is selected above) ───────────────────────── */}
-                  {!isOther && (
+                  {/* ── Breaker's Name (conditional on BREAKER, either flow) ── */}
+                  <AnimatePresence>
+                    {form.acquisitionMethod === "BREAKER" && (
+                      <motion.div
+                        key="breakerName"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Breaker&apos;s Name</Label>
+                        <Input
+                          value={form.breakerName}
+                          onChange={setField("breakerName")}
+                          placeholder="e.g. @username, breaker's name..."
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* ── Which Product (shown for SELF always, and for OTHER
+                      when the source is a breaker — enabled once "Pulled"
+                      or "Breaker" is selected) ───────────────────────────── */}
+                  {(!isOther || form.acquisitionMethod === "BREAKER") && (
                     <div>
-                      <Label>Which Product</Label>
+                      <Label>Which Product *</Label>
                       <Select
                         value={form.productOptionId}
                         onChange={setField("productOptionId")}
-                        disabled={form.acquisitionMethod !== "PULLED"}
+                        disabled={!productApplies}
                       >
-                        {form.acquisitionMethod !== "PULLED" ? (
-                          <option value="" className="bg-slate-900">Select &quot;Pulled&quot; above first</option>
+                        {!productApplies ? (
+                          <option value="" className="bg-slate-900">Select product...</option>
                         ) : products.length === 0 ? (
                           <option value="" className="bg-slate-900">No products added for this set yet</option>
                         ) : (
@@ -1480,14 +1557,14 @@ export default function AddGelModal({
                   {/* ── Hit Location ─────────────────────────────────────── */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label>City</Label>
+                      <Label>{form.acquisitionMethod === "BREAKER" ? "City (of the breaker)" : "City"}</Label>
                       <Input
                         value={form.hitCity}
                         onChange={setField("hitCity")}
                       />
                     </div>
                     <div>
-                      <Label>Country</Label>
+                      <Label>{form.acquisitionMethod === "BREAKER" ? "Country (of the breaker)" : "Country"}</Label>
                       <CountrySelect
                         value={form.hitCountry}
                         onChange={(v) => setForm((prev) => ({ ...prev, hitCountry: v }))}
@@ -1521,7 +1598,7 @@ export default function AddGelModal({
                 <>
                   {/* ── Shared fields — every card below uses these ──────── */}
                   <div>
-                    <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
+                    <Label>{isOther ? "Who pulled it? *" : "How did you get it? *"}</Label>
                     <Select
                       value={form.acquisitionMethod}
                       onChange={(e) => {
@@ -1529,7 +1606,7 @@ export default function AddGelModal({
                         setForm((prev) => ({
                           ...prev,
                           acquisitionMethod: value,
-                          productOptionId: value === "PULLED" ? prev.productOptionId : "",
+                          productOptionId: value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
                         }));
                       }}
                     >
@@ -1548,21 +1625,42 @@ export default function AddGelModal({
                           <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
                           <option value="BOUGHT" className="bg-slate-900">Bought</option>
                           <option value="BREAKER" className="bg-slate-900">From a Break</option>
+                          <option value="OTHER" className="bg-slate-900">Other</option>
                         </>
                       )}
                     </Select>
                   </div>
 
-                  {!isOther && (
+                  <AnimatePresence>
+                    {form.acquisitionMethod === "BREAKER" && (
+                      <motion.div
+                        key="breakerName"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Breaker&apos;s Name</Label>
+                        <Input
+                          value={form.breakerName}
+                          onChange={setField("breakerName")}
+                          placeholder="e.g. @username, breaker's name..."
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {(!isOther || form.acquisitionMethod === "BREAKER") && (
                     <div>
-                      <Label>Which Product</Label>
+                      <Label>Which Product *</Label>
                       <Select
                         value={form.productOptionId}
                         onChange={setField("productOptionId")}
-                        disabled={form.acquisitionMethod !== "PULLED"}
+                        disabled={!productApplies}
                       >
-                        {form.acquisitionMethod !== "PULLED" ? (
-                          <option value="" className="bg-slate-900">Select &quot;Pulled&quot; above first</option>
+                        {!productApplies ? (
+                          <option value="" className="bg-slate-900">Select product...</option>
                         ) : products.length === 0 ? (
                           <option value="" className="bg-slate-900">No products added for this set yet</option>
                         ) : (
@@ -1620,14 +1718,14 @@ export default function AddGelModal({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label>City</Label>
+                      <Label>{form.acquisitionMethod === "BREAKER" ? "City (of the breaker)" : "City"}</Label>
                       <Input
                         value={form.hitCity}
                         onChange={setField("hitCity")}
                       />
                     </div>
                     <div>
-                      <Label>Country</Label>
+                      <Label>{form.acquisitionMethod === "BREAKER" ? "Country (of the breaker)" : "Country"}</Label>
                       <CountrySelect
                         value={form.hitCountry}
                         onChange={(v) => setForm((prev) => ({ ...prev, hitCountry: v }))}
@@ -1694,7 +1792,10 @@ export default function AddGelModal({
                       ? !canSubmitMulti
                       : !form.checklistCardId ||
                         !form.cardFrontImageUrl ||
-                        (isOther && !form.notes.trim()))
+                        (isOther && !form.notes.trim()) ||
+                        !form.acquisitionMethod ||
+                        (productApplies && !form.productOptionId) ||
+                        (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber))
                   }
                   className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"
                 >
