@@ -114,6 +114,20 @@ export const MONTHS = [
   "September","October","November","December",
 ];
 
+// ─── MULTI-CARD ENTRY (Multiple Gels flow) ────────────────────────────────────
+// One repeatable Card/Serial/Images/Notes block — everything else (how it
+// was acquired, which product, when, where) is shared across every entry,
+// still held in the single `form` FormState above.
+interface MultiCardEntry {
+  key: number; // stable React key — see the counter ref in the main component
+  checklistCardId: string;
+  selectedCardOption: ChecklistCardOption | null;
+  serialNumber: string;
+  cardFrontImageUrl: string;
+  cardBackImageUrl: string;
+  notes: string;
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 // iPhones save photos as HEIC by default. It's a valid "image/*" file (so it
@@ -602,6 +616,95 @@ function CountrySelect({
   );
 }
 
+// ─── MULTI-CARD BLOCK (Multiple Gels flow) ───────────────────────────────────
+// One repeatable Card/Serial/Images/Notes section. Mirrors the "X" remove
+// button (only shown when more than one block exists) + "+ Add another"
+// text-link pattern already used for repeatable lists in
+// components/admin/AdminProductPacksModal.tsx.
+function MultiCardBlock({
+  entry,
+  index,
+  canRemove,
+  onRemove,
+  onChange,
+  setId,
+  category,
+  isOther,
+}: {
+  entry: MultiCardEntry;
+  index: number;
+  canRemove: boolean;
+  onRemove: () => void;
+  onChange: (patch: Partial<MultiCardEntry>) => void;
+  setId: string;
+  category: string;
+  isOther: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gel #{index + 1}</p>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove entry #${index + 1}`}
+            className="shrink-0 p-1 text-red-400/80 hover:text-red-400 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      <div>
+        <Label>Card *</Label>
+        <ChecklistCardSearch
+          setId={setId}
+          selected={entry.selectedCardOption}
+          onSelect={(option) => onChange({ checklistCardId: option?.id ?? "", selectedCardOption: option })}
+          isLocked={false}
+          category={category}
+        />
+      </div>
+
+      {category !== "TCG" && (
+        <div>
+          <Label>Serial Number</Label>
+          <Input
+            type="number"
+            value={entry.serialNumber}
+            onChange={(e) => onChange({ serialNumber: e.target.value })}
+            placeholder="e.g. 8"
+            min="1"
+          />
+        </div>
+      )}
+
+      <ImageUploadField
+        label="Card Front Image *"
+        value={entry.cardFrontImageUrl}
+        onChange={(v) => onChange({ cardFrontImageUrl: v })}
+      />
+      <ImageUploadField
+        label="Card Back Image"
+        value={entry.cardBackImageUrl}
+        onChange={(v) => onChange({ cardBackImageUrl: v })}
+      />
+
+      <div>
+        <Label>{isOther ? "Notes (e.g. breaker name, eBay seller name etc.) *" : "Notes"}</Label>
+        <Textarea
+          value={entry.notes}
+          onChange={(e) => onChange({ notes: e.target.value })}
+          placeholder={isOther ? "e.g. Hobby Shop Breaks, @username on Instagram..." : "Any extra details about this card..."}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function AddGelModal({
@@ -635,11 +738,32 @@ export default function AddGelModal({
   >(null);
   const [isResolvingDuplicate, setIsResolvingDuplicate] = useState(false);
 
-  // "choice": the "are you logging your own gel or someone else's?" screen —
-  // shown first for every fresh (non-edit) open. "form": the actual log
-  // form, in either its SELF or OTHER variant depending on loggedFor.
-  const [step, setStep]           = useState<"choice" | "form">("choice");
+  // "choice": the "are you logging your own gel or someone else's?" screen.
+  // "mode": the "Single Gel" vs "Multiple Gels" screen shown next. "form":
+  // the actual log form, in whichever of the four SELF/OTHER × Single/
+  // Multiple variants `loggedFor`/`logMode` select. Editing an existing gel
+  // skips "choice" and "mode" entirely, going straight to "form" in
+  // logMode "single" (editing is always single-gel).
+  const [step, setStep]           = useState<"choice" | "mode" | "form">("choice");
   const [loggedFor, setLoggedFor] = useState<LoggedFor>("SELF");
+  const [logMode, setLogMode]     = useState<"single" | "multiple">("single");
+
+  // ── Multiple Gels flow state ───────────────────────────────────────────────
+  const [multiCards, setMultiCards] = useState<MultiCardEntry[]>([]);
+  const multiCardKeyRef = useRef(0);
+
+  function newMultiCardEntry(prefill?: ChecklistCardOption | null): MultiCardEntry {
+    multiCardKeyRef.current += 1;
+    return {
+      key: multiCardKeyRef.current,
+      checklistCardId: prefill?.id ?? "",
+      selectedCardOption: prefill ?? null,
+      serialNumber: "",
+      cardFrontImageUrl: "",
+      cardBackImageUrl: "",
+      notes: "",
+    };
+  }
 
   const isEditing = Boolean(editingGel);
   const isOther   = loggedFor === "OTHER";
@@ -658,8 +782,10 @@ export default function AddGelModal({
 
     if (editingGel) {
       // Editing always resumes directly into the form the gel was
-      // originally logged under — there's no reassigning SELF ↔ OTHER.
+      // originally logged under — there's no reassigning SELF ↔ OTHER,
+      // and editing is always single-gel.
       setStep("form");
+      setLogMode("single");
       setLoggedFor(editingGel.isInHand === false ? "OTHER" : "SELF");
       // Resolve which ProductOption (if any) matches this gel's stored
       // productType/productTypeOther — note this can come up empty if the
@@ -699,8 +825,10 @@ export default function AddGelModal({
     } else {
       setStep("choice");
       setLoggedFor("SELF");
+      setLogMode("single");
       setForm({ ...EMPTY_FORM, checklistCardId: preselectedCardOption?.id ?? "" });
       setSelectedCardOption(preselectedCardOption ?? null);
+      setMultiCards([newMultiCardEntry(preselectedCardOption)]);
     }
     setError(null);
     setDuplicatePrompt(null);
@@ -732,6 +860,17 @@ export default function AddGelModal({
       },
     []
   );
+
+  // ── Multiple Gels: per-entry field updaters ────────────────────────────────
+  function updateMultiCard(key: number, patch: Partial<MultiCardEntry>) {
+    setMultiCards((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+  }
+  function addMultiCard() {
+    setMultiCards((prev) => [...prev, newMultiCardEntry()]);
+  }
+  function removeMultiCard(key: number) {
+    setMultiCards((prev) => prev.filter((c) => c.key !== key));
+  }
 
   // ── Body shared by every write this form can make: the initial POST/PATCH,
   // the "File a Duplicate" re-POST, and the "Replace" PATCH onto the
@@ -883,6 +1022,86 @@ export default function AddGelModal({
     }
   }
 
+  // ── Multiple Gels: submit ──────────────────────────────────────────────────
+  // All entries share the acquisition/product/date/location fields in
+  // `form` — see app/api/sets/[id]/gels/batch/route.ts for the exact wire
+  // shape this builds.
+  async function handleMultiSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    for (let i = 0; i < multiCards.length; i++) {
+      const c = multiCards[i];
+      if (!c.checklistCardId) {
+        setError(`Please select a card for entry #${i + 1}.`);
+        return;
+      }
+      if (!c.cardFrontImageUrl) {
+        setError(`Please upload a card front image for entry #${i + 1}.`);
+        return;
+      }
+      if (isOther && !c.notes.trim()) {
+        setError(`Please add a note for entry #${i + 1} describing where you saw this card pulled.`);
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      const selectedProduct =
+        !isOther && form.acquisitionMethod === "PULLED"
+          ? products.find((p) => p.id === form.productOptionId)
+          : undefined;
+
+      const res = await fetch(`/api/sets/${setId}/gels/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loggedFor,
+          acquisitionMethod: form.acquisitionMethod || null,
+          productType:       selectedProduct?.productType ?? null,
+          productTypeOther:  selectedProduct?.productTypeOther ?? null,
+          hitYear:    form.hitYear   ? parseInt(form.hitYear)   : null,
+          hitMonth:   form.hitMonth  ? parseInt(form.hitMonth)  : null,
+          hitCity:    form.hitCity   || null,
+          hitCountry: form.hitCountry || null,
+          seller:     form.seller || null,
+          cards: multiCards.map((c) => ({
+            cardTemplateId:    c.checklistCardId,
+            serialNumber:      c.serialNumber ? parseInt(c.serialNumber) : null,
+            cardFrontImageUrl: c.cardFrontImageUrl || null,
+            cardBackImageUrl:  c.cardBackImageUrl  || null,
+            notes:             c.notes || null,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (typeof data.cardIndex === "number") {
+          setError(`Entry #${data.cardIndex + 1}: ${data.error}`);
+        } else {
+          setError(data.error ?? "Something went wrong. Please try again.");
+        }
+        return;
+      }
+
+      for (const gel of data.gels as GelEntry[]) {
+        onSuccess(gel);
+      }
+      onClose();
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const canSubmitMulti =
+    multiCards.length > 0 &&
+    multiCards.every((c) => c.checklistCardId && c.cardFrontImageUrl && (!isOther || c.notes.trim()));
+
   return (
     <>
     <AnimatePresence>
@@ -951,7 +1170,7 @@ export default function AddGelModal({
                         hitCity:    defaultHitCity    ?? "",
                         hitCountry: defaultHitCountry ?? "",
                       }));
-                      setStep("form");
+                      setStep("mode");
                     }}
                     className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-blue-500/60 hover:bg-slate-800 text-left transition-all duration-150"
                   >
@@ -981,7 +1200,7 @@ export default function AddGelModal({
                         hitCity: "",
                         hitCountry: "",
                       }));
-                      setStep("form");
+                      setStep("mode");
                     }}
                     className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-orange-500/60 hover:bg-slate-800 text-left transition-all duration-150"
                   >
@@ -998,15 +1217,94 @@ export default function AddGelModal({
                   </button>
                 </div>
               </div>
+            ) : step === "mode" ? (
+              <div className="p-6 space-y-5">
+                {/* ── Header ─────────────────────────────────────────────── */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setStep("choice")}
+                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 font-medium mb-1 transition-colors"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 18l-6-6 6-6" />
+                      </svg>
+                      Back
+                    </button>
+                    <h2 className="text-lg font-bold text-white">Log a Gel</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Are you logging one card, or several at once?
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
+                    aria-label="Close modal"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* ── Mode buttons ─────────────────────────────────────────── */}
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogMode("single");
+                      setStep("form");
+                    }}
+                    className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-blue-500/60 hover:bg-slate-800 text-left transition-all duration-150"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="4" y="2" width="16" height="20" rx="2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Single Gel</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Log one card at a time.</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogMode("multiple");
+                      setMultiCards((prev) => (prev.length > 0 ? prev : [newMultiCardEntry(preselectedCardOption)]));
+                      setStep("form");
+                    }}
+                    className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-violet-500/60 hover:bg-slate-800 text-left transition-all duration-150"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="3" width="13" height="17" rx="2" />
+                        <path d="M19 7v13a1 1 0 0 1-1 1H9" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Multiple Gels</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {isOther
+                          ? "Log multiple cards you saw from the same person."
+                          : "Log multiple cards that were pulled or bought at the same time."}
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
             ) : (
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={logMode === "multiple" ? handleMultiSubmit : handleSubmit} className="p-6 space-y-5">
               {/* ── Header ───────────────────────────────────────────────── */}
               <div className="flex items-start justify-between gap-4">
                 <div>
                   {!isEditing && (
                     <button
                       type="button"
-                      onClick={() => setStep("choice")}
+                      onClick={() => setStep("mode")}
                       className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 font-medium mb-1 transition-colors"
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1019,9 +1317,13 @@ export default function AddGelModal({
                   <p className="text-xs text-slate-400 mt-0.5">
                     {isEditing
                       ? "Update the details for this logged gel."
-                      : isOther
-                        ? "Record a card you saw someone else pull or sell."
-                        : "Record a card you pulled or purchased from this set."}
+                      : logMode === "multiple"
+                        ? isOther
+                          ? "Record several cards you saw someone else pull or sell."
+                          : "Record several cards you pulled or purchased from this set."
+                        : isOther
+                          ? "Record a card you saw someone else pull or sell."
+                          : "Record a card you pulled or purchased from this set."}
                   </p>
                 </div>
                 <button
@@ -1036,182 +1338,329 @@ export default function AddGelModal({
                 </button>
               </div>
 
-              {/* ── Card Selection ───────────────────────────────────────── */}
-              <div>
-                <Label>Card *</Label>
-                <ChecklistCardSearch
-                  setId={setId}
-                  selected={selectedCardOption}
-                  onSelect={(option) => {
-                    setForm((prev) => ({ ...prev, checklistCardId: option?.id ?? "" }));
-                    setSelectedCardOption(option);
-                  }}
-                  isLocked={Boolean(preselectedCardOption) || isEditing}
-                  category={category}
-                />
-              </div>
-
-              {/* ── Acquisition Method ───────────────────────────────────── */}
-              <div>
-                <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
-                <Select
-                  value={form.acquisitionMethod}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setForm((prev) => ({
-                      ...prev,
-                      acquisitionMethod: value,
-                      // "Which Product" only applies to "Pulled" — clear
-                      // any selection made while it was briefly enabled.
-                      productOptionId: value === "PULLED" ? prev.productOptionId : "",
-                    }));
-                  }}
-                >
-                  {isOther ? (
-                    <>
-                      <option value="" className="bg-slate-900">Select source...</option>
-                      <option value="BREAKER" className="bg-slate-900">Breaker</option>
-                      <option value="EBAY" className="bg-slate-900">eBay</option>
-                      <option value="FRIEND" className="bg-slate-900">Friend</option>
-                      <option value="SOCIAL_MEDIA" className="bg-slate-900">Social Media</option>
-                      <option value="OTHER" className="bg-slate-900">Others</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="" className="bg-slate-900">Select method...</option>
-                      <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
-                      <option value="BOUGHT" className="bg-slate-900">Bought</option>
-                      <option value="BREAKER" className="bg-slate-900">From a Break</option>
-                    </>
-                  )}
-                </Select>
-              </div>
-
-              {/* ── Which Product (SELF flow only, enabled only once
-                  "Pulled" is selected above) ───────────────────────────── */}
-              {!isOther && (
-                <div>
-                  <Label>Which Product</Label>
-                  <Select
-                    value={form.productOptionId}
-                    onChange={setField("productOptionId")}
-                    disabled={form.acquisitionMethod !== "PULLED"}
-                  >
-                    {form.acquisitionMethod !== "PULLED" ? (
-                      <option value="" className="bg-slate-900">Select &quot;Pulled&quot; above first</option>
-                    ) : products.length === 0 ? (
-                      <option value="" className="bg-slate-900">No products added for this set yet</option>
-                    ) : (
-                      <>
-                        <option value="" className="bg-slate-900">Select product...</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
-                        ))}
-                      </>
-                    )}
-                  </Select>
-                </div>
-              )}
-
-              {/* ── Seller (conditional on BOUGHT, "my own gel" flow only —
-                  the "someone else's gel" flow captures this in Notes instead) ── */}
-              <AnimatePresence>
-                {!isOther && form.acquisitionMethod === "BOUGHT" && (
-                  <motion.div
-                    key="seller"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <Label>Seller / Source</Label>
-                    <Input
-                      value={form.seller}
-                      onChange={setField("seller")}
-                      placeholder="e.g. eBay, COMC, local shop..."
+              {logMode === "single" ? (
+                <>
+                  {/* ── Card Selection ───────────────────────────────────── */}
+                  <div>
+                    <Label>Card *</Label>
+                    <ChecklistCardSearch
+                      setId={setId}
+                      selected={selectedCardOption}
+                      onSelect={(option) => {
+                        setForm((prev) => ({ ...prev, checklistCardId: option?.id ?? "" }));
+                        setSelectedCardOption(option);
+                      }}
+                      isLocked={Boolean(preselectedCardOption) || isEditing}
+                      category={category}
                     />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
 
-              {/* ── Serial Number ─────────────────────────────────────────── */}
-              {/* TCG cards aren't reliably serial-numbered, so this field is
-                  hidden entirely for TCG sets (both SELF and OTHER). */}
-              {category !== "TCG" && (
-                <div>
-                  <Label>Serial Number</Label>
-                  <Input
-                    type="number"
-                    value={form.serialNumber}
-                    onChange={setField("serialNumber")}
-                    placeholder="e.g. 8"
-                    min="1"
+                  {/* ── Serial Number — sits right after Card. TCG cards
+                      aren't reliably serial-numbered, so this field is
+                      hidden entirely for TCG sets (both SELF and OTHER). ── */}
+                  {category !== "TCG" && (
+                    <div>
+                      <Label>Serial Number</Label>
+                      <Input
+                        type="number"
+                        value={form.serialNumber}
+                        onChange={setField("serialNumber")}
+                        placeholder="e.g. 8"
+                        min="1"
+                      />
+                    </div>
+                  )}
+
+                  {/* ── Acquisition Method ───────────────────────────────── */}
+                  <div>
+                    <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
+                    <Select
+                      value={form.acquisitionMethod}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setForm((prev) => ({
+                          ...prev,
+                          acquisitionMethod: value,
+                          // "Which Product" only applies to "Pulled" — clear
+                          // any selection made while it was briefly enabled.
+                          productOptionId: value === "PULLED" ? prev.productOptionId : "",
+                        }));
+                      }}
+                    >
+                      {isOther ? (
+                        <>
+                          <option value="" className="bg-slate-900">Select source...</option>
+                          <option value="BREAKER" className="bg-slate-900">Breaker</option>
+                          <option value="EBAY" className="bg-slate-900">eBay</option>
+                          <option value="FRIEND" className="bg-slate-900">Friend</option>
+                          <option value="SOCIAL_MEDIA" className="bg-slate-900">Social Media</option>
+                          <option value="OTHER" className="bg-slate-900">Others</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="" className="bg-slate-900">Select method...</option>
+                          <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
+                          <option value="BOUGHT" className="bg-slate-900">Bought</option>
+                          <option value="BREAKER" className="bg-slate-900">From a Break</option>
+                        </>
+                      )}
+                    </Select>
+                  </div>
+
+                  {/* ── Which Product (SELF flow only, enabled only once
+                      "Pulled" is selected above) ───────────────────────── */}
+                  {!isOther && (
+                    <div>
+                      <Label>Which Product</Label>
+                      <Select
+                        value={form.productOptionId}
+                        onChange={setField("productOptionId")}
+                        disabled={form.acquisitionMethod !== "PULLED"}
+                      >
+                        {form.acquisitionMethod !== "PULLED" ? (
+                          <option value="" className="bg-slate-900">Select &quot;Pulled&quot; above first</option>
+                        ) : products.length === 0 ? (
+                          <option value="" className="bg-slate-900">No products added for this set yet</option>
+                        ) : (
+                          <>
+                            <option value="" className="bg-slate-900">Select product...</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
+                            ))}
+                          </>
+                        )}
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* ── Seller (conditional on BOUGHT, "my own gel" flow only —
+                      the "someone else's gel" flow captures this in Notes instead) ── */}
+                  <AnimatePresence>
+                    {!isOther && form.acquisitionMethod === "BOUGHT" && (
+                      <motion.div
+                        key="seller"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Seller / Source</Label>
+                        <Input
+                          value={form.seller}
+                          onChange={setField("seller")}
+                          placeholder="e.g. eBay, COMC, local shop..."
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* ── Hit Date ─────────────────────────────────────────── */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Month Pulled</Label>
+                      <Select value={form.hitMonth} onChange={setField("hitMonth")}>
+                        <option value="" className="bg-slate-900">Month...</option>
+                        {MONTHS.map((m, i) => (
+                          <option key={m} value={i + 1} className="bg-slate-900">{m}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Year Pulled</Label>
+                      <Select value={form.hitYear} onChange={setField("hitYear")}>
+                        <option value="" className="bg-slate-900">Year...</option>
+                        {yearOptions.map((y) => (
+                          <option key={y} value={y} className="bg-slate-900">{y}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* ── Hit Location ─────────────────────────────────────── */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>City</Label>
+                      <Input
+                        value={form.hitCity}
+                        onChange={setField("hitCity")}
+                      />
+                    </div>
+                    <div>
+                      <Label>Country</Label>
+                      <CountrySelect
+                        value={form.hitCountry}
+                        onChange={(v) => setForm((prev) => ({ ...prev, hitCountry: v }))}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Card Images — Upload buttons (replaces URL text inputs) ── */}
+                  <ImageUploadField
+                    label="Card Front Image *"
+                    value={form.cardFrontImageUrl}
+                    onChange={setImageField("cardFrontImageUrl")}
                   />
-                </div>
+                  <ImageUploadField
+                    label="Card Back Image"
+                    value={form.cardBackImageUrl}
+                    onChange={setImageField("cardBackImageUrl")}
+                  />
+
+                  {/* ── Notes ────────────────────────────────────────────── */}
+                  <div>
+                    <Label>{isOther ? "Notes (e.g. breaker name, eBay seller name etc.) *" : "Notes"}</Label>
+                    <Textarea
+                      value={form.notes}
+                      onChange={setField("notes")}
+                      placeholder={isOther ? "e.g. Hobby Shop Breaks, @username on Instagram..." : "Any extra details about this card..."}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* ── Shared fields — every card below uses these ──────── */}
+                  <div>
+                    <Label>{isOther ? "Who pulled it?" : "How did you get it?"}</Label>
+                    <Select
+                      value={form.acquisitionMethod}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setForm((prev) => ({
+                          ...prev,
+                          acquisitionMethod: value,
+                          productOptionId: value === "PULLED" ? prev.productOptionId : "",
+                        }));
+                      }}
+                    >
+                      {isOther ? (
+                        <>
+                          <option value="" className="bg-slate-900">Select source...</option>
+                          <option value="BREAKER" className="bg-slate-900">Breaker</option>
+                          <option value="EBAY" className="bg-slate-900">eBay</option>
+                          <option value="FRIEND" className="bg-slate-900">Friend</option>
+                          <option value="SOCIAL_MEDIA" className="bg-slate-900">Social Media</option>
+                          <option value="OTHER" className="bg-slate-900">Others</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="" className="bg-slate-900">Select method...</option>
+                          <option value="PULLED" className="bg-slate-900">Pulled (from a pack)</option>
+                          <option value="BOUGHT" className="bg-slate-900">Bought</option>
+                          <option value="BREAKER" className="bg-slate-900">From a Break</option>
+                        </>
+                      )}
+                    </Select>
+                  </div>
+
+                  {!isOther && (
+                    <div>
+                      <Label>Which Product</Label>
+                      <Select
+                        value={form.productOptionId}
+                        onChange={setField("productOptionId")}
+                        disabled={form.acquisitionMethod !== "PULLED"}
+                      >
+                        {form.acquisitionMethod !== "PULLED" ? (
+                          <option value="" className="bg-slate-900">Select &quot;Pulled&quot; above first</option>
+                        ) : products.length === 0 ? (
+                          <option value="" className="bg-slate-900">No products added for this set yet</option>
+                        ) : (
+                          <>
+                            <option value="" className="bg-slate-900">Select product...</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
+                            ))}
+                          </>
+                        )}
+                      </Select>
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {!isOther && form.acquisitionMethod === "BOUGHT" && (
+                      <motion.div
+                        key="seller"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Seller / Source</Label>
+                        <Input
+                          value={form.seller}
+                          onChange={setField("seller")}
+                          placeholder="e.g. eBay, COMC, local shop..."
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Month Pulled</Label>
+                      <Select value={form.hitMonth} onChange={setField("hitMonth")}>
+                        <option value="" className="bg-slate-900">Month...</option>
+                        {MONTHS.map((m, i) => (
+                          <option key={m} value={i + 1} className="bg-slate-900">{m}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Year Pulled</Label>
+                      <Select value={form.hitYear} onChange={setField("hitYear")}>
+                        <option value="" className="bg-slate-900">Year...</option>
+                        {yearOptions.map((y) => (
+                          <option key={y} value={y} className="bg-slate-900">{y}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>City</Label>
+                      <Input
+                        value={form.hitCity}
+                        onChange={setField("hitCity")}
+                      />
+                    </div>
+                    <div>
+                      <Label>Country</Label>
+                      <CountrySelect
+                        value={form.hitCountry}
+                        onChange={(v) => setForm((prev) => ({ ...prev, hitCountry: v }))}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Repeating Card/Serial/Images/Notes blocks ────────── */}
+                  <div className="space-y-4">
+                    {multiCards.map((entry, i) => (
+                      <MultiCardBlock
+                        key={entry.key}
+                        entry={entry}
+                        index={i}
+                        canRemove={multiCards.length > 1}
+                        onRemove={() => removeMultiCard(entry.key)}
+                        onChange={(patch) => updateMultiCard(entry.key, patch)}
+                        setId={setId}
+                        category={category}
+                        isOther={isOther}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={addMultiCard}
+                    className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    + Add another Gel
+                  </button>
+                </>
               )}
-
-              {/* ── Hit Date ─────────────────────────────────────────────── */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Month Pulled</Label>
-                  <Select value={form.hitMonth} onChange={setField("hitMonth")}>
-                    <option value="" className="bg-slate-900">Month...</option>
-                    {MONTHS.map((m, i) => (
-                      <option key={m} value={i + 1} className="bg-slate-900">{m}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <Label>Year Pulled</Label>
-                  <Select value={form.hitYear} onChange={setField("hitYear")}>
-                    <option value="" className="bg-slate-900">Year...</option>
-                    {yearOptions.map((y) => (
-                      <option key={y} value={y} className="bg-slate-900">{y}</option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-
-              {/* ── Hit Location ─────────────────────────────────────────── */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>City</Label>
-                  <Input
-                    value={form.hitCity}
-                    onChange={setField("hitCity")}
-                  />
-                </div>
-                <div>
-                  <Label>Country</Label>
-                  <CountrySelect
-                    value={form.hitCountry}
-                    onChange={(v) => setForm((prev) => ({ ...prev, hitCountry: v }))}
-                  />
-                </div>
-              </div>
-
-              {/* ── Card Images — Upload buttons (replaces URL text inputs) ── */}
-              <ImageUploadField
-                label="Card Front Image *"
-                value={form.cardFrontImageUrl}
-                onChange={setImageField("cardFrontImageUrl")}
-              />
-              <ImageUploadField
-                label="Card Back Image"
-                value={form.cardBackImageUrl}
-                onChange={setImageField("cardBackImageUrl")}
-              />
-
-              {/* ── Notes ────────────────────────────────────────────────── */}
-              <div>
-                <Label>{isOther ? "Notes (e.g. breaker name, eBay seller name etc.) *" : "Notes"}</Label>
-                <Textarea
-                  value={form.notes}
-                  onChange={setField("notes")}
-                  placeholder={isOther ? "e.g. Hobby Shop Breaks, @username on Instagram..." : "Any extra details about this card..."}
-                />
-              </div>
 
               {/* ── Error ────────────────────────────────────────────────── */}
               <AnimatePresence>
@@ -1241,9 +1690,11 @@ export default function AddGelModal({
                   type="submit"
                   disabled={
                     isSubmitting ||
-                    !form.checklistCardId ||
-                    !form.cardFrontImageUrl ||
-                    (isOther && !form.notes.trim())
+                    (logMode === "multiple"
+                      ? !canSubmitMulti
+                      : !form.checklistCardId ||
+                        !form.cardFrontImageUrl ||
+                        (isOther && !form.notes.trim()))
                   }
                   className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"
                 >

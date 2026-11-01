@@ -6,9 +6,12 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
+import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicateFile } from "@/lib/data/gels";
 
 // ─── POST /api/sets/[id]/gels ─────────────────────────────────────────────────
-// Creates a new PortfolioCard (gel) for the current user.
+// Creates a new PortfolioCard (gel) for the current user. For logging
+// several cards that share the same acquisition/date/location details in
+// one request, see the batch sibling at app/api/sets/[id]/gels/batch/route.ts.
 //
 // Body fields:
 //   cardTemplateId     — required. Despite the name, this is the id of a
@@ -41,8 +44,8 @@ import { revalidateSetDetailCache } from "@/lib/data/sets";
 //                        where the user records where/who they saw pull it)
 //   acknowledgeDuplicate — optional boolean. Only meaningful when another
 //                        user already logged a gel with the same
-//                        checklistCardId + serialNumber (see step 4a below)
-//                        — set true once the user has seen that warning and
+//                        checklistCardId + serialNumber (see below) — set
+//                        true once the user has seen that warning and
 //                        clicked "File a Duplicate" to proceed anyway.
 //
 // Duplicate handling (serialized cards only — a null serialNumber never
@@ -153,57 +156,21 @@ export async function POST(
   }
 
   // ── 4b. Duplicate check (serialized cards only) ───────────────────────────────
-  // Two PortfolioCards sharing a checklistCardId + serialNumber means either
-  // this user double-logged their own card, or two different users are
-  // claiming the same numbered copy — see the doc comment above.
   const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
-  let duplicateMatch: { id: string; userId: string; createdAt: Date; serialNumber: number | null; cardFrontImageUrl: string | null; user: { name: string | null; username: string | null; handle: string | null } } | null = null;
-
-  if (validSerialNumber !== null) {
-    duplicateMatch = await prisma.portfolioCard.findFirst({
-      where:   { checklistCardId, serialNumber: validSerialNumber },
-      orderBy: { createdAt: "asc" },
-      select: {
-        id:                true,
-        userId:            true,
-        createdAt:         true,
-        serialNumber:      true,
-        cardFrontImageUrl: true,
-        user: { select: { name: true, username: true, handle: true } },
-      },
-    });
-  }
+  const duplicateMatch = await findDuplicateMatch(checklistCardId, validSerialNumber);
 
   if (duplicateMatch && duplicateMatch.userId === userId) {
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId);
     return NextResponse.json(
-      {
-        error: "You've already logged this exact gel.",
-        duplicateKind: "SELF",
-        existingGel: {
-          id:                duplicateMatch.id,
-          createdAt:         duplicateMatch.createdAt.toISOString(),
-          serialNumber:      duplicateMatch.serialNumber,
-          cardFrontImageUrl: duplicateMatch.cardFrontImageUrl,
-        },
-      },
+      { error: "You've already logged this exact gel.", duplicateKind, existingGel },
       { status: 409 }
     );
   }
 
   if (duplicateMatch && duplicateMatch.userId !== userId && acknowledgeDuplicate !== true) {
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId);
     return NextResponse.json(
-      {
-        error: "Someone else has already logged this exact card.",
-        duplicateKind: "OTHER",
-        existingGel: {
-          id:                duplicateMatch.id,
-          createdAt:         duplicateMatch.createdAt.toISOString(),
-          serialNumber:      duplicateMatch.serialNumber,
-          cardFrontImageUrl: duplicateMatch.cardFrontImageUrl,
-          loggedByName:      duplicateMatch.user.name ?? duplicateMatch.user.username ?? "A user",
-          loggedByHandle:    duplicateMatch.user.handle,
-        },
-      },
+      { error: "Someone else has already logged this exact card.", duplicateKind, existingGel },
       { status: 409 }
     );
   }
@@ -221,149 +188,47 @@ export async function POST(
   const isVerified = isFilingDuplicate ? false : (loggingUser?.isVerifiedUser ?? false);
 
   // ── 5. Create the PortfolioCard ──────────────────────────────────────────────
-  const portfolioCard = await prisma.portfolioCard.create({
-    data: {
-      // ── FIX 2: Use Prisma relation connect syntax instead of raw userId ──────
-      // Prisma v7 requires you to connect related records using the relation
-      // name ("user") and a nested "connect" object. Writing `userId` directly
-      // is rejected. Prisma will handle writing the foreign key column for us.
-      user: {
-        connect: { id: userId },
-      },
-      cardSet: {
-        connect: { id: setId },
-      },
-      checklistCard: {
-        connect: { id: checklistCardId },
-      },
-      isInHand:      isInHand,
-      isHit:         true,
-      isVerified:    isVerified,
-      duplicateFlag: isFilingDuplicate ? "PENDING" : "NONE",
-      acquisitionMethod:
-        typeof acquisitionMethod === "string"
-          ? (acquisitionMethod as never)
-          : undefined,
-      productType:
-        productApplies && typeof productType === "string"
-          ? (productType as never)
-          : null,
-      productTypeOther:
-        productApplies && typeof productTypeOther === "string"
-          ? productTypeOther
-          : null,
-      serialNumber:
-        typeof serialNumber === "number" ? serialNumber : null,
-      hitYear:
-        typeof hitYear === "number" ? hitYear : null,
-      hitMonth:
-        typeof hitMonth === "number" ? hitMonth : null,
-      hitCity:
-        typeof hitCity === "string" ? hitCity : null,
-      hitCountry:
-        typeof hitCountry === "string" ? hitCountry : null,
-      cardFrontImageUrl:
-        typeof cardFrontImageUrl === "string" ? cardFrontImageUrl : null,
-      cardBackImageUrl:
-        typeof cardBackImageUrl === "string" ? cardBackImageUrl : null,
-      seller:
-        typeof seller === "string" ? seller : null,
-      notes:
-        typeof notes === "string" ? notes : null,
-    },
-
-    // ── Return only the fields the frontend GelEntry type needs ──────────────
-    select: {
-      id:                true,
-      checklistCardId:   true,
-      isInHand:          true,
-      isVerified:        true,
-      duplicateFlag:     true,
-      acquisitionMethod: true,
-      productType:       true,
-      productTypeOther:  true,
-      serialNumber:      true,
-      hitYear:           true,
-      hitMonth:          true,
-      hitCity:           true,
-      hitCountry:        true,
-      cardFrontImageUrl: true,
-      cardBackImageUrl:  true,
-      seller:            true,
-      notes:             true,
-      checklistCard: {
-        select: {
-          playerName:    true,
-          cardCategory:  true,
-          parallel:      true,
-          printRun:      true,
-          variationName: true,
-          team:          true,
-        },
-      },
-    },
+  const gel = await createGelRow({
+    userId,
+    setId,
+    checklistCardId,
+    isInHand,
+    isVerified,
+    duplicateFlag:     isFilingDuplicate ? "PENDING" : "NONE",
+    acquisitionMethod: typeof acquisitionMethod === "string" ? acquisitionMethod : null,
+    productType:       productApplies && typeof productType === "string" ? productType : null,
+    productTypeOther:  productApplies && typeof productTypeOther === "string" ? productTypeOther : null,
+    serialNumber:      validSerialNumber,
+    hitYear:           typeof hitYear    === "number" ? hitYear    : null,
+    hitMonth:          typeof hitMonth   === "number" ? hitMonth   : null,
+    hitCity:           typeof hitCity    === "string" ? hitCity    : null,
+    hitCountry:        typeof hitCountry === "string" ? hitCountry : null,
+    cardFrontImageUrl: typeof cardFrontImageUrl === "string" ? cardFrontImageUrl : null,
+    cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
+    seller:            typeof seller === "string" ? seller : null,
+    notes:             typeof notes  === "string" ? notes  : null,
   });
 
   // Only "my own gel" submissions update the remembered City/Country
   // defaults — a "someone else's gel" report isn't this user's own location.
   if (isInHand) {
-    await rememberGelLocationDefaults(userId, hitCity, hitCountry);
+    await rememberGelLocationDefaults(
+      userId,
+      typeof hitCity === "string" ? hitCity : null,
+      typeof hitCountry === "string" ? hitCountry : null
+    );
   }
 
-  // Filing a duplicate: flag the pre-existing gel too (it keeps its own
-  // isVerified as-is — only the "Possible Duplicate" tag is new for it) and
-  // open the case file for the developer to review at /admin/duplicate-gels.
+  // Filing a duplicate: flag the pre-existing gel too and open the case
+  // file for the developer to review at /admin/duplicate-gels.
   if (isFilingDuplicate && duplicateMatch) {
-    await prisma.portfolioCard.update({
-      where: { id: duplicateMatch.id },
-      data:  { duplicateFlag: "PENDING" },
-    });
-    await prisma.duplicateGelFile.create({
-      data: {
-        checklistCard: { connect: { id: checklistCardId } },
-        filedByUser:   { connect: { id: userId } },
-        filedGel:      { connect: { id: portfolioCard.id } },
-        existingGel:   { connect: { id: duplicateMatch.id } },
-      },
-    });
+    await openDuplicateFile(checklistCardId, userId, gel.id, duplicateMatch.id);
   }
 
   // A new gel changes this set's cached checklist-row status/gelsPulled/
   // cardHistory and chasesPulledInSet — invalidate the shared cache so
   // every other viewer's next load reflects it immediately.
   revalidateSetDetailCache(setId);
-
-  // ── 6. Shape the response to match the GelEntry type ─────────────────────────
-  // Field names here (cardTemplateId, cardTemplate.cardType/parallelType) are
-  // kept as-is even though the data now comes from ChecklistCard, so the
-  // frontend (YourGels.tsx, SetDetailClient.tsx) doesn't need to change yet.
-  const gel = {
-    id:                portfolioCard.id,
-    cardTemplateId:    portfolioCard.checklistCardId,
-    isInHand:          portfolioCard.isInHand,
-    isVerified:        portfolioCard.isVerified,
-    duplicateFlag:     String(portfolioCard.duplicateFlag),
-    acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
-    productType:       portfolioCard.productType ? String(portfolioCard.productType) : null,
-    productTypeOther:  portfolioCard.productTypeOther  ?? null,
-    serialNumber:      portfolioCard.serialNumber      ?? null,
-    hitYear:           portfolioCard.hitYear           ?? null,
-    hitMonth:          portfolioCard.hitMonth          ?? null,
-    hitCity:           portfolioCard.hitCity           ?? null,
-    hitCountry:        portfolioCard.hitCountry        ?? null,
-    cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
-    cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
-    seller:            portfolioCard.seller            ?? null,
-    notes:             portfolioCard.notes             ?? null,
-    cardTemplate: {
-      playerName:    portfolioCard.checklistCard.playerName,
-      cardType:      String(portfolioCard.checklistCard.cardCategory),
-      parallelType:  portfolioCard.checklistCard.parallel ?? null,
-      printRun:      portfolioCard.checklistCard.printRun ?? null,
-      variationName: portfolioCard.checklistCard.variationName ?? null,
-      team:          portfolioCard.checklistCard.team     ?? null,
-    },
-  };
 
   return NextResponse.json({ gel }, { status: 201 });
 }
