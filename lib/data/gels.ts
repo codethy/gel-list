@@ -8,6 +8,7 @@
 // rather than two copies drifting apart.
 
 import { prisma } from "@/lib/prisma";
+import { createCoOwnershipRequestNotification } from "@/lib/data/notifications";
 
 // ─── DUPLICATE MATCH ────────────────────────────────────────────────────────
 // Two PortfolioCards sharing a checklistCardId + serialNumber means either
@@ -288,4 +289,72 @@ export async function openDuplicateFile(
       fileType,
     },
   });
+}
+
+// Opens a CO_OWNERSHIP file — "Did you buy/pull this?" (AddGelModal/
+// CardImageModal), where both gels are real owned copies of the same
+// physical card (one Pulled, one Bought), not a conflicting duplicate or
+// a sighting being claimed. Unlike openDuplicateFile, only the **new**
+// (filed) gel gets flagged — the existing gel isn't in question, so its
+// own badge is left exactly as it was. If the existing gel is already
+// verified, the owner's confirm/deny/unsure notification fires
+// immediately; otherwise the file starts PENDING and
+// maybeSendPendingCoOwnershipNotifications (lib/data/notifications.ts)
+// sends it later once that gel is verified.
+export async function openCoOwnershipFile(
+  checklistCardId:      string,
+  filedByUserId:        string,
+  filedGelId:           string,
+  existingGelId:        string,
+  existingGelIsVerified: boolean,
+  existingGelOwnerId:   string
+): Promise<void> {
+  if (await isGelAlreadyFiled(existingGelId) || await isGelAlreadyFiled(filedGelId)) {
+    throw new GelAlreadyFiledError();
+  }
+
+  const decision = existingGelIsVerified ? "CO_OWN_AWAITING_OWNER" : "PENDING";
+
+  const file = await prisma.duplicateGelFile.create({
+    data: {
+      checklistCard: { connect: { id: checklistCardId } },
+      filedByUser:   { connect: { id: filedByUserId } },
+      filedGel:      { connect: { id: filedGelId } },
+      existingGel:   { connect: { id: existingGelId } },
+      fileType:      "CO_OWNERSHIP",
+      decision,
+    },
+  });
+
+  if (existingGelIsVerified) {
+    await createCoOwnershipRequestNotification(file.id, existingGelOwnerId);
+  }
+}
+
+// ─── DELETION CLEANUP ───────────────────────────────────────────────────────
+// A gel referenced by an open DuplicateGelFile (any fileType) can be
+// deleted outright via /admin/gels (the "False" verify action, or a
+// direct delete) — onDelete: SetNull only nulls that one FK, leaving the
+// surviving gel's duplicateFlag dangling forever with no partner left to
+// resolve against. Call this with the gel's id BEFORE deleting it; it
+// looks up any file involving that gel, and returns a callback the
+// caller runs AFTER the delete succeeds to reset the survivor's flag
+// (onDelete: SetNull has already nulled the FK by then, so the lookup
+// has to happen first).
+export async function prepareGelDeletionCleanup(gelId: string): Promise<() => Promise<void>> {
+  const file = await prisma.duplicateGelFile.findFirst({
+    where:  { OR: [{ filedGelId: gelId }, { existingGelId: gelId }] },
+    select: { filedGelId: true, existingGelId: true },
+  });
+  if (!file) return async () => {};
+
+  const survivorId = file.filedGelId === gelId ? file.existingGelId : file.filedGelId;
+  if (!survivorId) return async () => {};
+
+  return async () => {
+    await prisma.portfolioCard.update({
+      where: { id: survivorId },
+      data:  { duplicateFlag: "NONE" },
+    });
+  };
 }

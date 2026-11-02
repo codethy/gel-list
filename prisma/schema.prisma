@@ -104,6 +104,7 @@ model User {
   favoriteGels        FavoriteGel[]
   productOpenings     ProductOpening[]
   filedDuplicateFiles DuplicateGelFile[] @relation("DuplicateFiledBy")
+  notifications       Notification[]
 }
 
 // ─── TAXONOMY ───────────────────────────────────────────────────────────────
@@ -571,11 +572,15 @@ model DuplicateGelFile {
   filedByUser   User           @relation("DuplicateFiledBy", fields: [filedByUserId], references: [id])
   filedGel      PortfolioCard? @relation("DuplicateFiledGel", fields: [filedGelId], references: [id], onDelete: SetNull)
   existingGel   PortfolioCard? @relation("DuplicateExistingGel", fields: [existingGelId], references: [id], onDelete: SetNull)
+  notifications Notification[]
 }
 
 enum DuplicateFileType {
   DUPLICATE
   CLAIM
+  // Both ends are real owned gels (one Pulled, one Bought) of the same
+  // physical card — see "Did you buy/pull this?" in AddGelModal/CardImageModal.
+  CO_OWNERSHIP
 }
 
 enum DuplicateFileStatus {
@@ -589,6 +594,40 @@ enum DuplicateFileDecision {
   NOT_DUPLICATE
   CLAIM_APPROVED
   CLAIM_REJECTED
+  // CO_OWNERSHIP only — PENDING above covers "filed, existing gel not yet
+  // verified, no notification sent."
+  CO_OWN_AWAITING_OWNER
+  CO_OWN_CONFIRMED
+  CO_OWN_DENIED
+  CO_OWN_UNSURE
+}
+
+// ─── NOTIFICATION ─────────────────────────────────────────────────────────────
+// Shown via the bell icon in Navbar.tsx (no dedicated page) — currently
+// only used for the CO_OWNERSHIP claim flow: the original gel's owner is
+// asked to confirm/deny/defer a co-ownership request once their own gel
+// is verified, and the claimer is told if their request is denied.
+// Deliberately minimal — no duplicated render fields, everything (the
+// claimer, the acquisitionMethod claimed, the card) is read by joining
+// through duplicateGelFile at fetch time (see lib/data/notifications.ts),
+// same "reuse the rich relation" approach as AdminDuplicateFile.
+model Notification {
+  id                 String           @id @default(cuid())
+  userId             String
+  type               NotificationType
+  duplicateGelFileId String?
+  isRead             Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  duplicateGelFile DuplicateGelFile? @relation(fields: [duplicateGelFileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+enum NotificationType {
+  CO_OWNERSHIP_REQUEST
+  CO_OWNERSHIP_DENIED
 }
 
 // ─── FAVORITE GEL ─────────────────────────────────────────────────────────────

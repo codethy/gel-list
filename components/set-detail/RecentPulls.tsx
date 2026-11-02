@@ -12,15 +12,18 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { GelCard, type GelEntry } from "./YourGels";
 import { CardImageModal, type CardImageTarget } from "./ChecklistTable";
-import type { ClaimPrefill } from "./AddGelModal";
+import type { ClaimPrefill, CoOwnPrefill } from "./AddGelModal";
 
 interface RecentPullsProps {
   gels: GelEntry[];
   // "Claim this card" in the image popup — see AddGelModal's claimPrefill.
   onClaimGel?: (prefill: ClaimPrefill) => void;
+  // "..." menu's "Did you buy/pull this?" in the image popup — see
+  // AddGelModal's coOwnPrefill.
+  onCoOwnClaim?: (prefill: CoOwnPrefill) => void;
 }
 
-export default function RecentPulls({ gels, onClaimGel }: RecentPullsProps) {
+export default function RecentPulls({ gels, onClaimGel, onCoOwnClaim }: RecentPullsProps) {
   const [imageTarget, setImageTarget] = useState<CardImageTarget | null>(null);
 
   if (gels.length === 0) return null;
@@ -40,7 +43,7 @@ export default function RecentPulls({ gels, onClaimGel }: RecentPullsProps) {
         ))}
       </motion.div>
 
-      <CardImageModal target={imageTarget} onClose={() => setImageTarget(null)} onClaim={onClaimGel} />
+      <CardImageModal target={imageTarget} onClose={() => setImageTarget(null)} onClaim={onClaimGel} onCoOwnClaim={onCoOwnClaim} />
     </section>
   );
 }

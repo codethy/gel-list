@@ -55,7 +55,7 @@ export async function getChecklistRowExtras(
 ): Promise<Map<string, ChecklistRowExtras>> {
   if (cardIds.length === 0) return new Map();
 
-  const userSelect = { id: true, username: true, name: true } as const;
+  const userSelect = { id: true, username: true, name: true, handle: true } as const;
 
   const [likeCounts, userLikes, portfolioCards] = await Promise.all([
     prisma.checklistCardLike.groupBy({
@@ -273,6 +273,9 @@ export async function getChecklistRowExtras(
         isInHand:          card.isInHand,
         username,
         displayName,
+        handle:            card.user.handle ?? null,
+        acquisitionMethod: card.acquisitionMethod != null ? String(card.acquisitionMethod) : null,
+        userId:            card.user.id,
         cardHistory:       buildHistory(card),
       };
     });

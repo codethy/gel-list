@@ -52,6 +52,10 @@ export interface GelEntry {
   // their public profile (/u/[handle]). Null only for the rare user with no
   // handle at all (shouldn't normally happen — see generateUniqueHandle).
   loggedByHandle?: string | null;
+  // Same "Recent Pulls" only scope as the two fields above — this gel's
+  // own owner id, for CardImageModal's "..." menu's owner-exclusion
+  // gating (hidden for the viewer's own gel).
+  userId?: string;
   cardTemplate: {
     // Only ever populated by the profile data layer (see shapeGelEntry in
     // lib/data/profile.ts) — used by ManageFavoritesModal's search. Other
@@ -200,6 +204,9 @@ export function GelCard({
                 parallelType: gel.cardTemplate.parallelType ?? null,
                 variationName: gel.cardTemplate.variationName ?? null,
                 team: gel.cardTemplate.team ?? null,
+                gelId: gel.id,
+                gelUserId: gel.userId,
+                acquisitionMethod: gel.acquisitionMethod ?? null,
               })
             }
             aria-label={`View card image for ${gel.cardTemplate.playerName}`}

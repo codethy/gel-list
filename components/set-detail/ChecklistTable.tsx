@@ -1,11 +1,12 @@
 // components/set-detail/ChecklistTable.tsx
 "use client";
 
-import { useState, useEffect, useTransition, useCallback } from "react";
+import { useState, useEffect, useRef, useTransition, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { ChecklistCardOption, ClaimPrefill } from "./AddGelModal";
+import type { ChecklistCardOption, ClaimPrefill, CoOwnPrefill } from "./AddGelModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,15 @@ export interface LoggedGel {
   isInHand: boolean;
   username: string;
   displayName: string | null;
+  // The logging user's @handle — links the loggedByName badge to their
+  // public profile, same as Recent Pulls' loggedByHandle.
+  handle: string | null;
+  // Needed for the "..." menu's "Did you pull this?" gating (hidden when
+  // this gel was itself PULLED) — see CardImageModal.
+  acquisitionMethod: string | null;
+  // The logging user's own id — drives CardImageModal's "..." menu's
+  // owner-exclusion gating (hidden for the viewer's own gel).
+  userId: string;
   cardHistory: CardHistoryEvent[];
 }
 
@@ -114,6 +124,9 @@ interface ChecklistTableProps {
   // "Claim this card" in the Logged Gels/Card History popup — see
   // AddGelModal's claimPrefill.
   onClaimGel?: (prefill: ClaimPrefill) => void;
+  // "..." menu's "Did you buy/pull this?" in the Logged Gels/Card History
+  // popup's image modal — see AddGelModal's coOwnPrefill.
+  onCoOwnClaim?: (prefill: CoOwnPrefill) => void;
   onFilterChange: (filters: {
     search?: string;
     filterType?: string | null;
@@ -522,6 +535,20 @@ function LoggedGelsModal({
                                     subtitle: label,
                                     imageUrl: gel.cardFrontImageUrl,
                                     cardBackImageUrl: gel.cardBackImageUrl,
+                                    serialNumber: gel.serialNumber,
+                                    printRun: row.printRun ?? null,
+                                    loggedByName: gel.displayName ?? gel.username,
+                                    loggedByHandle: gel.handle,
+                                    isInHand: gel.isInHand,
+                                    cardTemplateId: row.id,
+                                    cardType: row.cardType,
+                                    cardTier: row.cardTier,
+                                    parallelType: row.parallelType ?? null,
+                                    variationName: row.variationName ?? null,
+                                    team: row.team ?? null,
+                                    gelId: gel.id,
+                                    gelUserId: gel.userId,
+                                    acquisitionMethod: gel.acquisitionMethod,
                                   });
                                 }}
                                 aria-label={`View card image for ${label}`}
@@ -576,8 +603,11 @@ function LoggedGelsModal({
                                 });
                                 onClose();
                               }}
-                              className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-white whitespace-nowrap bg-purple-600/90 hover:bg-purple-500 transition-colors shrink-0"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-[10px] font-medium border border-slate-600/50 hover:border-slate-500/60 whitespace-nowrap transition-all duration-150 shrink-0"
                             >
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 5v14M5 12h14" />
+                              </svg>
                               Claim this card
                             </button>
                           )}
@@ -639,12 +669,21 @@ export interface CardImageTarget {
   parallelType?: string | null;
   variationName?: string | null;
   team?: string | null;
+  // The specific viewed gel's own id/owner/acquisition method — drives the
+  // "..." menu ("Did you buy/pull this?", see onCoOwnClaim below). Set
+  // whenever the target came from a real logged gel (Recent Pulls or the
+  // Logged Gels/Card History popup) — not from the checklist row's own
+  // thumbnail click, which doesn't map to one definite gel.
+  gelId?: string;
+  gelUserId?: string;
+  acquisitionMethod?: string | null;
 }
 
 export function CardImageModal({
   target,
   onClose,
   onClaim,
+  onCoOwnClaim,
 }: {
   target: CardImageTarget | null;
   onClose: () => void;
@@ -652,8 +691,66 @@ export function CardImageModal({
   // badge below) — opens AddGelModal pre-filled to claim this sighting
   // as the viewer's own card. Omit to hide the button entirely.
   onClaim?: (prefill: ClaimPrefill) => void;
+  // "..." menu's "Did you buy/pull this?" — opens AddGelModal pre-filled
+  // to co-claim this gel (see CoOwnPrefill). Omit to hide the menu
+  // entirely (it's also hidden whenever gelUserId isn't set, or is the
+  // viewer's own).
+  onCoOwnClaim?: (prefill: CoOwnPrefill) => void;
 }) {
   const hasImage = Boolean(target?.imageUrl || target?.cardBackImageUrl);
+  const { data: session } = useSession();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
+
+  // Reset whenever a different gel is viewed, so the menu never stays
+  // open across targets — the "adjust state during render" pattern
+  // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than an effect, since two different GelCard buttons can call
+  // setImageTarget directly without this component ever unmounting.
+  const [lastTargetGelId, setLastTargetGelId] = useState(target?.gelId);
+  if (target?.gelId !== lastTargetGelId) {
+    setLastTargetGelId(target?.gelId);
+    setMenuOpen(false);
+  }
+
+  const canCoOwnClaim =
+    Boolean(onCoOwnClaim) &&
+    Boolean(target?.gelId) &&
+    Boolean(target?.gelUserId) &&
+    target?.gelUserId !== session?.user?.id;
+
+  function handleCoOwnClick(acquisitionMethod: "PULLED" | "BOUGHT") {
+    if (!onCoOwnClaim || !target?.gelId || !target.cardTemplateId) return;
+    onCoOwnClaim({
+      cardOption: {
+        id:            target.cardTemplateId,
+        cardNumber:    "",
+        playerName:    target.title,
+        cardType:      target.cardType ?? "",
+        cardTier:      target.cardTier,
+        parallelType:  target.parallelType ?? null,
+        printRun:      target.printRun ?? null,
+        variationName: target.variationName ?? null,
+        team:          target.team ?? null,
+      },
+      serialNumber: target.serialNumber ?? null,
+      acquisitionMethod,
+      targetGelId: target.gelId,
+    });
+    setMenuOpen(false);
+    onClose();
+  }
 
   return (
     <AnimatePresence>
@@ -746,8 +843,11 @@ export function CardImageModal({
                               });
                               onClose();
                             }}
-                            className="px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap uppercase bg-purple-600/90 hover:bg-purple-500 transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-[11px] font-medium border border-slate-600/50 hover:border-slate-500/60 whitespace-nowrap transition-all duration-150"
                           >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
                             Claim this card
                           </button>
                         )}
@@ -756,16 +856,69 @@ export function CardImageModal({
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
-                  aria-label="Close"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {canCoOwnClaim && (
+                    <div ref={menuRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setMenuOpen((prev) => !prev)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
+                        aria-label="More options"
+                        aria-haspopup="menu"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                      {menuOpen && (
+                        <div
+                          role="menu"
+                          className="absolute right-0 mt-1 w-52 rounded-xl bg-slate-800 border border-slate-700/60 shadow-xl overflow-hidden z-10"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => handleCoOwnClick("BOUGHT")}
+                            className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                          >
+                            Did you buy this?
+                          </button>
+                          {target.acquisitionMethod !== "PULLED" && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleCoOwnClick("PULLED")}
+                              className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                            >
+                              Did you pull this?
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled
+                            title="Coming soon"
+                            className="w-full text-left px-3 py-2 text-sm text-slate-500 cursor-not-allowed"
+                          >
+                            Report this gel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
+                    aria-label="Close"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1472,7 +1625,7 @@ function ChecklistRowItem({
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function ChecklistTable({
-  rows, meta, setId, category, onAddGelClick, onClaimGel, onFilterChange, isLoading = false, availableTeams, availableCategories, availableTiers,
+  rows, meta, setId, category, onAddGelClick, onClaimGel, onCoOwnClaim, onFilterChange, isLoading = false, availableTeams, availableCategories, availableTiers,
 }: ChecklistTableProps) {
   const [search, setSearch]             = useState("");
   const [filterType, setFilterType]     = useState("");
@@ -1651,6 +1804,7 @@ export default function ChecklistTable({
       <CardImageModal
         target={imageTarget}
         onClose={() => setImageTarget(null)}
+        onCoOwnClaim={onCoOwnClaim}
       />
     </section>
   );

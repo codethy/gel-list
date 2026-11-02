@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { prepareGelDeletionCleanup } from "@/lib/data/gels";
 
 export async function PATCH(
   req: NextRequest,
@@ -111,6 +112,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Gel not found" }, { status: 404 });
   }
 
+  const cleanup = await prepareGelDeletionCleanup(gelId);
   try {
     await prisma.portfolioCard.delete({ where: { id: gelId } });
   } catch (error) {
@@ -122,6 +124,7 @@ export async function DELETE(
     }
     throw error;
   }
+  await cleanup();
 
   return NextResponse.json({ success: true });
 }

@@ -14,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
+import { prepareGelDeletionCleanup } from "@/lib/data/gels";
+import { maybeSendPendingCoOwnershipNotifications } from "@/lib/data/notifications";
 
 async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
   return prisma.portfolioCard.findFirst({
@@ -196,6 +198,14 @@ export async function PATCH(
     await rememberGelLocationDefaults(userId, hitCity, hitCountry);
   }
 
+  // A CO_OWNERSHIP file may have been waiting on exactly this gel to be
+  // verified before notifying its owner — see lib/data/notifications.ts.
+  // Harmless to call when it was already verified before this edit too;
+  // the helper only acts on files still PENDING.
+  if (isVerified) {
+    await maybeSendPendingCoOwnershipNotifications(gelId);
+  }
+
   revalidateSetDetailCache(setId);
 
   // Same field-name compatibility note as POST — see that route for why.
@@ -251,6 +261,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Gel not found" }, { status: 404 });
   }
 
+  const cleanup = await prepareGelDeletionCleanup(gelId);
   try {
     await prisma.portfolioCard.delete({ where: { id: gelId } });
   } catch (error) {
@@ -266,6 +277,7 @@ export async function DELETE(
     }
     throw error;
   }
+  await cleanup();
 
   revalidateSetDetailCache(setId);
 

@@ -86,6 +86,9 @@ export interface SetDetailData {
     productTypeOther:  string | null;
     loggedByName:      string;
     loggedByHandle:    string | null;
+    // The logging user's own id — drives CardImageModal's "..." menu's
+    // owner-exclusion gating (hidden for the viewer's own gel).
+    userId:            string;
     cardTemplate: {
       playerName:    string;
       cardType:      string;
@@ -580,6 +583,7 @@ export async function getSetDetail(
         notes:             true,
         productType:       true,
         productTypeOther:  true,
+        userId:            true,
         user: { select: { name: true, username: true, handle: true } },
         checklistCard: {
           select: {
@@ -662,6 +666,7 @@ export async function getSetDetail(
     productTypeOther:  pc.productTypeOther  ?? null,
     loggedByName:      pc.user.name ?? pc.user.username ?? "A user",
     loggedByHandle:    pc.user.handle ?? null,
+    userId:            pc.userId,
     cardTemplate: {
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),

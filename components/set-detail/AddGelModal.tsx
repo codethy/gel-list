@@ -34,6 +34,21 @@ export interface ClaimPrefill {
   serialNumber: number;
 }
 
+// What "Did you buy this?" / "Did you pull this?" (CardImageModal's "..."
+// menu) hands to AddGelModal — same straight-to-form treatment as
+// ClaimPrefill above, except both the card+serial AND the acquisition
+// method are locked (the button itself determines which), and submitting
+// posts to the dedicated co-claim endpoint (see
+// app/api/sets/[id]/gels/co-claim/route.ts) instead of the normal create
+// route — there's no 409/confirm round-trip here, since filling out this
+// whole form already is the confirmation.
+export interface CoOwnPrefill {
+  cardOption: ChecklistCardOption;
+  serialNumber: number | null;
+  acquisitionMethod: "PULLED" | "BOUGHT";
+  targetGelId: string;
+}
+
 // One entry in this set's admin-curated product catalog (see SetProduct in
 // prisma/schema.prisma) — options for the "Which Product" dropdown, enabled
 // only when "How did you get it?" is "Pulled".
@@ -76,6 +91,10 @@ interface AddGelModalProps {
   // same 409 duplicateKind: "CLAIM" flow a regular SELF-vs-OTHER
   // collision during normal logging goes through.
   claimPrefill?: ClaimPrefill | null;
+  // When set (and no editingGel/claimPrefill), same straight-to-form
+  // treatment, except both card+serial AND acquisition method are locked
+  // and submitting goes to the co-claim endpoint — see CoOwnPrefill above.
+  coOwnPrefill?: CoOwnPrefill | null;
   // This user's own most recently submitted City/Country (SELF flow only)
   // — see lib/data/userGelDefaults.ts. Pre-fills a fresh "My Own Gel" log,
   // never "Someone Else's Gel".
@@ -745,6 +764,7 @@ export default function AddGelModal({
   preselectedCardOption,
   editingGel,
   claimPrefill,
+  coOwnPrefill,
   defaultHitCity,
   defaultHitCountry,
 }: AddGelModalProps) {
@@ -876,6 +896,25 @@ export default function AddGelModal({
       });
       setSelectedCardOption(claimPrefill.cardOption);
       setMultiCards([newMultiCardEntry(claimPrefill.cardOption)]);
+    } else if (coOwnPrefill) {
+      // "Did you buy/pull this?" — straight to the SELF/Single form,
+      // locked to this card+serial AND this acquisition method (the
+      // button clicked determines which). No 409/confirm round-trip —
+      // submitting this whole form already is the confirmation (see
+      // handleCoOwnSubmit).
+      setStep("form");
+      setLogMode("single");
+      setLoggedFor("SELF");
+      setForm({
+        ...EMPTY_FORM,
+        checklistCardId:   coOwnPrefill.cardOption.id,
+        acquisitionMethod: coOwnPrefill.acquisitionMethod,
+        serialNumber:       coOwnPrefill.serialNumber != null ? String(coOwnPrefill.serialNumber) : "",
+        hitCity:            defaultHitCity    ?? "",
+        hitCountry:         defaultHitCountry ?? "",
+      });
+      setSelectedCardOption(coOwnPrefill.cardOption);
+      setMultiCards([newMultiCardEntry(coOwnPrefill.cardOption)]);
     } else {
       setStep("choice");
       setLoggedFor("SELF");
@@ -886,7 +925,7 @@ export default function AddGelModal({
     }
     setError(null);
     setDuplicatePrompt(null);
-  }, [isOpen, editingGel, claimPrefill, preselectedCardOption, products, defaultHitCity, defaultHitCountry]);
+  }, [isOpen, editingGel, claimPrefill, coOwnPrefill, preselectedCardOption, products, defaultHitCity, defaultHitCountry]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1089,6 +1128,66 @@ export default function AddGelModal({
       setDuplicatePrompt(null);
     } finally {
       setIsResolvingDuplicate(false);
+    }
+  }
+
+  // ── "Did you buy/pull this?" submit — posts straight to the co-claim
+  // endpoint, no 409/confirm round-trip (filling out this whole form
+  // already is the confirmation). ───────────────────────────────────────────
+  function buildCoOwnBody() {
+    const selectedProduct = productApplies
+      ? products.find((p) => p.id === form.productOptionId)
+      : undefined;
+
+    return {
+      targetGelId:       coOwnPrefill!.targetGelId,
+      acquisitionMethod: form.acquisitionMethod || null,
+      productType:       selectedProduct?.productType ?? null,
+      productTypeOther:  selectedProduct?.productTypeOther ?? null,
+      hitYear:           form.hitYear   ? parseInt(form.hitYear)   : null,
+      hitMonth:          form.hitMonth  ? parseInt(form.hitMonth)  : null,
+      hitCity:           form.hitCity   || null,
+      hitCountry:        form.hitCountry || null,
+      cardFrontImageUrl: form.cardFrontImageUrl || null,
+      cardBackImageUrl:  form.cardBackImageUrl  || null,
+      seller:            form.seller || null,
+      breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+      notes:             form.notes  || null,
+    };
+  }
+
+  async function handleCoOwnSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!form.cardFrontImageUrl) {
+      setError("Please upload a card front image.");
+      return;
+    }
+
+    if (productApplies && !form.productOptionId) {
+      setError("Please select which product this came from.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/sets/${setId}/gels/co-claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildCoOwnBody()),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      onSuccess(data.gel as GelEntry);
+      onClose();
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -1388,11 +1487,11 @@ export default function AddGelModal({
                 </div>
               </div>
             ) : (
-            <form onSubmit={logMode === "multiple" ? handleMultiSubmit : handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={coOwnPrefill ? handleCoOwnSubmit : logMode === "multiple" ? handleMultiSubmit : handleSubmit} className="p-6 space-y-5">
               {/* ── Header ───────────────────────────────────────────────── */}
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  {!isEditing && !claimPrefill && (
+                  {!isEditing && !claimPrefill && !coOwnPrefill && (
                     <button
                       type="button"
                       onClick={() => setStep("mode")}
@@ -1441,7 +1540,7 @@ export default function AddGelModal({
                         setForm((prev) => ({ ...prev, checklistCardId: option?.id ?? "" }));
                         setSelectedCardOption(option);
                       }}
-                      isLocked={Boolean(preselectedCardOption) || isEditing || Boolean(claimPrefill)}
+                      isLocked={Boolean(preselectedCardOption) || isEditing || Boolean(claimPrefill) || Boolean(coOwnPrefill)}
                       category={category}
                     />
                   </div>
@@ -1460,15 +1559,19 @@ export default function AddGelModal({
                         onChange={setField("serialNumber")}
                         placeholder="e.g. 8"
                         min="1"
+                        disabled={Boolean(coOwnPrefill)}
                       />
                     </div>
                   )}
 
-                  {/* ── Acquisition Method ───────────────────────────────── */}
+                  {/* ── Acquisition Method — locked when coOwnPrefill is set
+                      (the "Did you buy/pull this?" button already decided
+                      which) ──────────────────────────────────────────────── */}
                   <div>
                     <Label>{isOther ? "Who pulled it? *" : "How did you get it? *"}</Label>
                     <Select
                       value={form.acquisitionMethod}
+                      disabled={Boolean(coOwnPrefill)}
                       onChange={(e) => {
                         const value = e.target.value;
                         setForm((prev) => ({

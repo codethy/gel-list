@@ -16,6 +16,8 @@ import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { AUTO_VERIFY_THRESHOLD } from "@/lib/data/adminGels";
+import { prepareGelDeletionCleanup } from "@/lib/data/gels";
+import { maybeSendPendingCoOwnershipNotifications } from "@/lib/data/notifications";
 
 export async function POST(
   req: NextRequest,
@@ -49,6 +51,10 @@ export async function POST(
   }
 
   if (action === "FALSE") {
+    // Find-before: a gel party to an open DuplicateGelFile needs its
+    // surviving partner's duplicateFlag reset after it's gone — onDelete:
+    // SetNull only nulls the FK, not the other gel's flag.
+    const cleanup = await prepareGelDeletionCleanup(gelId);
     try {
       await prisma.portfolioCard.delete({ where: { id: gelId } });
     } catch (error) {
@@ -60,6 +66,7 @@ export async function POST(
       }
       throw error;
     }
+    await cleanup();
     return NextResponse.json({ success: true, deleted: true });
   }
 
@@ -68,6 +75,10 @@ export async function POST(
     where: { id: gelId },
     data:  { isVerified: true },
   });
+
+  // A CO_OWNERSHIP file may have been waiting on exactly this gel to be
+  // verified before notifying its owner — see lib/data/notifications.ts.
+  await maybeSendPendingCoOwnershipNotifications(gelId);
 
   const verifiedCount = await prisma.portfolioCard.count({
     where: { userId: gel.userId, isVerified: true },

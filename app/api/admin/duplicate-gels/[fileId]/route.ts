@@ -30,6 +30,18 @@
 //                        isVerified-driven review queue (the admin can
 //                        still remove it outright via the file's own
 //                        per-gel "Remove" button if it should be deleted).
+//   CONFIRM_CO_OWNERSHIP — fileType CO_OWNERSHIP only. Same effect as the
+//                        original gel owner's "Confirm" response (see
+//                        app/api/notifications/[id]/respond/route.ts) —
+//                        the filed gel becomes isVerified: true,
+//                        duplicateFlag: NONE. Unlike the actions above,
+//                        this and DENY_CO_OWNERSHIP are always available
+//                        regardless of the file's current decision — the
+//                        admin can override either user's decision at
+//                        any time, per the request.
+//   DENY_CO_OWNERSHIP  — fileType CO_OWNERSHIP only. Same effect as
+//                        "Deny" — filed gel's duplicateFlag resets to
+//                        NONE, claimer gets a CO_OWNERSHIP_DENIED notification.
 //   CLOSE / REOPEN     — pure housekeeping, independent of the decision
 //                        above — a file can be closed in any decision
 //                        state and reopened later.
@@ -39,10 +51,20 @@ import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
 import { AUTO_VERIFY_THRESHOLD } from "@/lib/data/adminGels";
+import { createCoOwnershipDeniedNotification } from "@/lib/data/notifications";
 
-const ACTIONS = new Set(["CONFIRM_DUPLICATE", "NOT_DUPLICATE", "APPROVE_CLAIM", "REJECT_CLAIM", "CLOSE", "REOPEN"]);
+const ACTIONS = new Set([
+  "CONFIRM_DUPLICATE", "NOT_DUPLICATE",
+  "APPROVE_CLAIM", "REJECT_CLAIM",
+  "CONFIRM_CO_OWNERSHIP", "DENY_CO_OWNERSHIP",
+  "CLOSE", "REOPEN",
+]);
 const DUPLICATE_ACTIONS = new Set(["CONFIRM_DUPLICATE", "NOT_DUPLICATE"]);
 const CLAIM_ACTIONS = new Set(["APPROVE_CLAIM", "REJECT_CLAIM"]);
+// Unlike the two sets above, these are always available regardless of the
+// file's current decision — the admin can override either user's
+// decision (confirm/deny/unsure) at any time, per the request.
+const CO_OWNERSHIP_ACTIONS = new Set(["CONFIRM_CO_OWNERSHIP", "DENY_CO_OWNERSHIP"]);
 
 export async function PATCH(
   req: NextRequest,
@@ -65,7 +87,7 @@ export async function PATCH(
   const { action } = body;
   if (typeof action !== "string" || !ACTIONS.has(action)) {
     return NextResponse.json(
-      { error: 'action must be one of "CONFIRM_DUPLICATE", "NOT_DUPLICATE", "APPROVE_CLAIM", "REJECT_CLAIM", "CLOSE", "REOPEN"' },
+      { error: 'action must be one of "CONFIRM_DUPLICATE", "NOT_DUPLICATE", "APPROVE_CLAIM", "REJECT_CLAIM", "CONFIRM_CO_OWNERSHIP", "DENY_CO_OWNERSHIP", "CLOSE", "REOPEN"' },
       { status: 400 }
     );
   }
@@ -77,6 +99,7 @@ export async function PATCH(
       fileType:      true,
       filedGelId:    true,
       existingGelId: true,
+      filedByUserId: true,
       filedGel:      { select: { userId: true } },
       checklistCard: { select: { cardSetId: true } },
     },
@@ -90,6 +113,9 @@ export async function PATCH(
   }
   if (CLAIM_ACTIONS.has(action) && file.fileType !== "CLAIM") {
     return NextResponse.json({ error: `${action} only applies to a claim-type file` }, { status: 400 });
+  }
+  if (CO_OWNERSHIP_ACTIONS.has(action) && file.fileType !== "CO_OWNERSHIP") {
+    return NextResponse.json({ error: `${action} only applies to a co-ownership-type file` }, { status: 400 });
   }
 
   const gelIds = [file.filedGelId, file.existingGelId].filter((id): id is string => id !== null);
@@ -135,6 +161,36 @@ export async function PATCH(
           });
         }
       }
+    }
+  } else if (action === "CONFIRM_CO_OWNERSHIP" || action === "DENY_CO_OWNERSHIP") {
+    // Always available regardless of the file's current decision — the
+    // admin can override either user's confirm/deny/unsure at any time.
+    const decision = action === "CONFIRM_CO_OWNERSHIP" ? "CO_OWN_CONFIRMED" : "CO_OWN_DENIED";
+    await prisma.duplicateGelFile.update({ where: { id: fileId }, data: { decision } });
+
+    if (file.filedGelId) {
+      await prisma.portfolioCard.update({
+        where: { id: file.filedGelId },
+        data:  action === "CONFIRM_CO_OWNERSHIP"
+          ? { isVerified: true, duplicateFlag: "NONE" }
+          : { duplicateFlag: "NONE" },
+      });
+
+      if (action === "CONFIRM_CO_OWNERSHIP" && file.filedGel) {
+        const verifiedCount = await prisma.portfolioCard.count({
+          where: { userId: file.filedGel.userId, isVerified: true },
+        });
+        if (verifiedCount >= AUTO_VERIFY_THRESHOLD) {
+          await prisma.user.updateMany({
+            where: { id: file.filedGel.userId, isVerifiedUser: false },
+            data:  { isVerifiedUser: true },
+          });
+        }
+      }
+    }
+
+    if (action === "DENY_CO_OWNERSHIP") {
+      await createCoOwnershipDeniedNotification(file.id, file.filedByUserId);
     }
   } else {
     // CLOSE / REOPEN

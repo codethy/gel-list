@@ -11,7 +11,7 @@ import ChecklistTable, {
   type ChecklistRow,
   type ChecklistMeta,
 } from "./ChecklistTable";
-import AddGelModal, { type ChecklistCardOption, type ProductOption, type ClaimPrefill } from "./AddGelModal";
+import AddGelModal, { type ChecklistCardOption, type ProductOption, type ClaimPrefill, type CoOwnPrefill } from "./AddGelModal";
 import SignInRequiredModal from "@/components/SignInRequiredModal";
 import PacksOpenedBreakdownModal from "./PacksOpenedBreakdownModal";
 import LogProductOpeningsModal, { type OpeningEntry } from "./LogProductOpeningsModal";
@@ -125,6 +125,9 @@ export default function SetDetailClient({
   // Set by a "Claim this card" button (Recent Pulls popup, Logged Gels/
   // Card History popup) — see handleClaimGel below.
   const [claimPrefill, setClaimPrefill]                 = useState<ClaimPrefill | null>(null);
+  // Set by "Did you buy/pull this?" (CardImageModal's "..." menu) — see
+  // handleCoOwnClaim below.
+  const [coOwnPrefill, setCoOwnPrefill]                 = useState<CoOwnPrefill | null>(null);
   // Shown instead of AddGelModal when a signed-out visitor clicks "Add a
   // Gel" — see handleAddGelClick below.
   const [signInRequiredOpen, setSignInRequiredOpen]     = useState(false);
@@ -164,6 +167,7 @@ export default function SetDetailClient({
       }
       setEditingGel(null);
       setClaimPrefill(null);
+      setCoOwnPrefill(null);
       setPreselectedCardOption(option ?? null);
       setModalOpen(true);
     },
@@ -174,6 +178,7 @@ export default function SetDetailClient({
   const handleEditGelClick = useCallback((gel: GelEntry) => {
     setEditingGel(gel);
     setClaimPrefill(null);
+    setCoOwnPrefill(null);
     setPreselectedCardOption(null);
     setModalOpen(true);
   }, []);
@@ -189,7 +194,25 @@ export default function SetDetailClient({
       }
       setEditingGel(null);
       setPreselectedCardOption(null);
+      setCoOwnPrefill(null);
       setClaimPrefill(prefill);
+      setModalOpen(true);
+    },
+    [sessionStatus]
+  );
+
+  // ── Open modal ("Did you buy this?" / "Did you pull this?") ────────────────
+  // From CardImageModal's "..." menu — see AddGelModal's coOwnPrefill prop.
+  const handleCoOwnClaim = useCallback(
+    (prefill: CoOwnPrefill) => {
+      if (sessionStatus === "unauthenticated") {
+        setSignInRequiredOpen(true);
+        return;
+      }
+      setEditingGel(null);
+      setPreselectedCardOption(null);
+      setClaimPrefill(null);
+      setCoOwnPrefill(prefill);
       setModalOpen(true);
     },
     [sessionStatus]
@@ -201,6 +224,7 @@ export default function SetDetailClient({
     setPreselectedCardOption(null);
     setEditingGel(null);
     setClaimPrefill(null);
+    setCoOwnPrefill(null);
   }, []);
 
   // ── On successful gel add or edit ───────────────────────────────────────────
@@ -358,7 +382,7 @@ export default function SetDetailClient({
         />
 
         {/* ── Recent Pulls (all users, above Your Gels) ──────────────── */}
-        <RecentPulls gels={recentPulls} onClaimGel={handleClaimGel} />
+        <RecentPulls gels={recentPulls} onClaimGel={handleClaimGel} onCoOwnClaim={handleCoOwnClaim} />
 
         {/* ── 2. Your Gels ──────────────────────────────────────────── */}
         <YourGels
@@ -379,6 +403,7 @@ export default function SetDetailClient({
           category={category}
           onAddGelClick={handleAddGelClick}
           onClaimGel={handleClaimGel}
+          onCoOwnClaim={handleCoOwnClaim}
           onFilterChange={handleFilterChange}
           isLoading={checklistLoading}
           availableTeams={availableTeams}
@@ -399,6 +424,7 @@ export default function SetDetailClient({
         preselectedCardOption={preselectedCardOption}
         editingGel={editingGel}
         claimPrefill={claimPrefill}
+        coOwnPrefill={coOwnPrefill}
         defaultHitCity={lastGelCity}
         defaultHitCountry={lastGelCountry}
       />

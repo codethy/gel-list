@@ -25,7 +25,7 @@ export interface DuplicateFileGel extends AdminGelEntry {
 export interface AdminDuplicateFile {
   id:         string;
   fileNumber: number;
-  fileType:   string; // "DUPLICATE" | "CLAIM"
+  fileType:   string; // "DUPLICATE" | "CLAIM" | "CO_OWNERSHIP"
   status:     string;
   decision:   string;
   createdAt:  string;

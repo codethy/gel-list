@@ -111,24 +111,31 @@ function GelPanel({
 }
 
 const DECISION_LABELS: Record<string, string> = {
-  CONFIRMED_DUPLICATE: "Confirmed Duplicate",
-  NOT_DUPLICATE:        "Not a Duplicate",
-  CLAIM_APPROVED:       "Claim Approved",
-  CLAIM_REJECTED:       "Claim Rejected",
-  PENDING:              "Pending Review",
+  CONFIRMED_DUPLICATE:   "Confirmed Duplicate",
+  NOT_DUPLICATE:         "Not a Duplicate",
+  CLAIM_APPROVED:        "Claim Approved",
+  CLAIM_REJECTED:        "Claim Rejected",
+  CO_OWN_AWAITING_OWNER: "Awaiting Owner",
+  CO_OWN_CONFIRMED:      "Co-Ownership Confirmed",
+  CO_OWN_DENIED:         "Co-Ownership Denied",
+  CO_OWN_UNSURE:         "Owner Unsure",
+  PENDING:               "Pending Review",
 };
 
 function decisionBadgeClass(decision: string): string {
-  if (decision === "CONFIRMED_DUPLICATE" || decision === "CLAIM_REJECTED") {
+  if (decision === "CONFIRMED_DUPLICATE" || decision === "CLAIM_REJECTED" || decision === "CO_OWN_DENIED") {
     return "bg-red-500/15 text-red-300 border-red-500/30";
   }
   if (decision === "NOT_DUPLICATE") {
     return "bg-slate-600/20 text-slate-400 border-slate-600/40";
   }
-  if (decision === "CLAIM_APPROVED") {
+  if (decision === "CLAIM_APPROVED" || decision === "CO_OWN_CONFIRMED") {
     return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
   }
-  return "bg-amber-500/15 text-amber-300 border-amber-500/30"; // PENDING
+  if (decision === "CO_OWN_UNSURE") {
+    return "bg-sky-500/15 text-sky-300 border-sky-500/30";
+  }
+  return "bg-amber-500/15 text-amber-300 border-amber-500/30"; // PENDING, CO_OWN_AWAITING_OWNER
 }
 
 function FileCard({
@@ -141,13 +148,14 @@ function FileCard({
 }: {
   file: AdminDuplicateFile;
   busy: boolean;
-  onDecision: (fileId: string, action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE" | "APPROVE_CLAIM" | "REJECT_CLAIM") => void;
+  onDecision: (fileId: string, action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE" | "APPROVE_CLAIM" | "REJECT_CLAIM" | "CONFIRM_CO_OWNERSHIP" | "DENY_CO_OWNERSHIP") => void;
   onToggleStatus: (fileId: string, action: "CLOSE" | "REOPEN") => void;
   onEditGel: (gel: AdminGelEntry) => void;
   onDeleteGel: (fileId: string, slot: "filedGel" | "existingGel", gelId: string) => void;
 }) {
   const subtitle = playerSubtitle(file.checklistCard);
   const isClaim = file.fileType === "CLAIM";
+  const isCoOwnership = file.fileType === "CO_OWNERSHIP";
 
   return (
     <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 p-4 space-y-3">
@@ -159,10 +167,14 @@ function FileCard({
             </p>
             <span
               className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border whitespace-nowrap ${
-                isClaim ? "bg-purple-500/15 text-purple-300 border-purple-500/30" : "bg-sky-500/15 text-sky-300 border-sky-500/30"
+                isClaim
+                  ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
+                  : isCoOwnership
+                  ? "bg-teal-500/15 text-teal-300 border-teal-500/30"
+                  : "bg-sky-500/15 text-sky-300 border-sky-500/30"
               }`}
             >
-              {isClaim ? "Claim" : "Duplicate"}
+              {isClaim ? "Claim" : isCoOwnership ? "Co-Ownership" : "Duplicate"}
             </span>
           </div>
           <p className="text-xs text-slate-500">
@@ -193,14 +205,14 @@ function FileCard({
       <div className="flex flex-col sm:flex-row gap-3">
         <GelPanel
           gel={file.filedGel}
-          title={isClaim ? "Claiming Gel" : "Filed Gel"}
+          title={isCoOwnership ? "Claiming Gel" : isClaim ? "Claiming Gel" : "Filed Gel"}
           busy={busy}
           onEdit={onEditGel}
           onDelete={(gelId) => onDeleteGel(file.id, "filedGel", gelId)}
         />
         <GelPanel
           gel={file.existingGel}
-          title={isClaim ? "Originally Reported Gel" : "Pre-Existing Gel"}
+          title={isCoOwnership ? "Original Gel" : isClaim ? "Originally Reported Gel" : "Pre-Existing Gel"}
           busy={busy}
           onEdit={onEditGel}
           onDelete={(gelId) => onDeleteGel(file.id, "existingGel", gelId)}
@@ -208,7 +220,26 @@ function FileCard({
       </div>
 
       <div className="flex items-center gap-2 pt-1 flex-wrap">
-        {isClaim ? (
+        {isCoOwnership ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision(file.id, "CONFIRM_CO_OWNERSHIP")}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-40 transition-colors"
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision(file.id, "DENY_CO_OWNERSHIP")}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40 transition-colors"
+            >
+              Deny
+            </button>
+          </>
+        ) : isClaim ? (
           <>
             <button
               type="button"
@@ -271,7 +302,7 @@ export default function AdminDuplicateGelsClient({ initialFiles }: { initialFile
 
   const handleDecision = useCallback(async (
     fileId: string,
-    action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE" | "APPROVE_CLAIM" | "REJECT_CLAIM"
+    action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE" | "APPROVE_CLAIM" | "REJECT_CLAIM" | "CONFIRM_CO_OWNERSHIP" | "DENY_CO_OWNERSHIP"
   ) => {
     setBusyId(fileId);
     try {
@@ -282,15 +313,17 @@ export default function AdminDuplicateGelsClient({ initialFiles }: { initialFile
       });
       if (res.ok) {
         const decision = {
-          CONFIRM_DUPLICATE: "CONFIRMED_DUPLICATE",
-          NOT_DUPLICATE:     "NOT_DUPLICATE",
-          APPROVE_CLAIM:     "CLAIM_APPROVED",
-          REJECT_CLAIM:      "CLAIM_REJECTED",
+          CONFIRM_DUPLICATE:    "CONFIRMED_DUPLICATE",
+          NOT_DUPLICATE:        "NOT_DUPLICATE",
+          APPROVE_CLAIM:        "CLAIM_APPROVED",
+          REJECT_CLAIM:         "CLAIM_REJECTED",
+          CONFIRM_CO_OWNERSHIP: "CO_OWN_CONFIRMED",
+          DENY_CO_OWNERSHIP:    "CO_OWN_DENIED",
         }[action];
         // Matches the server's exact per-gel update: a duplicate decision
-        // flags both gels identically; a claim decision only ever marks
-        // the claiming (filed) gel isVerified on approval — the existing
-        // (originally reported) gel only ever has its flag cleared.
+        // flags both gels identically; a claim or co-ownership decision
+        // only ever marks the filed gel isVerified on approval/confirm —
+        // the existing gel only ever has its flag cleared.
         setFiles((prev) =>
           prev.map((f) => {
             if (f.id !== fileId) return f;
@@ -303,11 +336,12 @@ export default function AdminDuplicateGelsClient({ initialFiles }: { initialFile
                 existingGel: f.existingGel ? { ...f.existingGel, duplicateFlag } : null,
               };
             }
+            const isVerifyingAction = action === "APPROVE_CLAIM" || action === "CONFIRM_CO_OWNERSHIP";
             return {
               ...f,
               decision,
               filedGel: f.filedGel
-                ? { ...f.filedGel, duplicateFlag: "NONE", isVerified: action === "APPROVE_CLAIM" ? true : f.filedGel.isVerified }
+                ? { ...f.filedGel, duplicateFlag: "NONE", isVerified: isVerifyingAction ? true : f.filedGel.isVerified }
                 : null,
               existingGel: f.existingGel ? { ...f.existingGel, duplicateFlag: "NONE" } : null,
             };
