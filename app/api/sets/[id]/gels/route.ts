@@ -6,7 +6,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
-import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicateFile } from "@/lib/data/gels";
+import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicateFile, isGelAlreadyFiled, GelAlreadyFiledError } from "@/lib/data/gels";
 
 // ─── POST /api/sets/[id]/gels ─────────────────────────────────────────────────
 // Creates a new PortfolioCard (gel) for the current user. For logging
@@ -58,11 +58,17 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //     existing gel instead of POSTing again (see
 //     app/api/sets/[id]/gels/[gelId]/route.ts) — no "confirm" flag needed
 //     here since that path never re-POSTs.
-//   - different user, no acknowledgeDuplicate → 409 { duplicateKind: "OTHER", ... }
-//     without creating anything, so the user can double check their info.
+//   - different user, new gel owned (isInHand) and the match is only a
+//     reported sighting (!isInHand), no acknowledgeDuplicate →
+//     409 { duplicateKind: "CLAIM", ... } — the new logger may actually
+//     own the physical card someone else just reported seeing.
+//   - different user, anything else, no acknowledgeDuplicate →
+//     409 { duplicateKind: "OTHER", ... } without creating anything, so
+//     the user can double check their info.
 //   - different user, acknowledgeDuplicate: true → creates the gel as
-//     usual (forced unverified) AND opens a DuplicateGelFile for the
-//     developer to review at /admin/duplicate-gels.
+//     usual (forced unverified) AND opens a DuplicateGelFile (fileType
+//     CLAIM or DUPLICATE, matching whichever 409 above would have fired)
+//     for the developer to review at /admin/duplicate-gels.
 
 export async function POST(
   req: NextRequest,
@@ -185,7 +191,7 @@ export async function POST(
   const duplicateMatch = await findDuplicateMatch(checklistCardId, validSerialNumber);
 
   if (duplicateMatch && duplicateMatch.userId === userId) {
-    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId);
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId, isInHand);
     return NextResponse.json(
       { error: "You've already logged this exact gel.", duplicateKind, existingGel },
       { status: 409 }
@@ -193,14 +199,27 @@ export async function POST(
   }
 
   if (duplicateMatch && duplicateMatch.userId !== userId && acknowledgeDuplicate !== true) {
-    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId);
-    return NextResponse.json(
-      { error: "Someone else has already logged this exact card.", duplicateKind, existingGel },
-      { status: 409 }
-    );
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId, isInHand);
+    const error =
+      duplicateKind === "CLAIM"
+        ? "Someone else has reported seeing this exact card."
+        : "Someone else has already logged this exact card.";
+    return NextResponse.json({ error, duplicateKind, existingGel }, { status: 409 });
   }
 
   const isFilingDuplicate = duplicateMatch !== null && duplicateMatch.userId !== userId && acknowledgeDuplicate === true;
+  // The new gel is owned and the match is only a reported sighting — the
+  // logger is claiming it as their own physical copy, not reporting a
+  // conflicting duplicate. Re-derived server-side, never trusted from the
+  // client, same as every other flag in this route.
+  const isClaim = isFilingDuplicate && isInHand && duplicateMatch !== null && !duplicateMatch.isInHand;
+
+  if (isFilingDuplicate && duplicateMatch && await isGelAlreadyFiled(duplicateMatch.id)) {
+    return NextResponse.json(
+      { error: "This card is already part of an open review." },
+      { status: 409 }
+    );
+  }
 
   // Trusted users (5+ gels already verified by the developer) skip the
   // review queue entirely — see app/api/admin/gels/[gelId]/verify/route.ts
@@ -219,7 +238,7 @@ export async function POST(
     checklistCardId,
     isInHand,
     isVerified,
-    duplicateFlag:     isFilingDuplicate ? "PENDING" : "NONE",
+    duplicateFlag:     isFilingDuplicate ? (isClaim ? "CLAIMING" : "PENDING") : "NONE",
     acquisitionMethod: typeof acquisitionMethod === "string" ? acquisitionMethod : null,
     productType:       productApplies && typeof productType === "string" ? productType : null,
     productTypeOther:  productApplies && typeof productTypeOther === "string" ? productTypeOther : null,
@@ -245,10 +264,17 @@ export async function POST(
     );
   }
 
-  // Filing a duplicate: flag the pre-existing gel too and open the case
-  // file for the developer to review at /admin/duplicate-gels.
+  // Filing a duplicate or claim: flag the pre-existing gel too and open
+  // the case file for the developer to review at /admin/duplicate-gels.
   if (isFilingDuplicate && duplicateMatch) {
-    await openDuplicateFile(checklistCardId, userId, gel.id, duplicateMatch.id);
+    try {
+      await openDuplicateFile(checklistCardId, userId, gel.id, duplicateMatch.id, isClaim ? "CLAIM" : "DUPLICATE");
+    } catch (error) {
+      if (error instanceof GelAlreadyFiledError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+      throw error;
+    }
   }
 
   // A new gel changes this set's cached checklist-row status/gelsPulled/

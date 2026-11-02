@@ -5,7 +5,7 @@ import { useState, useEffect, useTransition, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import type { ChecklistCardOption } from "./AddGelModal";
+import type { ChecklistCardOption, ClaimPrefill } from "./AddGelModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,9 @@ export interface LoggedGel {
   cardBackImageUrl: string | null;
   isVerified: boolean;
   duplicateFlag: DuplicateFlag;
+  // False for a reported sighting ("Someone Else's Gel") — drives the
+  // "Claim this card" button next to VerificationBadge in LoggedGelsModal.
+  isInHand: boolean;
   username: string;
   displayName: string | null;
   cardHistory: CardHistoryEvent[];
@@ -108,6 +111,9 @@ interface ChecklistTableProps {
   // header label.
   category: string;
   onAddGelClick: (option: ChecklistCardOption) => void;
+  // "Claim this card" in the Logged Gels/Card History popup — see
+  // AddGelModal's claimPrefill.
+  onClaimGel?: (prefill: ClaimPrefill) => void;
   onFilterChange: (filters: {
     search?: string;
     filterType?: string | null;
@@ -241,7 +247,7 @@ function CardTypeBadge({ type }: { type: string }) {
 // Every logged gel is reviewed by the developer at /admin/gels before it's
 // trusted — this reflects that review state wherever a logged gel is shown.
 
-export type DuplicateFlag = "NONE" | "PENDING" | "VERIFIED_DUPLICATE";
+export type DuplicateFlag = "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING";
 
 export function VerificationBadge({
   isVerified,
@@ -249,14 +255,23 @@ export function VerificationBadge({
 }: {
   isVerified: boolean;
   // A DuplicateGelFile is open or resolved against this gel — see
-  // prisma/schema.prisma's DuplicateGelFile. "VERIFIED_DUPLICATE" replaces
-  // the normal badge entirely; "PENDING" adds a second tag alongside it.
+  // prisma/schema.prisma's DuplicateGelFile. "VERIFIED_DUPLICATE" and
+  // "CLAIMING" replace the normal badge entirely; "PENDING" adds a
+  // second tag alongside it.
   duplicateFlag?: DuplicateFlag;
 }) {
   if (duplicateFlag === "VERIFIED_DUPLICATE") {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/30 whitespace-nowrap">
         Verified Duplicate
+      </span>
+    );
+  }
+
+  if (duplicateFlag === "CLAIMING") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-purple-500/15 text-purple-300 border-purple-500/30 whitespace-nowrap">
+        Verifying
       </span>
     );
   }
@@ -400,10 +415,14 @@ function LoggedGelsModal({
   row,
   onClose,
   onOpenImage,
+  onClaim,
 }: {
   row: ChecklistRow | null;
   onClose: () => void;
   onOpenImage: (target: CardImageTarget) => void;
+  // "Claim this card" next to VerificationBadge, shown for a sighting
+  // (!gel.isInHand) row — see AddGelModal's claimPrefill.
+  onClaim?: (prefill: ClaimPrefill) => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -536,6 +555,33 @@ function LoggedGelsModal({
 
                           <VerificationBadge isVerified={gel.isVerified} duplicateFlag={gel.duplicateFlag} />
 
+                          {!gel.isInHand && onClaim && gel.serialNumber != null && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onClaim({
+                                  cardOption: {
+                                    id:            row.id,
+                                    cardNumber:    row.cardNumber ?? "",
+                                    playerName:    row.playerName,
+                                    cardType:      row.cardType,
+                                    cardTier:      row.cardTier,
+                                    parallelType:  row.parallelType ?? null,
+                                    printRun:      row.printRun ?? null,
+                                    variationName: row.variationName ?? null,
+                                    team:          row.team ?? null,
+                                  },
+                                  serialNumber: gel.serialNumber!,
+                                });
+                                onClose();
+                              }}
+                              className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-white whitespace-nowrap bg-purple-600/90 hover:bg-purple-500 transition-colors shrink-0"
+                            >
+                              Claim this card
+                            </button>
+                          )}
+
                           <motion.span
                             animate={{ rotate: isExpanded ? 180 : 0 }}
                             transition={{ duration: 0.2 }}
@@ -577,20 +623,35 @@ export interface CardImageTarget {
   imageUrl: string | null;
   cardBackImageUrl: string | null;
   // Only ever set when opened from the "Recent Pulls" feed — drives the
-  // serial/logged-by/ownership badge row next to the close button below.
+  // serial/logged-by/ownership badge row next to the close button below,
+  // and the "Claim this card" button when !isInHand.
   serialNumber?: number | null;
   printRun?: number | null;
   loggedByName?: string | null;
   loggedByHandle?: string | null;
   isInHand?: boolean;
+  // Card identity, for the "Claim this card" button — enough to build a
+  // ChecklistCardOption/ClaimPrefill for AddGelModal. Same Recent-Pulls-only
+  // scope as the fields above.
+  cardTemplateId?: string;
+  cardType?: string;
+  cardTier?: string;
+  parallelType?: string | null;
+  variationName?: string | null;
+  team?: string | null;
 }
 
 export function CardImageModal({
   target,
   onClose,
+  onClaim,
 }: {
   target: CardImageTarget | null;
   onClose: () => void;
+  // "Recent Pulls" only (gated on loggedByName, same as the ownership
+  // badge below) — opens AddGelModal pre-filled to claim this sighting
+  // as the viewer's own card. Omit to hide the button entirely.
+  onClaim?: (prefill: ClaimPrefill) => void;
 }) {
   const hasImage = Boolean(target?.imageUrl || target?.cardBackImageUrl);
 
@@ -665,6 +726,31 @@ export function CardImageModal({
                         >
                           {target.isInHand ? "Own Gel" : "Someone Else's"}
                         </span>
+                        {!target.isInHand && onClaim && target.cardTemplateId && target.serialNumber != null && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClaim({
+                                cardOption: {
+                                  id:            target.cardTemplateId!,
+                                  cardNumber:    "",
+                                  playerName:    target.title,
+                                  cardType:      target.cardType ?? "",
+                                  cardTier:      target.cardTier,
+                                  parallelType:  target.parallelType ?? null,
+                                  printRun:      target.printRun ?? null,
+                                  variationName: target.variationName ?? null,
+                                  team:          target.team ?? null,
+                                },
+                                serialNumber: target.serialNumber!,
+                              });
+                              onClose();
+                            }}
+                            className="px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap uppercase bg-purple-600/90 hover:bg-purple-500 transition-colors"
+                          >
+                            Claim this card
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -1386,7 +1472,7 @@ function ChecklistRowItem({
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function ChecklistTable({
-  rows, meta, setId, category, onAddGelClick, onFilterChange, isLoading = false, availableTeams, availableCategories, availableTiers,
+  rows, meta, setId, category, onAddGelClick, onClaimGel, onFilterChange, isLoading = false, availableTeams, availableCategories, availableTiers,
 }: ChecklistTableProps) {
   const [search, setSearch]             = useState("");
   const [filterType, setFilterType]     = useState("");
@@ -1559,6 +1645,7 @@ export default function ChecklistTable({
         row={historyRow}
         onClose={() => setHistoryRow(null)}
         onOpenImage={setImageTarget}
+        onClaim={onClaimGel}
       />
 
       <CardImageModal

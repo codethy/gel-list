@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 export interface DuplicateMatch {
   id:                string;
   userId:            string;
+  isInHand:          boolean;
   createdAt:         Date;
   serialNumber:      number | null;
   cardFrontImageUrl: string | null;
@@ -36,6 +37,7 @@ export async function findDuplicateMatch(
     select: {
       id:                true,
       userId:            true,
+      isInHand:          true,
       createdAt:         true,
       serialNumber:      true,
       cardFrontImageUrl: true,
@@ -45,10 +47,22 @@ export async function findDuplicateMatch(
 }
 
 // Shapes a DuplicateMatch into the { duplicateKind, existingGel } pair both
-// routes return on a 409 — "OTHER" includes who logged it (public info —
-// name/handle, never email), "SELF" doesn't need to since it's the same user.
-export function shapeDuplicateResponse(match: DuplicateMatch, requestingUserId: string) {
-  const duplicateKind = match.userId === requestingUserId ? "SELF" : "OTHER";
+// routes return on a 409 — "OTHER"/"CLAIM" include who logged it (public
+// info — name/handle, never email), "SELF" doesn't need to since it's the
+// same user. "CLAIM": the new gel is owned (isInHand) and the match is only
+// a reported sighting (!match.isInHand) — the new logger is claiming it as
+// their own physical copy, rather than reporting a conflicting duplicate.
+export function shapeDuplicateResponse(
+  match: DuplicateMatch,
+  requestingUserId: string,
+  newGelIsInHand: boolean
+) {
+  const duplicateKind =
+    match.userId === requestingUserId
+      ? "SELF"
+      : newGelIsInHand && !match.isInHand
+      ? "CLAIM"
+      : "OTHER";
   return {
     duplicateKind,
     existingGel: {
@@ -56,7 +70,7 @@ export function shapeDuplicateResponse(match: DuplicateMatch, requestingUserId: 
       createdAt:         match.createdAt.toISOString(),
       serialNumber:      match.serialNumber,
       cardFrontImageUrl: match.cardFrontImageUrl,
-      ...(duplicateKind === "OTHER"
+      ...(duplicateKind === "OTHER" || duplicateKind === "CLAIM"
         ? {
             loggedByName:   match.user.name ?? match.user.username ?? "A user",
             loggedByHandle: match.user.handle,
@@ -74,7 +88,7 @@ export interface CreateGelRowInput {
   checklistCardId:   string;
   isInHand:          boolean;
   isVerified:        boolean;
-  duplicateFlag:     "NONE" | "PENDING";
+  duplicateFlag:     "NONE" | "PENDING" | "CLAIMING";
   acquisitionMethod: string | null;
   productType:       string | null;
   productTypeOther:  string | null;
@@ -213,20 +227,57 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
 }
 
 // ─── DUPLICATE FILE ─────────────────────────────────────────────────────────
+// Thrown instead of letting DuplicateGelFile's unique filedGelId/
+// existingGelId constraints blow up as an unhandled P2002 — a gel can only
+// ever be referenced by one open-or-closed file at a time (its whole
+// history, not just while OPEN, since a CLOSED file is still a real
+// record), so a second filing attempt against an already-filed gel needs
+// a clean error instead of a 500.
+export class GelAlreadyFiledError extends Error {
+  constructor() {
+    super("This card is already part of an open review.");
+  }
+}
+
+// Call BEFORE creating a new gel when a duplicate/claim match was found —
+// lets the route return a clean 409 without ever creating an orphaned gel
+// that then fails to get filed. openDuplicateFile re-checks this itself
+// right before its own create too, as a backstop against a race between
+// two concurrent requests filing against the same existing gel.
+export async function isGelAlreadyFiled(gelId: string): Promise<boolean> {
+  const existing = await prisma.duplicateGelFile.findFirst({
+    where:  { OR: [{ filedGelId: gelId }, { existingGelId: gelId }] },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
 // Flags the pre-existing gel (it keeps its own isVerified as-is — only the
-// "Possible Duplicate" tag is new for it) and opens the case file for the
-// developer to review at /admin/duplicate-gels. Only ever called from the
-// single-gel create path — the batch path never auto-files (see
-// app/api/sets/[id]/gels/batch/route.ts's doc comment for why).
+// new duplicateFlag tag is new for it) and opens the case file for the
+// developer to review at /admin/duplicate-gels. `fileType` distinguishes a
+// real duplicate-serial conflict (DUPLICATE — see AddGelModal's "File a
+// Duplicate") from a user claiming a card someone else only reported
+// seeing (CLAIM — "Claim this Card"); drives both the file's own type and
+// which DuplicateFlag ("PENDING" vs "CLAIMING") both gels get. Only ever
+// called from the single-gel create path — the batch path never
+// auto-files (see app/api/sets/[id]/gels/batch/route.ts's doc comment for
+// why).
 export async function openDuplicateFile(
   checklistCardId: string,
   filedByUserId:   string,
   filedGelId:      string,
-  existingGelId:   string
+  existingGelId:   string,
+  fileType:        "DUPLICATE" | "CLAIM"
 ): Promise<void> {
+  if (await isGelAlreadyFiled(existingGelId) || await isGelAlreadyFiled(filedGelId)) {
+    throw new GelAlreadyFiledError();
+  }
+
+  const duplicateFlag = fileType === "CLAIM" ? "CLAIMING" : "PENDING";
+
   await prisma.portfolioCard.update({
     where: { id: existingGelId },
-    data:  { duplicateFlag: "PENDING" },
+    data:  { duplicateFlag },
   });
   await prisma.duplicateGelFile.create({
     data: {
@@ -234,6 +285,7 @@ export async function openDuplicateFile(
       filedByUser:   { connect: { id: filedByUserId } },
       filedGel:      { connect: { id: filedGelId } },
       existingGel:   { connect: { id: existingGelId } },
+      fileType,
     },
   });
 }

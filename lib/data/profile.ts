@@ -81,7 +81,7 @@ function shapeGelEntry(pc: PortfolioCardWithRelations): GelEntry & { cardSetId: 
     cardTemplateId:    pc.checklistCard.id,
     isInHand:          pc.isInHand,
     isVerified:        pc.isVerified,
-    duplicateFlag:     String(pc.duplicateFlag) as "NONE" | "PENDING" | "VERIFIED_DUPLICATE",
+    duplicateFlag:     String(pc.duplicateFlag) as "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING",
     acquisitionMethod: pc.acquisitionMethod != null ? String(pc.acquisitionMethod) : null,
     serialNumber:      pc.serialNumber      ?? null,
     hitYear:           pc.hitYear           ?? null,

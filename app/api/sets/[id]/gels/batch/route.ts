@@ -163,7 +163,7 @@ export async function POST(
   const conflictIndex = duplicateMatches.findIndex((m) => m !== null);
   if (conflictIndex !== -1) {
     const match = duplicateMatches[conflictIndex]!;
-    const { duplicateKind, existingGel } = shapeDuplicateResponse(match, userId);
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(match, userId, isInHand);
     return NextResponse.json(
       {
         error: `Card #${conflictIndex + 1} (serial #${match.serialNumber}) was already logged — remove it or correct the serial number before submitting.`,

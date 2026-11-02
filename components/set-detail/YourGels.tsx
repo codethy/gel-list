@@ -194,6 +194,12 @@ export function GelCard({
                 loggedByName: gel.loggedByName ?? null,
                 loggedByHandle: gel.loggedByHandle ?? null,
                 isInHand: gel.isInHand ?? true,
+                cardTemplateId: gel.cardTemplateId,
+                cardType: gel.cardTemplate.cardType,
+                cardTier: gel.cardTemplate.cardTier,
+                parallelType: gel.cardTemplate.parallelType ?? null,
+                variationName: gel.cardTemplate.variationName ?? null,
+                team: gel.cardTemplate.team ?? null,
               })
             }
             aria-label={`View card image for ${gel.cardTemplate.playerName}`}

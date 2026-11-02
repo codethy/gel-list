@@ -528,13 +528,18 @@ enum DuplicateFlag {
   NONE
   PENDING
   VERIFIED_DUPLICATE
+  // A DuplicateGelFile with fileType CLAIM is open against this gel —
+  // overrides the badge shown to "Verifying" until the admin resolves it.
+  CLAIMING
 }
 
 // ─── DUPLICATE GEL FILE ───────────────────────────────────────────────────────
-// Opened when a user logs a serialized card (same checklistCardId +
-// serialNumber) that someone ELSE has already logged — the "File a
-// Duplicate" action in AddGelModal. Reviewed by the developer at
-// /admin/duplicate-gels.
+// Opened in two cases: a user logs a serialized card (same
+// checklistCardId + serialNumber) that someone ELSE has already logged
+// (fileType DUPLICATE — the "File a Duplicate" action), or a user logs
+// their own copy of a card someone else had only reported seeing
+// (fileType CLAIM — the "Claim this Card" action). Both are opened from
+// AddGelModal and reviewed by the developer at /admin/duplicate-gels.
 model DuplicateGelFile {
   id              String @id @default(cuid())
   // Auto-assigned, starting at 1 — shown to the admin as "Case #N".
@@ -548,11 +553,15 @@ model DuplicateGelFile {
   filedGelId    String? @unique
   existingGelId String? @unique
 
+  fileType DuplicateFileType @default(DUPLICATE)
+
   // Pure admin housekeeping — independent of decision below, reopenable.
   status   DuplicateFileStatus   @default(OPEN)
-  // The developer's call on whether this is a real duplicate (e.g. a
-  // genuine manufacturer misprint of the same serial twice) or not (one
-  // side made a mistake, handled via the normal edit/verify flow instead).
+  // The developer's call: for a DUPLICATE file, whether this is a real
+  // duplicate (e.g. a genuine manufacturer misprint of the same serial
+  // twice) or not (one side made a mistake, handled via the normal
+  // edit/verify flow instead); for a CLAIM file, whether the claiming
+  // user really does own the card.
   decision DuplicateFileDecision @default(PENDING)
 
   createdAt DateTime @default(now())
@@ -564,6 +573,11 @@ model DuplicateGelFile {
   existingGel   PortfolioCard? @relation("DuplicateExistingGel", fields: [existingGelId], references: [id], onDelete: SetNull)
 }
 
+enum DuplicateFileType {
+  DUPLICATE
+  CLAIM
+}
+
 enum DuplicateFileStatus {
   OPEN
   CLOSED
@@ -573,6 +587,8 @@ enum DuplicateFileDecision {
   PENDING
   CONFIRMED_DUPLICATE
   NOT_DUPLICATE
+  CLAIM_APPROVED
+  CLAIM_REJECTED
 }
 
 // ─── FAVORITE GEL ─────────────────────────────────────────────────────────────

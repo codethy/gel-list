@@ -85,7 +85,7 @@ function GelPanel({
               &ldquo;{gel.notes}&rdquo;
             </p>
           )}
-          <VerificationBadge isVerified={gel.isVerified} duplicateFlag={gel.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE"} />
+          <VerificationBadge isVerified={gel.isVerified} duplicateFlag={gel.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING"} />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
@@ -110,6 +110,27 @@ function GelPanel({
   );
 }
 
+const DECISION_LABELS: Record<string, string> = {
+  CONFIRMED_DUPLICATE: "Confirmed Duplicate",
+  NOT_DUPLICATE:        "Not a Duplicate",
+  CLAIM_APPROVED:       "Claim Approved",
+  CLAIM_REJECTED:       "Claim Rejected",
+  PENDING:              "Pending Review",
+};
+
+function decisionBadgeClass(decision: string): string {
+  if (decision === "CONFIRMED_DUPLICATE" || decision === "CLAIM_REJECTED") {
+    return "bg-red-500/15 text-red-300 border-red-500/30";
+  }
+  if (decision === "NOT_DUPLICATE") {
+    return "bg-slate-600/20 text-slate-400 border-slate-600/40";
+  }
+  if (decision === "CLAIM_APPROVED") {
+    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  }
+  return "bg-amber-500/15 text-amber-300 border-amber-500/30"; // PENDING
+}
+
 function FileCard({
   file,
   busy,
@@ -120,20 +141,30 @@ function FileCard({
 }: {
   file: AdminDuplicateFile;
   busy: boolean;
-  onDecision: (fileId: string, action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE") => void;
+  onDecision: (fileId: string, action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE" | "APPROVE_CLAIM" | "REJECT_CLAIM") => void;
   onToggleStatus: (fileId: string, action: "CLOSE" | "REOPEN") => void;
   onEditGel: (gel: AdminGelEntry) => void;
   onDeleteGel: (fileId: string, slot: "filedGel" | "existingGel", gelId: string) => void;
 }) {
   const subtitle = playerSubtitle(file.checklistCard);
+  const isClaim = file.fileType === "CLAIM";
 
   return (
     <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-white">
-            Case #{file.fileNumber} &mdash; {file.checklistCard.playerName}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold text-white">
+              Case #{file.fileNumber} &mdash; {file.checklistCard.playerName}
+            </p>
+            <span
+              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border whitespace-nowrap ${
+                isClaim ? "bg-purple-500/15 text-purple-300 border-purple-500/30" : "bg-sky-500/15 text-sky-300 border-sky-500/30"
+              }`}
+            >
+              {isClaim ? "Claim" : "Duplicate"}
+            </span>
+          </div>
           <p className="text-xs text-slate-500">
             {file.checklistCard.setName}
             {subtitle ? ` — ${subtitle}` : ""}
@@ -152,15 +183,9 @@ function FileCard({
             {file.status === "CLOSED" ? "Closed" : "Open"}
           </span>
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap ${
-              file.decision === "CONFIRMED_DUPLICATE"
-                ? "bg-red-500/15 text-red-300 border-red-500/30"
-                : file.decision === "NOT_DUPLICATE"
-                ? "bg-slate-600/20 text-slate-400 border-slate-600/40"
-                : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-            }`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap ${decisionBadgeClass(file.decision)}`}
           >
-            {file.decision === "CONFIRMED_DUPLICATE" ? "Confirmed Duplicate" : file.decision === "NOT_DUPLICATE" ? "Not a Duplicate" : "Pending Review"}
+            {DECISION_LABELS[file.decision] ?? file.decision}
           </span>
         </div>
       </div>
@@ -168,14 +193,14 @@ function FileCard({
       <div className="flex flex-col sm:flex-row gap-3">
         <GelPanel
           gel={file.filedGel}
-          title="Filed Gel"
+          title={isClaim ? "Claiming Gel" : "Filed Gel"}
           busy={busy}
           onEdit={onEditGel}
           onDelete={(gelId) => onDeleteGel(file.id, "filedGel", gelId)}
         />
         <GelPanel
           gel={file.existingGel}
-          title="Pre-Existing Gel"
+          title={isClaim ? "Originally Reported Gel" : "Pre-Existing Gel"}
           busy={busy}
           onEdit={onEditGel}
           onDelete={(gelId) => onDeleteGel(file.id, "existingGel", gelId)}
@@ -183,22 +208,45 @@ function FileCard({
       </div>
 
       <div className="flex items-center gap-2 pt-1 flex-wrap">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onDecision(file.id, "CONFIRM_DUPLICATE")}
-          className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40 transition-colors"
-        >
-          Verify Duplicate is Real
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onDecision(file.id, "NOT_DUPLICATE")}
-          className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-slate-700/60 text-slate-300 border border-slate-600/50 hover:bg-slate-700 disabled:opacity-40 transition-colors"
-        >
-          Not a Duplicate
-        </button>
+        {isClaim ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision(file.id, "APPROVE_CLAIM")}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-40 transition-colors"
+            >
+              Verify Claim
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision(file.id, "REJECT_CLAIM")}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40 transition-colors"
+            >
+              Reject Claim
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision(file.id, "CONFIRM_DUPLICATE")}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40 transition-colors"
+            >
+              Verify Duplicate is Real
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision(file.id, "NOT_DUPLICATE")}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold bg-slate-700/60 text-slate-300 border border-slate-600/50 hover:bg-slate-700 disabled:opacity-40 transition-colors"
+            >
+              Not a Duplicate
+            </button>
+          </>
+        )}
         <button
           type="button"
           disabled={busy}
@@ -221,7 +269,10 @@ export default function AdminDuplicateGelsClient({ initialFiles }: { initialFile
     setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, ...patch } : f)));
   }, []);
 
-  const handleDecision = useCallback(async (fileId: string, action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE") => {
+  const handleDecision = useCallback(async (
+    fileId: string,
+    action: "CONFIRM_DUPLICATE" | "NOT_DUPLICATE" | "APPROVE_CLAIM" | "REJECT_CLAIM"
+  ) => {
     setBusyId(fileId);
     try {
       const res = await fetch(`/api/admin/duplicate-gels/${fileId}`, {
@@ -230,19 +281,37 @@ export default function AdminDuplicateGelsClient({ initialFiles }: { initialFile
         body: JSON.stringify({ action }),
       });
       if (res.ok) {
-        const decision = action === "CONFIRM_DUPLICATE" ? "CONFIRMED_DUPLICATE" : "NOT_DUPLICATE";
-        const duplicateFlag = action === "CONFIRM_DUPLICATE" ? "VERIFIED_DUPLICATE" : "NONE";
+        const decision = {
+          CONFIRM_DUPLICATE: "CONFIRMED_DUPLICATE",
+          NOT_DUPLICATE:     "NOT_DUPLICATE",
+          APPROVE_CLAIM:     "CLAIM_APPROVED",
+          REJECT_CLAIM:      "CLAIM_REJECTED",
+        }[action];
+        // Matches the server's exact per-gel update: a duplicate decision
+        // flags both gels identically; a claim decision only ever marks
+        // the claiming (filed) gel isVerified on approval — the existing
+        // (originally reported) gel only ever has its flag cleared.
         setFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileId
-              ? {
-                  ...f,
-                  decision,
-                  filedGel:    f.filedGel    ? { ...f.filedGel,    duplicateFlag } : null,
-                  existingGel: f.existingGel ? { ...f.existingGel, duplicateFlag } : null,
-                }
-              : f
-          )
+          prev.map((f) => {
+            if (f.id !== fileId) return f;
+            if (action === "CONFIRM_DUPLICATE" || action === "NOT_DUPLICATE") {
+              const duplicateFlag = action === "CONFIRM_DUPLICATE" ? "VERIFIED_DUPLICATE" : "NONE";
+              return {
+                ...f,
+                decision,
+                filedGel:    f.filedGel    ? { ...f.filedGel,    duplicateFlag } : null,
+                existingGel: f.existingGel ? { ...f.existingGel, duplicateFlag } : null,
+              };
+            }
+            return {
+              ...f,
+              decision,
+              filedGel: f.filedGel
+                ? { ...f.filedGel, duplicateFlag: "NONE", isVerified: action === "APPROVE_CLAIM" ? true : f.filedGel.isVerified }
+                : null,
+              existingGel: f.existingGel ? { ...f.existingGel, duplicateFlag: "NONE" } : null,
+            };
+          })
         );
       } else {
         alert((await res.json().catch(() => ({})))?.error ?? "Failed to update file");

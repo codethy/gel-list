@@ -37,7 +37,7 @@ export interface SetDetailData {
     cardTemplateId:    string;
     isInHand:          boolean;
     isVerified:        boolean;
-    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE";
+    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING";
     acquisitionMethod: string | null;
     serialNumber:      number | null;
     hitYear:           number | null;
@@ -70,7 +70,7 @@ export interface SetDetailData {
     cardTemplateId:    string;
     isInHand:          boolean;
     isVerified:        boolean;
-    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE";
+    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING";
     acquisitionMethod: string | null;
     serialNumber:      number | null;
     hitYear:           number | null;
@@ -615,7 +615,7 @@ export async function getSetDetail(
     cardTemplateId:    pc.checklistCard.id,
     isInHand:          pc.isInHand,
     isVerified:        pc.isVerified,
-    duplicateFlag:     pc.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE",
+    duplicateFlag:     pc.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING",
     acquisitionMethod: pc.acquisitionMethod != null ? String(pc.acquisitionMethod) : null,
     serialNumber:      pc.serialNumber      ?? null,
     hitYear:           pc.hitYear           ?? null,
@@ -646,7 +646,7 @@ export async function getSetDetail(
     cardTemplateId:    pc.checklistCard.id,
     isInHand:          pc.isInHand,
     isVerified:        pc.isVerified,
-    duplicateFlag:     pc.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE",
+    duplicateFlag:     pc.duplicateFlag as "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING",
     acquisitionMethod: pc.acquisitionMethod != null ? String(pc.acquisitionMethod) : null,
     serialNumber:      pc.serialNumber      ?? null,
     hitYear:           pc.hitYear           ?? null,

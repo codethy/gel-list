@@ -12,12 +12,15 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { GelCard, type GelEntry } from "./YourGels";
 import { CardImageModal, type CardImageTarget } from "./ChecklistTable";
+import type { ClaimPrefill } from "./AddGelModal";
 
 interface RecentPullsProps {
   gels: GelEntry[];
+  // "Claim this card" in the image popup — see AddGelModal's claimPrefill.
+  onClaimGel?: (prefill: ClaimPrefill) => void;
 }
 
-export default function RecentPulls({ gels }: RecentPullsProps) {
+export default function RecentPulls({ gels, onClaimGel }: RecentPullsProps) {
   const [imageTarget, setImageTarget] = useState<CardImageTarget | null>(null);
 
   if (gels.length === 0) return null;
@@ -37,7 +40,7 @@ export default function RecentPulls({ gels }: RecentPullsProps) {
         ))}
       </motion.div>
 
-      <CardImageModal target={imageTarget} onClose={() => setImageTarget(null)} />
+      <CardImageModal target={imageTarget} onClose={() => setImageTarget(null)} onClaim={onClaimGel} />
     </section>
   );
 }

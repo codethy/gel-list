@@ -25,6 +25,7 @@ export interface DuplicateFileGel extends AdminGelEntry {
 export interface AdminDuplicateFile {
   id:         string;
   fileNumber: number;
+  fileType:   string; // "DUPLICATE" | "CLAIM"
   status:     string;
   decision:   string;
   createdAt:  string;
@@ -132,6 +133,7 @@ export async function getAllDuplicateFiles(): Promise<AdminDuplicateFile[]> {
     select: {
       id:         true,
       fileNumber: true,
+      fileType:   true,
       status:     true,
       decision:   true,
       createdAt:  true,
@@ -156,6 +158,7 @@ export async function getAllDuplicateFiles(): Promise<AdminDuplicateFile[]> {
   return files.map((f) => ({
     id:         f.id,
     fileNumber: f.fileNumber,
+    fileType:   String(f.fileType),
     status:     String(f.status),
     decision:   String(f.decision),
     createdAt:  f.createdAt.toISOString(),

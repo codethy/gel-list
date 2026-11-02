@@ -25,6 +25,15 @@ export interface ChecklistCardOption {
   team?: string | null;
 }
 
+// What a "Claim this card" button (Recent Pulls popup, Logged Gels/Card
+// History popup) hands to AddGelModal to open straight into the SELF/
+// Single form, locked to this specific card+serial — see the
+// `claimPrefill` prop below.
+export interface ClaimPrefill {
+  cardOption: ChecklistCardOption;
+  serialNumber: number;
+}
+
 // One entry in this set's admin-curated product catalog (see SetProduct in
 // prisma/schema.prisma) — options for the "Which Product" dropdown, enabled
 // only when "How did you get it?" is "Pulled".
@@ -58,6 +67,15 @@ interface AddGelModalProps {
   // reassign a logged gel to a different card), and submitting PATCHes
   // instead of POSTing.
   editingGel?: GelEntry | null;
+  // When set (and no editingGel), the modal opens straight into the
+  // Single Gel / "My Own Gel" form — skipping the choice/mode screens —
+  // prefilled and locked to this specific card+serial. Set from the
+  // "Claim this card" buttons (Recent Pulls popup, Logged Gels/Card
+  // History popup) for a card someone else only reported seeing; the
+  // actual claim is detected and confirmed server-side on submit, the
+  // same 409 duplicateKind: "CLAIM" flow a regular SELF-vs-OTHER
+  // collision during normal logging goes through.
+  claimPrefill?: ClaimPrefill | null;
   // This user's own most recently submitted City/Country (SELF flow only)
   // — see lib/data/userGelDefaults.ts. Pre-fills a fresh "My Own Gel" log,
   // never "Someone Else's Gel".
@@ -726,6 +744,7 @@ export default function AddGelModal({
   products,
   preselectedCardOption,
   editingGel,
+  claimPrefill,
   defaultHitCity,
   defaultHitCountry,
 }: AddGelModalProps) {
@@ -739,10 +758,12 @@ export default function AddGelModal({
   // submit — see handleSubmit's 409 handling below. "SELF": this user
   // already logged this exact card (offer to replace it in place).
   // "OTHER": a different user already logged it (offer to file a
-  // duplicate case for the developer to review).
+  // duplicate case for the developer to review). "CLAIM": this gel is
+  // owned (SELF) and the match is only a reported sighting by someone
+  // else — offer to claim it as the logger's own physical copy instead.
   const [duplicatePrompt, setDuplicatePrompt] = useState<
     | { kind: "SELF"; existingGel: { id: string; createdAt: string; serialNumber: number | null; cardFrontImageUrl: string | null } }
-    | { kind: "OTHER"; existingGel: { id: string; createdAt: string; serialNumber: number | null; cardFrontImageUrl: string | null; loggedByName: string; loggedByHandle: string | null } }
+    | { kind: "OTHER" | "CLAIM"; existingGel: { id: string; createdAt: string; serialNumber: number | null; cardFrontImageUrl: string | null; loggedByName: string; loggedByHandle: string | null } }
     | null
   >(null);
   const [isResolvingDuplicate, setIsResolvingDuplicate] = useState(false);
@@ -838,6 +859,23 @@ export default function AddGelModal({
         variationName: editingGel.cardTemplate.variationName ?? null,
         team:          editingGel.cardTemplate.team          ?? null,
       });
+    } else if (claimPrefill) {
+      // "Claim this card" — go straight to the SELF/Single form, locked
+      // to this specific card+serial. The actual claim is only confirmed
+      // server-side when this gets submitted (the same duplicateKind:
+      // "CLAIM" 409 flow a normal collision during logging goes through).
+      setStep("form");
+      setLogMode("single");
+      setLoggedFor("SELF");
+      setForm({
+        ...EMPTY_FORM,
+        checklistCardId: claimPrefill.cardOption.id,
+        serialNumber:    String(claimPrefill.serialNumber),
+        hitCity:         defaultHitCity    ?? "",
+        hitCountry:      defaultHitCountry ?? "",
+      });
+      setSelectedCardOption(claimPrefill.cardOption);
+      setMultiCards([newMultiCardEntry(claimPrefill.cardOption)]);
     } else {
       setStep("choice");
       setLoggedFor("SELF");
@@ -848,7 +886,7 @@ export default function AddGelModal({
     }
     setError(null);
     setDuplicatePrompt(null);
-  }, [isOpen, editingGel, preselectedCardOption, products]);
+  }, [isOpen, editingGel, claimPrefill, preselectedCardOption, products, defaultHitCity, defaultHitCountry]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -981,7 +1019,7 @@ export default function AddGelModal({
         // gel — see app/api/sets/[id]/gels/route.ts. Editing never hits
         // this (duplicate-checking is create-only), so isEditing is never
         // true here in practice.
-        if (res.status === 409 && (data.duplicateKind === "SELF" || data.duplicateKind === "OTHER")) {
+        if (res.status === 409 && ["SELF", "OTHER", "CLAIM"].includes(data.duplicateKind)) {
           setDuplicatePrompt({ kind: data.duplicateKind, existingGel: data.existingGel });
           return;
         }
@@ -1025,11 +1063,12 @@ export default function AddGelModal({
     }
   }
 
-  // ── Resolve the "someone else already logged this" prompt: proceed with
-  // logging anyway, flagging the gel (and the pre-existing one) as a
-  // possible duplicate for the developer to review. ─────────────────────────
+  // ── Resolve the "someone else already logged this" or "claim this
+  // card" prompt: proceed with logging anyway — the server decides
+  // whether this opens a DUPLICATE or CLAIM file from the gels' own
+  // isInHand values, not from anything this function asserts. ───────────
   async function handleFileDuplicate() {
-    if (!duplicatePrompt || duplicatePrompt.kind !== "OTHER") return;
+    if (!duplicatePrompt || (duplicatePrompt.kind !== "OTHER" && duplicatePrompt.kind !== "CLAIM")) return;
     setIsResolvingDuplicate(true);
     try {
       const res = await fetch(`/api/sets/${setId}/gels`, {
@@ -1353,7 +1392,7 @@ export default function AddGelModal({
               {/* ── Header ───────────────────────────────────────────────── */}
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  {!isEditing && (
+                  {!isEditing && !claimPrefill && (
                     <button
                       type="button"
                       onClick={() => setStep("mode")}
@@ -1402,7 +1441,7 @@ export default function AddGelModal({
                         setForm((prev) => ({ ...prev, checklistCardId: option?.id ?? "" }));
                         setSelectedCardOption(option);
                       }}
-                      isLocked={Boolean(preselectedCardOption) || isEditing}
+                      isLocked={Boolean(preselectedCardOption) || isEditing || Boolean(claimPrefill)}
                       category={category}
                     />
                   </div>
@@ -1832,7 +1871,9 @@ export default function AddGelModal({
             aria-modal="true"
             aria-label="Possible duplicate gel"
           >
-            <div className={`h-1 w-full rounded-t-2xl ${duplicatePrompt.kind === "SELF" ? "bg-blue-500" : "bg-amber-500"}`} />
+            <div className={`h-1 w-full rounded-t-2xl ${
+              duplicatePrompt.kind === "SELF" ? "bg-blue-500" : duplicatePrompt.kind === "CLAIM" ? "bg-purple-500" : "bg-amber-500"
+            }`} />
             <div className="p-5 space-y-4">
               {duplicatePrompt.kind === "SELF" ? (
                 <>
@@ -1841,6 +1882,16 @@ export default function AddGelModal({
                     You logged serial #{duplicatePrompt.existingGel.serialNumber} for this card on{" "}
                     {new Date(duplicatePrompt.existingGel.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
                     Would you like to replace that entry with these details?
+                  </p>
+                </>
+              ) : duplicatePrompt.kind === "CLAIM" ? (
+                <>
+                  <h2 className="text-base font-bold text-white">Claim this card?</h2>
+                  <p className="text-sm text-slate-400">
+                    <span className="text-slate-200 font-semibold">{duplicatePrompt.existingGel.loggedByName}</span> reported
+                    seeing serial #{duplicatePrompt.existingGel.serialNumber} for this card on{" "}
+                    {new Date(duplicatePrompt.existingGel.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
+                    Would you like to claim it as your own?
                   </p>
                 </>
               ) : (
@@ -1883,10 +1934,18 @@ export default function AddGelModal({
                   className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-40 transition-colors duration-150 shadow-lg ${
                     duplicatePrompt.kind === "SELF"
                       ? "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
+                      : duplicatePrompt.kind === "CLAIM"
+                      ? "bg-purple-600 hover:bg-purple-500 shadow-purple-900/30"
                       : "bg-amber-600 hover:bg-amber-500 shadow-amber-900/30"
                   }`}
                 >
-                  {isResolvingDuplicate ? "Saving..." : duplicatePrompt.kind === "SELF" ? "Replace" : "File a Duplicate"}
+                  {isResolvingDuplicate
+                    ? "Saving..."
+                    : duplicatePrompt.kind === "SELF"
+                    ? "Replace"
+                    : duplicatePrompt.kind === "CLAIM"
+                    ? "Claim this Card"
+                    : "File a Duplicate"}
                 </button>
               </div>
             </div>
