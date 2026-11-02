@@ -108,7 +108,15 @@ export interface SetDetailData {
     cardType:      string;
     cardTier:      string;
     parallelType:  string | null;
+    // This card's own real printRun, exactly as the admin set it (or null
+    // if unspecified) — never derived from how many gels are logged.
+    // Feeds playerSubtitle's "/N" suffix and the card search/options.
     printRun:      number | null;
+    // The Gels column's combined denominator across every parallel/variant
+    // sharing this cardNumber — can differ from printRun above: a variant
+    // with no fixed printRun contributes its own logged-gel count instead
+    // of 0 (see the grouping comment below). Only ever used by GelsCell.
+    combinedPrintRun: number | null;
     variationName: string | null;
     imageUrl:      string | null;
     cardBackImageUrl: string | null;
@@ -298,7 +306,13 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
       const totalPrintRunByRepId = new Map(
         firstPageGroups.map((g) => [
           g.representativeId,
-          g.knownPrintRunSum + g.nullPrintRunCardIds.reduce((sum, id) => sum + (firstPageGelsCountByCardId.get(id) ?? 0), 0),
+          // Only meaningful once at least one variant in the group has a
+          // real printRun — a group where EVERY variant is unlimited/
+          // unspecified (e.g. a plain TCG card with no parallels at all)
+          // has no real denominator to show, not "however many logged."
+          g.knownPrintRunSum > 0
+            ? g.knownPrintRunSum + g.nullPrintRunCardIds.reduce((sum, id) => sum + (firstPageGelsCountByCardId.get(id) ?? 0), 0)
+            : 0,
         ] as const)
       );
 
@@ -415,9 +429,11 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
           cardType:      String(c.cardCategory),
           cardTier:      String(c.cardTier),
           parallelType:  c.parallel     ?? null,
+          // This row's own real printRun — never the combined total below.
+          printRun:      c.printRun ?? null,
           // The Gels column shows combined totals across every
           // parallel/variant of this base card.
-          printRun:      totalPrintRunByRepId.get(id) || null,
+          combinedPrintRun: totalPrintRunByRepId.get(id) || null,
           variationName: c.variationName ?? null,
           // A real logged gel's own photo takes precedence; the admin-set
           // default image only fills in until one exists.

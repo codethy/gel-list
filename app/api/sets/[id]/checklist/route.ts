@@ -157,7 +157,13 @@ export async function GET(
   const totalPrintRunByRepId = new Map(
     pageGroups.map((g) => [
       g.representativeId,
-      g.knownPrintRunSum + g.nullPrintRunCardIds.reduce((sum, id) => sum + (gelsCountByCardId.get(id) ?? 0), 0),
+      // Only meaningful once at least one variant in the group has a real
+      // printRun — a group where EVERY variant is unlimited/unspecified
+      // (e.g. a plain TCG card with no parallels at all) has no real
+      // denominator to show at all, not "however many have been logged."
+      g.knownPrintRunSum > 0
+        ? g.knownPrintRunSum + g.nullPrintRunCardIds.reduce((sum, id) => sum + (gelsCountByCardId.get(id) ?? 0), 0)
+        : 0,
     ] as const)
   );
 
@@ -200,13 +206,17 @@ export async function GET(
       cardType:      String(c.cardCategory),  // cardCategory → cardType for UI
       cardTier:      String(c.cardTier),      // only shown for TCG sets, as "Rarity"
       parallelType:  c.parallel    ?? null,   // parallel → parallelType for UI
+      // This row's own real printRun, exactly as the admin set it — never
+      // derived from how many gels are logged. Feeds the subtitle's "/N"
+      // suffix; the combined total below is a separate field.
+      printRun:      c.printRun ?? null,
       // The Gels column shows combined totals across every parallel/variant
       // of this base card, not just this one representative row — e.g. a
       // card with a /50, /25, /10, and /1 parallel shows "owned/86", and a
       // gel logged against any one of them counts toward that total. A
       // printRun of 0 only happens when every variant's own printRun is
       // null (unlimited/unspecified), so it's reported back as null too.
-      printRun:      totalPrintRunByRepId.get(id) || null,
+      combinedPrintRun: totalPrintRunByRepId.get(id) || null,
       variationName: c.variationName ?? null,
       status:        extras.status,
       ownedGelId:    extras.ownedGelId,

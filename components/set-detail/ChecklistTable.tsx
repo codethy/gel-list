@@ -88,7 +88,16 @@ export interface ChecklistRow {
   // the main ChecklistTable component.
   cardTier: string;
   parallelType?: string | null;
+  // This card's own real printRun, exactly as the admin set it (or null
+  // if unspecified) — never derived from how many gels are logged. Used
+  // for playerSubtitle's "/N" suffix, never for the Gels column.
   printRun?: number | null;
+  // The Gels column's combined denominator across every parallel/variant
+  // sharing this cardNumber — see lib/data/sets.ts. Undefined for an
+  // already-expanded single-variant row (the variants lazy-fetch route
+  // doesn't group), in which case GelsCell falls back to this row's own
+  // printRun above.
+  combinedPrintRun?: number | null;
   variationName?: string | null;
   status: CardStatus;
   ownedGelId?: string | null;
@@ -1116,7 +1125,7 @@ function VariantSubRow({
         <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
 
         <div className="flex items-center gap-1.5 w-16 justify-start">
-          <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+          <GelsCell gelsPulled={row.gelsPulled} printRun={row.combinedPrintRun ?? row.printRun} />
         </div>
 
         <button
@@ -1171,7 +1180,7 @@ function VariantSubRow({
           <p className="text-xs text-slate-300 truncate">{subtitle ?? "—"}</p>
           <div className="flex items-center gap-1.5 flex-wrap mt-1">
             <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
-            <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+            <GelsCell gelsPulled={row.gelsPulled} printRun={row.combinedPrintRun ?? row.printRun} />
           </div>
         </div>
 
@@ -1470,7 +1479,7 @@ function ChecklistRowItem({
 
         {/* Gels pulled / print run + "view details" hint */}
         <div className="flex items-center justify-start gap-1.5">
-          <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+          <GelsCell gelsPulled={row.gelsPulled} printRun={row.combinedPrintRun ?? row.printRun} />
           {hasGels && (
             <span className="text-slate-600 shrink-0" aria-hidden="true">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1568,7 +1577,7 @@ function ChecklistRowItem({
 
             <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
               <CardTypeBadge type={category === "TCG" ? row.cardTier : row.cardType} />
-              <GelsCell gelsPulled={row.gelsPulled} printRun={row.printRun} />
+              <GelsCell gelsPulled={row.gelsPulled} printRun={row.combinedPrintRun ?? row.printRun} />
               {hasVariants ? (
                 <button
                   type="button"
