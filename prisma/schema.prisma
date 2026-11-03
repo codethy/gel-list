@@ -421,29 +421,6 @@ model ProductOpening {
   @@index([cardSetId])
 }
 
-enum PurchaseChannel {
-  OFFICIAL_WEBSITE
-  EBAY
-  LOCAL_STORE
-  BREAKERS
-  OTHER
-}
-
-enum LocalStore {
-  WALMART
-  TARGET
-  COSTCO
-  BESTBUY
-  OTHER
-}
-
-enum BreakerPlatform {
-  WHATNOT
-  FANATICS
-  EBAY_LIVE
-  OTHER
-}
-
 // ─── PORTFOLIO CARD ──────────────────────────────────────────────────────────
 
 model PortfolioCard {
@@ -478,14 +455,6 @@ model PortfolioCard {
   productTypeOther      String?      @db.VarChar(150)
   totalCardsInProduct   Int?
   productQuantityOpened Int?
-
-  // Purchase channel
-  purchaseChannel      PurchaseChannel?
-  localStore           LocalStore?
-  localStoreOther      String?          @db.VarChar(150)
-  breakerPlatform      BreakerPlatform?
-  breakerOther         String?          @db.VarChar(150)
-  purchaseChannelOther String?          @db.VarChar(150)
 
   // Serial number
   serialNumber Int?
