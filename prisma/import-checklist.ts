@@ -433,6 +433,41 @@ async function main() {
   // only way to actually surface it.
   const seenKeys = new Map<string, { rowNum: number; playerName: string }>();
 
+  // A (cardNumber, parallel) collision doesn't always mean "the same
+  // physical card listed twice" — e.g. Topps Chrome "Image Variation" chase
+  // cards routinely reuse a base parallel's exact cardNumber+parallel pair
+  // (same player, same "SuperFractor"), and alphanumeric codes generated
+  // from player initials (e.g. "CCA-JT") can coincidentally collide between
+  // two totally unrelated cards. Rather than silently dropping a real card,
+  // a colliding row gets its own `parallel` value disambiguated — appending
+  // variationName first (distinguishes "Image Variation"/"Denim Tear" from
+  // the base parallel), then playerName too if that still collides (handles
+  // the initials-collision case, where variationName can be identical on
+  // both sides) — only ever touching the row that lost the collision, never
+  // the first-seen one. `usedParallelKeys` tracks every (cardNumber, final
+  // parallel) pair actually about to be inserted, so a synthesized value
+  // can never collide with another real or synthesized one either.
+  const usedParallelKeys = new Set<string>();
+  const disambiguations: string[] = [];
+
+  function disambiguateParallel(
+    cardNumber: string, parallel: string | null, variationName: string | null, playerName: string, rowNum: number
+  ): string | null {
+    const candidates = [
+      parallel,
+      [parallel, variationName].filter(Boolean).join(" ") || null,
+      [parallel, variationName, playerName].filter(Boolean).join(" ") || null,
+      [parallel, variationName, playerName, `#${rowNum}`].filter(Boolean).join(" "),
+    ];
+    for (const candidate of candidates) {
+      const key = `${cardNumber}::${candidate ?? ""}`;
+      if (!usedParallelKeys.has(key)) return candidate;
+    }
+    // Unreachable — the last candidate above includes the row number, which
+    // is always unique — but satisfies TypeScript's control-flow analysis.
+    return candidates[candidates.length - 1]!;
+  }
+
   for (let i = 0; i < rows.length; i++) {
     const row    = rows[i];
     const rowNum = i + 2; // +2 because row 1 is the header in Excel
@@ -479,14 +514,17 @@ async function main() {
     // NULL semantics wouldn't catch that at the database level.
     const dedupeKey = `${cardNumber}::${parallel ?? ""}`;
     const firstSeen = seenKeys.get(dedupeKey);
+    let finalParallel = parallel;
     if (firstSeen) {
-      parseErrors.push(
-        `Row ${rowNum} (card #${cardNumber}${parallel ? ` — ${parallel}` : ""} — ${playerName}): ` +
-        `duplicates row ${firstSeen.rowNum} (${firstSeen.playerName}) — same card number and parallel`
+      finalParallel = disambiguateParallel(cardNumber, parallel, variationName, playerName, rowNum);
+      disambiguations.push(
+        `Row ${rowNum} (card #${cardNumber} — ${playerName}): "${parallel ?? ""}" collided with row ` +
+        `${firstSeen.rowNum} (${firstSeen.playerName}) — stored as "${finalParallel}" instead`
       );
-      continue;
+    } else {
+      seenKeys.set(dedupeKey, { rowNum, playerName });
     }
-    seenKeys.set(dedupeKey, { rowNum, playerName });
+    usedParallelKeys.add(`${cardNumber}::${finalParallel ?? ""}`);
 
     // ── Derive isHit ─────────────────────────────────────────────────────────
     // If your Excel has an explicit TRUE/FALSE in the isHit column, that is used.
@@ -513,7 +551,7 @@ async function main() {
       team:          team,
       cardCategory:  categoryResult.valid,
       cardTier:      tierResult.valid,
-      parallel:      parallel,
+      parallel:      finalParallel,
       printRun:      printRun,
       variationName: variationName,
       isHit:         isHit,
@@ -543,6 +581,18 @@ async function main() {
       console.error("   Please fix the errors above and run again.\n");
       process.exit(1);
     }
+  }
+
+  // ── Report any auto-disambiguated parallels ─────────────────────────────
+  if (disambiguations.length > 0) {
+    console.log(`ℹ️  ${disambiguations.length} rows shared a cardNumber+parallel pair with another row and were auto-disambiguated (kept, not skipped):`);
+    for (const note of disambiguations.slice(0, 20)) {
+      console.log(`   - ${note}`);
+    }
+    if (disambiguations.length > 20) {
+      console.log(`   ... and ${disambiguations.length - 20} more`);
+    }
+    console.log("");
   }
 
   if (cards.length === 0) {

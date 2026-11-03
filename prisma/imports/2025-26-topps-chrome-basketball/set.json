@@ -1,0 +1,24 @@
+{
+  "fileName": "checklist.xlsx",
+  "sheetName": null,
+
+  "setName": "2025-26 Topps Chrome Basketball",
+  "year": 2026,
+  "brand": "Topps",
+  "category": "SPORTS",
+  "subCategory": "BASKETBALL",
+
+  "columns": {
+    "cardNumber": "cardNumber",
+    "playerName": "playerName",
+    "cardCategory": "cardCategory",
+    "cardTier": "cardTier",
+    "team": "team",
+    "parallel": "parallel",
+    "printRun": "printRun",
+    "variationName": "variationName",
+    "isHit": "isHit"
+  },
+
+  "batchSize": 100
+}
