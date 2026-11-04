@@ -53,6 +53,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
             initialName={user.name}
             initialHandle={user.handle}
             initialProfileImage={user.profileImage}
+            initialBio={user.bio}
             email={null}
             memberSince={memberSince}
             editable={false}

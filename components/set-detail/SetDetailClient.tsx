@@ -385,12 +385,20 @@ export default function SetDetailClient({
         <RecentPulls gels={recentPulls} onClaimGel={handleClaimGel} onCoOwnClaim={handleCoOwnClaim} />
 
         {/* ── 2. Your Gels ──────────────────────────────────────────── */}
-        <YourGels
-          gels={gels}
-          onAddGelClick={() => handleAddGelClick()}
-          onEditGel={handleEditGelClick}
-          onDeleteGel={handleDeleteGel}
-        />
+        {/* pt-6 (padding, not margin) so this adds to — rather than
+            competes on the same property with and gets silently
+            overridden by — the page's own space-y-8 margin-top. Without
+            this, "+ Add Gel" read as a continuation of the Recent Pulls
+            grid above it instead of its own section. */}
+        <div className="pt-6">
+          <YourGels
+            gels={gels}
+            setId={setId}
+            onAddGelClick={() => handleAddGelClick()}
+            onEditGel={handleEditGelClick}
+            onDeleteGel={handleDeleteGel}
+          />
+        </div>
 
         {/* ── Divider ───────────────────────────────────────────────── */}
         <div className="h-px w-full bg-slate-800/60" />

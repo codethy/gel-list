@@ -26,10 +26,14 @@ const HANDLE_MIN_LENGTH = 3;
 const HANDLE_MAX_LENGTH = 20;
 const HANDLE_PATTERN = /^[a-z0-9_]+$/;
 
+const BIO_MAX_LENGTH = 300;
+const BIO_MAX_LINES  = 3;
+
 interface ProfileAccountCardProps {
   initialName:         string;
   initialHandle:       string | null;
   initialProfileImage: string | null;
+  initialBio:          string | null;
   email:               string | null;
   memberSince:         string | null;
   // false on the public /u/[handle] view — hides the avatar upload/remove
@@ -42,6 +46,7 @@ export default function ProfileAccountCard({
   initialName,
   initialHandle,
   initialProfileImage,
+  initialBio,
   email,
   memberSince,
   editable = true,
@@ -58,6 +63,12 @@ export default function ProfileAccountCard({
   const [handleInput, setHandleInput] = useState(initialHandle ?? "");
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [identityError, setIdentityError]   = useState<string | null>(null);
+
+  const [bio, setBio]                 = useState(initialBio);
+  const [bioEditing, setBioEditing]   = useState(false);
+  const [bioInput, setBioInput]       = useState(initialBio ?? "");
+  const [savingBio, setSavingBio]     = useState(false);
+  const [bioError, setBioError]       = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -221,6 +232,56 @@ export default function ProfileAccountCard({
     }
   }
 
+  // ── Bio edit ──────────────────────────────────────────────────────────────
+  function openBioEdit() {
+    setBioInput(bio ?? "");
+    setBioError(null);
+    setBioEditing(true);
+  }
+
+  function cancelBioEdit() {
+    setBioEditing(false);
+    setBioError(null);
+  }
+
+  // Caps the textarea at 3 lines as the user types — extra Enter presses
+  // past the 3rd line are simply ignored, rather than letting the field
+  // grow and only rejecting on save.
+  function handleBioInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const lines = e.target.value.split("\n");
+    setBioInput(lines.length > BIO_MAX_LINES ? lines.slice(0, BIO_MAX_LINES).join("\n") : e.target.value);
+  }
+
+  async function handleSaveBio(e: React.FormEvent) {
+    e.preventDefault();
+    setBioError(null);
+
+    const trimmedBio = bioInput.trim();
+    if (trimmedBio.length > BIO_MAX_LENGTH) {
+      setBioError(`Bio must be ${BIO_MAX_LENGTH} characters or fewer`);
+      return;
+    }
+
+    setSavingBio(true);
+    try {
+      const res = await fetch("/api/user/bio", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bio: trimmedBio }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBioError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      setBio(trimmedBio || null);
+      setBioEditing(false);
+      router.refresh();
+    } finally {
+      setSavingBio(false);
+    }
+  }
+
   return (
     <>
     <div className="w-full sm:w-[340px] shrink-0 rounded-xl border border-slate-700/50 bg-slate-800/60 px-8 py-7 flex flex-col items-center justify-between gap-6">
@@ -363,6 +424,63 @@ export default function ProfileAccountCard({
               )}
             </div>
             {handle && <p className="text-sm text-slate-500">@{handle}</p>}
+          </div>
+        )}
+
+        {/* Bio — a short intro and/or social handles, up to 3 lines */}
+        {bioEditing ? (
+          <form onSubmit={handleSaveBio} className="w-full flex flex-col gap-2">
+            <textarea
+              autoFocus
+              rows={3}
+              value={bioInput}
+              onChange={handleBioInputChange}
+              placeholder="Add a short bio, what you collect, your social handles etc."
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200 text-center placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150 resize-none"
+            />
+
+            {bioError && (
+              <p className="text-xs text-red-400 text-center">{bioError}</p>
+            )}
+
+            <div className="flex items-center gap-2 w-full">
+              <button
+                type="button"
+                onClick={cancelBioEdit}
+                disabled={savingBio}
+                className="flex-1 text-sm font-medium text-slate-400 hover:text-white border border-slate-700/50 rounded-lg py-2 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingBio}
+                className="flex-1 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-2 transition-colors disabled:opacity-50"
+              >
+                {savingBio ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="w-full flex flex-col items-center gap-1 text-center">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bio</span>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={openBioEdit}
+                  title="Edit bio"
+                  className="text-slate-500 hover:text-white transition-colors text-sm"
+                >
+                  ✎
+                </button>
+              )}
+            </div>
+            {bio ? (
+              <p className="text-sm text-slate-300 whitespace-pre-line break-words">{bio}</p>
+            ) : (
+              editable && <p className="text-sm text-slate-600 italic">Add a short bio…</p>
+            )}
           </div>
         )}
       </div>

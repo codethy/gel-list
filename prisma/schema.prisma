@@ -65,6 +65,12 @@ model User {
   // used for gel attribution.
   handle String? @unique
 
+  // A short, free-text intro and/or social handles — shown on the profile
+  // page right under @handle. Up to 3 newline-separated lines, enforced
+  // both client-side (ProfileAccountCard.tsx) and server-side
+  // (app/api/user/bio/route.ts).
+  bio String? @db.VarChar(300)
+
   // False right after first sign-in — Google supplies an initial `name`, but
   // every new user is required to pick their own display name via a blocking
   // pop-up (see components/NameSetupModal.tsx) before using the app. This

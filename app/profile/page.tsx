@@ -25,7 +25,7 @@ export default async function ProfilePage() {
   const [user, stats, favorites, allGels] = await Promise.all([
     prisma.user.findUnique({
       where:  { id: userId },
-      select: { createdAt: true, name: true, handle: true, profileImage: true, email: true },
+      select: { createdAt: true, name: true, handle: true, profileImage: true, email: true, bio: true },
     }),
     getProfileStats(userId),
     getFavoriteGels(userId),
@@ -52,6 +52,7 @@ export default async function ProfilePage() {
             initialName={user?.name ?? session.user.name ?? ""}
             initialHandle={user?.handle ?? session.user.handle ?? null}
             initialProfileImage={user?.profileImage ?? null}
+            initialBio={user?.bio ?? null}
             email={user?.email ?? session.user.email ?? null}
             memberSince={memberSince ?? null}
           />

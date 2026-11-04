@@ -76,6 +76,9 @@ export interface GelEntry {
 
 interface YourGelsProps {
   gels: GelEntry[];
+  // Drives the "See All Your Gels" link below — /profile/gels filtered to
+  // just this set.
+  setId: string;
   onAddGelClick: () => void; // callback to open the Add Gel modal
   onEditGel: (gel: GelEntry) => void; // callback to open the Add Gel modal in edit mode
   onDeleteGel: (gelId: string) => Promise<void>; // performs the delete + removes it from state
@@ -468,7 +471,7 @@ function EmptyGelsState({ onAddGelClick }: { onAddGelClick: () => void }) {
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
-export default function YourGels({ gels, onAddGelClick, onEditGel, onDeleteGel }: YourGelsProps) {
+export default function YourGels({ gels, setId, onAddGelClick, onEditGel, onDeleteGel }: YourGelsProps) {
   const [imageTarget, setImageTarget] = useState<CardImageTarget | null>(null);
 
   return (
@@ -485,25 +488,36 @@ export default function YourGels({ gels, onAddGelClick, onEditGel, onDeleteGel }
         </div>
 
         {gels.length > 0 && (
-          <button
-            onClick={onAddGelClick}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-600/50 hover:border-slate-500/60 transition-all duration-150"
-          >
-            {/* Plus icon */}
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onAddGelClick}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-600/50 hover:border-slate-500/60 transition-all duration-150"
             >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Add Gel
-          </button>
+              {/* Plus icon */}
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add Gel
+            </button>
+            <Link
+              href={`/profile/gels?setId=${setId}`}
+              className="flex items-center gap-0.5 px-2 py-1 rounded-md text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors duration-150"
+            >
+              See All Your Gels
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </Link>
+          </div>
         )}
       </div>
 

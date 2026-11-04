@@ -13,6 +13,7 @@ export interface PublicProfileUser {
   name:         string;
   handle:       string;
   profileImage: string | null;
+  bio:          string | null;
   createdAt:    Date;
 }
 
@@ -22,10 +23,10 @@ export interface PublicProfileUser {
 export async function getUserByHandle(handle: string): Promise<PublicProfileUser | null> {
   const user = await prisma.user.findUnique({
     where:  { handle },
-    select: { id: true, name: true, handle: true, profileImage: true, createdAt: true },
+    select: { id: true, name: true, handle: true, profileImage: true, bio: true, createdAt: true },
   });
   if (!user || !user.handle) return null;
-  return { id: user.id, name: user.name ?? "A user", handle: user.handle, profileImage: user.profileImage, createdAt: user.createdAt };
+  return { id: user.id, name: user.name ?? "A user", handle: user.handle, profileImage: user.profileImage, bio: user.bio, createdAt: user.createdAt };
 }
 
 const portfolioCardSelect = {
@@ -161,9 +162,12 @@ export type UserGelEntry = GelEntry & { cardSetId: string; setName: string };
 
 // Every gel the user actually owns (isInHand: true), across every set —
 // used by both the "All Your Gels" page and the Manage Favorites picker.
-export async function getAllUserGels(userId: string): Promise<UserGelEntry[]> {
+// `setId`, when given, narrows this down to just one set — the "See All
+// Your Gels" link from a set's own "Your Gels" section (see
+// components/set-detail/YourGels.tsx) passes this via /profile/gels?setId=.
+export async function getAllUserGels(userId: string, setId?: string): Promise<UserGelEntry[]> {
   const cards = await prisma.portfolioCard.findMany({
-    where:   { userId, isInHand: true },
+    where:   { userId, isInHand: true, ...(setId ? { cardSetId: setId } : {}) },
     orderBy: { createdAt: "desc" },
     select:  portfolioCardSelect,
   });

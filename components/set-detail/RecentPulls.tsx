@@ -30,12 +30,7 @@ export default function RecentPulls({ gels, onClaimGel, onCoOwnClaim }: RecentPu
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h2 className="text-lg font-bold text-white">Recent Pulls</h2>
-        <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/30">
-          {gels.length}
-        </span>
-      </div>
+      <h2 className="text-lg font-bold text-white">Recent Pulls</h2>
 
       <motion.div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
         {gels.map((gel, i) => (

@@ -10,13 +10,22 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getAllUserGels } from "@/lib/data/profile";
 import AllGelsGrid from "@/components/profile/AllGelsGrid";
 
-export default async function AllGelsPage() {
+interface AllGelsPageProps {
+  // "See All Your Gels" from a set's own "Your Gels" section (see
+  // components/set-detail/YourGels.tsx) links here with ?setId= to narrow
+  // this down to just that set.
+  searchParams: Promise<{ setId?: string }>;
+}
+
+export default async function AllGelsPage({ searchParams }: AllGelsPageProps) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     redirect("/auth/signin?callbackUrl=/profile/gels");
   }
 
-  const gels = await getAllUserGels(session.user.id);
+  const { setId } = await searchParams;
+  const gels = await getAllUserGels(session.user.id, setId);
+  const setName = setId ? gels[0]?.setName : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -32,11 +41,23 @@ export default async function AllGelsPage() {
             Back
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">All Your Gels</h1>
+            <h1 className="text-2xl font-bold text-white">
+              {setId ? "Your Gels" : "All Your Gels"}
+            </h1>
             <p className="text-sm text-slate-400">
-              {gels.length} gel{gels.length === 1 ? "" : "s"} logged across every set
+              {setId
+                ? `${gels.length} gel${gels.length === 1 ? "" : "s"} logged${setName ? ` in ${setName}` : ""}`
+                : `${gels.length} gel${gels.length === 1 ? "" : "s"} logged across every set`}
             </p>
           </div>
+          {setId && (
+            <Link
+              href="/profile/gels"
+              className="ml-auto text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors duration-150"
+            >
+              View all sets
+            </Link>
+          )}
         </div>
 
         <AllGelsGrid gels={gels} />
