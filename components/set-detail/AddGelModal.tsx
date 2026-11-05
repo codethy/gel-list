@@ -674,6 +674,7 @@ function MultiCardBlock({
   setId,
   category,
   isOther,
+  acquisitionMethod,
 }: {
   entry: MultiCardEntry;
   index: number;
@@ -683,6 +684,9 @@ function MultiCardBlock({
   setId: string;
   category: string;
   isOther: boolean;
+  // Shared across every entry (same field in the top-level form state) —
+  // only needed here to pick the right Notes label below.
+  acquisitionMethod: string;
 }) {
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 p-4 space-y-4">
@@ -740,11 +744,17 @@ function MultiCardBlock({
       />
 
       <div>
-        <Label>{isOther ? "Notes (e.g. breaker name, eBay seller name etc.) *" : "Notes"}</Label>
+        <Label>
+          {!isOther
+            ? "Notes"
+            : acquisitionMethod === "BREAKER"
+            ? "Notes (any additional information)"
+            : "Notes (e.g. eBay seller name, @username on Instagram...)"}
+        </Label>
         <Textarea
           value={entry.notes}
           onChange={(e) => onChange({ notes: e.target.value })}
-          placeholder={isOther ? "e.g. Hobby Shop Breaks, @username on Instagram..." : "Any extra details about this card..."}
+          placeholder={isOther ? `Type "Unknown" if you're not sure who pulled the card` : "Any extra details about this card..."}
         />
       </div>
     </div>
@@ -1018,13 +1028,13 @@ export default function AddGelModal({
       return;
     }
 
-    if (isOther && !form.notes.trim()) {
-      setError("Please add a note describing where you saw this card pulled.");
+    if (!form.acquisitionMethod) {
+      setError("Please select how you got this card.");
       return;
     }
 
-    if (!form.acquisitionMethod) {
-      setError("Please select how you got this card.");
+    if (form.acquisitionMethod === "BREAKER" && !form.breakerName.trim()) {
+      setError("Please fill in the breaker's name.");
       return;
     }
 
@@ -1204,6 +1214,11 @@ export default function AddGelModal({
       return;
     }
 
+    if (form.acquisitionMethod === "BREAKER" && !form.breakerName.trim()) {
+      setError("Please fill in the breaker's name.");
+      return;
+    }
+
     if (productApplies && !form.productOptionId) {
       setError("Please select which product these cards came from.");
       return;
@@ -1217,10 +1232,6 @@ export default function AddGelModal({
       }
       if (!c.cardFrontImageUrl) {
         setError(`Please upload a card front image for entry #${i + 1}.`);
-        return;
-      }
-      if (isOther && !c.notes.trim()) {
-        setError(`Please add a note for entry #${i + 1} describing where you saw this card pulled.`);
         return;
       }
       if (category !== "TCG" && c.selectedCardOption?.cardTier === "NUMBERED" && !c.serialNumber) {
@@ -1283,12 +1294,12 @@ export default function AddGelModal({
 
   const canSubmitMulti =
     Boolean(form.acquisitionMethod) &&
+    (form.acquisitionMethod !== "BREAKER" || form.breakerName.trim()) &&
     (!productApplies || Boolean(form.productOptionId)) &&
     multiCards.length > 0 &&
     multiCards.every((c) =>
       c.checklistCardId &&
       c.cardFrontImageUrl &&
-      (!isOther || c.notes.trim()) &&
       (category === "TCG" || c.selectedCardOption?.cardTier !== "NUMBERED" || c.serialNumber)
     );
 
@@ -1615,7 +1626,7 @@ export default function AddGelModal({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <Label>Breaker&apos;s Name</Label>
+                        <Label>Breaker&apos;s Name *</Label>
                         <Input
                           value={form.breakerName}
                           onChange={setField("breakerName")}
@@ -1728,11 +1739,17 @@ export default function AddGelModal({
 
                   {/* ── Notes ────────────────────────────────────────────── */}
                   <div>
-                    <Label>{isOther ? "Notes (e.g. breaker name, eBay seller name etc.) *" : "Notes"}</Label>
+                    <Label>
+                      {!isOther
+                        ? "Notes"
+                        : form.acquisitionMethod === "BREAKER"
+                        ? "Notes (any additional information)"
+                        : "Notes (e.g. eBay seller name, @username on Instagram...)"}
+                    </Label>
                     <Textarea
                       value={form.notes}
                       onChange={setField("notes")}
-                      placeholder={isOther ? "e.g. Hobby Shop Breaks, @username on Instagram..." : "Any extra details about this card..."}
+                      placeholder={isOther ? `Type "Unknown" if you're not sure who pulled the card` : "Any extra details about this card..."}
                     />
                   </div>
                 </>
@@ -1783,7 +1800,7 @@ export default function AddGelModal({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <Label>Breaker&apos;s Name</Label>
+                        <Label>Breaker&apos;s Name *</Label>
                         <Input
                           value={form.breakerName}
                           onChange={setField("breakerName")}
@@ -1888,6 +1905,7 @@ export default function AddGelModal({
                         setId={setId}
                         category={category}
                         isOther={isOther}
+                        acquisitionMethod={form.acquisitionMethod}
                       />
                     ))}
                   </div>
@@ -1934,8 +1952,8 @@ export default function AddGelModal({
                       ? !canSubmitMulti
                       : !form.checklistCardId ||
                         !form.cardFrontImageUrl ||
-                        (isOther && !form.notes.trim()) ||
                         !form.acquisitionMethod ||
+                        (form.acquisitionMethod === "BREAKER" && !form.breakerName.trim()) ||
                         (productApplies && !form.productOptionId) ||
                         (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber))
                   }

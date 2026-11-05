@@ -231,7 +231,8 @@ export async function getChecklistRowExtras(
   }
 
   // Serialized copies (have a serial number) come first, ascending by
-  // serial; unserialized copies follow, ordered by when they were logged.
+  // serial — e.g. a /25 card shows 1/25 at the top, 25/25 at the bottom.
+  // Unserialized copies follow, most-recently-logged first.
   function sortLoggedGels(
     cards: (typeof portfolioCards)[number][]
   ): (typeof portfolioCards)[number][] {
@@ -240,7 +241,7 @@ export async function getChecklistRowExtras(
       .sort((a, b) => a.serialNumber! - b.serialNumber!);
     const unserialized = cards
       .filter((pc) => pc.serialNumber == null)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return [...serialized, ...unserialized];
   }
 
