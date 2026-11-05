@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { subCategoryLabel } from "@/lib/taxonomy";
 
 export interface SetItem {
   id:                 string;
@@ -75,7 +76,7 @@ export function SetCard({ set }: { set: SetItem }) {
           {set.name}
         </h3>
         <p className="text-xs text-zinc-500">
-          {set.subCategory.replace(/_/g, " ").toUpperCase()} · {set.year}
+          {subCategoryLabel(set.category, set.subCategory).toUpperCase()} · {set.year}
         </p>
       </div>
 

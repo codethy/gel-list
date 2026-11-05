@@ -4,6 +4,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { subCategoryLabel } from "@/lib/taxonomy";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ export default function SetHeader({
           <div className="flex-1 min-w-0">
             {/* Breadcrumb-style meta */}
             <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1.5">
-              {year} &bull; {sport.toUpperCase()} &bull; {manufacturer}
+              {year} &bull; {subCategoryLabel(category, sport).toUpperCase()} &bull; {manufacturer}
             </p>
 
             {/* Set name */}

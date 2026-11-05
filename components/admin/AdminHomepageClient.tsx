@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { TAXONOMY } from "@/lib/taxonomy";
+import { TAXONOMY, subCategoryLabel } from "@/lib/taxonomy";
 
 interface FeaturedSet {
   id:          string;
@@ -198,7 +198,7 @@ export default function AdminHomepageClient() {
                 <Thumb set={set} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-slate-200 truncate">{set.name}</p>
-                  <p className="text-[11px] text-slate-500">{set.year} · {set.subCategory.replace(/_/g, " ")}</p>
+                  <p className="text-[11px] text-slate-500">{set.year} · {subCategoryLabel(activeParent.enumValue, set.subCategory)}</p>
                 </div>
                 <button
                   type="button"
@@ -262,7 +262,7 @@ export default function AdminHomepageClient() {
                   <Thumb set={set} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-300 truncate">{set.name}</p>
-                    <p className="text-[11px] text-slate-500">{set.year} · {set.subCategory.replace(/_/g, " ")}</p>
+                    <p className="text-[11px] text-slate-500">{set.year} · {subCategoryLabel(set.category, set.subCategory)}</p>
                   </div>
                   <button
                     type="button"

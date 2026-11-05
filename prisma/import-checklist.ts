@@ -2,24 +2,36 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Universal XLSX → Database importer for card set checklists.
 //
+// Sets live nested two levels deep, by category then subcategory — e.g.
+// prisma/imports/sports/basketball/2026-topps-chrome-basketball/ — purely
+// for human browsability (lib/taxonomy.ts's categoryToSlug/
+// subCategoryToSlug give the canonical folder names, e.g. "sports",
+// "basketball"). The "set-slug" this script takes is always the set's own
+// folder path relative to prisma/imports/, nesting included.
+//
 // HOW TO RUN:
 //   npx tsx prisma/import-checklist.ts <set-slug>              — import for real
 //   npx tsx prisma/import-checklist.ts <set-slug> --dry-run     — preview only,
 //                                                                  writes nothing
+//   e.g. npx tsx prisma/import-checklist.ts sports/basketball/2026-topps-chrome-basketball
 //
 // TO IMPORT A NEW SET:
-//   1. Copy prisma/imports/_template/ to a new folder, e.g.
-//      prisma/imports/2026-topps-chrome-basketball/
+//   1. Copy prisma/imports/_template/ to a new folder nested under its
+//      category then subcategory, e.g.
+//      prisma/imports/sports/basketball/2026-topps-chrome-basketball/
 //   2. Put your .xlsx checklist file in that folder (matching the "fileName"
 //      in set.json — "checklist.xlsx" by default)
 //   3. Edit that folder's set.json — set name, year, brand, category,
-//      subCategory, and the column mapping for your Excel file
+//      subCategory, and the column mapping for your Excel file (the
+//      category/subcategory in set.json must agree with the folder you
+//      put it under — this is validated, see below)
 //   4. Run with --dry-run first to check the numbers before writing anything
 //   5. Run for real once the dry-run summary looks right
 //
 // WHAT set.json LOOKS LIKE — see prisma/imports/_template/set.json, or an
-// already-imported set's folder (e.g. prisma/imports/2026-topps-graphite-tennis/)
-// for a filled-in example.
+// already-imported set's folder (e.g.
+// prisma/imports/sports/tennis/2026-topps-graphite-tennis/) for a filled-in
+// example.
 //
 // cardCategory must match one of these EXACT values (case-sensitive):
 //   Sports/Entertainment: BASE, PARALLEL, INSERT, AUTO, RELIC, AUTO_RELIC,
@@ -55,7 +67,7 @@ import * as XLSX    from "xlsx";
 import { Pool }     from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Category, CardCategory, CardTier } from "@prisma/client";
-import { resolveSubCategory, SUBCATEGORY_TO_CATEGORY } from "../lib/taxonomy";
+import { resolveSubCategory, SUBCATEGORY_TO_CATEGORY, categoryToSlug, subCategoryToSlug } from "../lib/taxonomy";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config shape — one set.json per set, under prisma/imports/<slug>/set.json
@@ -86,12 +98,32 @@ interface SetConfig {
 
 const IMPORTS_DIR = path.join(process.cwd(), "prisma", "imports");
 
+// A "slug" is a set.json's path relative to IMPORTS_DIR, minus the
+// trailing "/set.json" — e.g. "entertainment/disney/2026-topps-chrome-
+// disney". Sets live nested by category then subcategory
+// (prisma/imports/<category-slug>/<subcategory-slug>/<set-slug>/, using
+// lib/taxonomy.ts's categoryToSlug/subCategoryToSlug) purely for human
+// browsability — this importer itself doesn't care about the nesting
+// depth, it just recursively looks for any directory containing a
+// set.json, skipping "_"/"."-prefixed dirs like _template at any level.
 function listAvailableSlugs(): string[] {
   if (!fs.existsSync(IMPORTS_DIR)) return [];
-  return fs.readdirSync(IMPORTS_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !d.name.startsWith("_") && !d.name.startsWith("."))
-    .map((d) => d.name)
-    .sort();
+
+  const slugs: string[] = [];
+
+  function walk(dir: string, relativePath: string) {
+    if (fs.existsSync(path.join(dir, "set.json"))) {
+      slugs.push(relativePath);
+      return; // a set's own folder is never itself a category grouping
+    }
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith("_") || entry.name.startsWith(".")) continue;
+      walk(path.join(dir, entry.name), relativePath ? `${relativePath}/${entry.name}` : entry.name);
+    }
+  }
+
+  walk(IMPORTS_DIR, "");
+  return slugs.sort();
 }
 
 // Loads and validates prisma/imports/<slug>/set.json. Exits with a clear,
@@ -156,6 +188,21 @@ function loadSetConfig(slug: string): SetConfig {
     );
     console.error(`   Fix prisma/imports/${slug}/set.json so category and subCategory agree.\n`);
     process.exit(1);
+  }
+
+  // Non-fatal — this folder is organized by category/subcategory purely
+  // for human browsability (see the header comment), so a mismatch here
+  // is a drifted/misplaced folder, not a data-correctness problem (the
+  // CardSet itself is created from set.json's own category/subCategory,
+  // not from the folder path). Still worth flagging immediately rather
+  // than letting the convention silently rot.
+  const expectedFolderPrefix = `${categoryToSlug(raw.category)}/${subCategoryToSlug(subCategory)}/`;
+  if (!slug.startsWith(expectedFolderPrefix)) {
+    console.warn(
+      `\n⚠️  This set's folder doesn't match its category/subCategory — expected it ` +
+      `under prisma/imports/${expectedFolderPrefix}, found it at prisma/imports/${slug}/. ` +
+      `Not blocking the import, but consider moving the folder to match.\n`
+    );
   }
 
   return {

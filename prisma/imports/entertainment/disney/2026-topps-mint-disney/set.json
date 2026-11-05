@@ -1,0 +1,23 @@
+{
+  "fileName": "checklist.xlsx",
+  "sheetName": null,
+
+  "setName": "2026 Topps Mint Disney",
+  "year": 2026,
+  "brand": "Topps",
+  "category": "ENTERTAINMENT",
+  "subCategory": "DISNEY",
+
+  "columns": {
+    "cardNumber": "cardNumber",
+    "playerName": "playerName",
+    "cardCategory": "cardCategory",
+    "cardTier": "cardTier",
+    "parallel": "parallel",
+    "printRun": "printRun",
+    "variationName": "variationName",
+    "isHit": "isHit"
+  },
+
+  "batchSize": 100
+}

@@ -10,6 +10,19 @@
 // prisma/create-set.ts / prisma/import-checklist.ts validate new sets
 // against this same list before writing them — so this file is the only
 // place a new subcategory is ever added.
+//
+// Every child `id` across the WHOLE taxonomy must be globally unique, not
+// just unique within its own parent — SUBCATEGORY_TO_CATEGORY below is a
+// single flat map keyed by subcategory id alone, and the Sidebar's filter
+// state (SidebarFilters.subcategories) is a single flat Set of ids shared
+// across every category's checkboxes. A repeated id (e.g. a plain "OTHER"
+// under more than one category) silently collapses those categories'
+// checkboxes into one shared toggle and makes resolveSubCategory() below
+// permanently resolve to whichever category happened to register that id
+// last — a real, previously-shipped bug, caught when an Entertainment/
+// Others set first exposed it. "Others" under each category therefore
+// gets a category-prefixed id (SPORTS_OTHER, etc.) — still displayed as
+// "Others" via subCategoryLabel() below, never the raw id.
 
 export const TAXONOMY = [
   {
@@ -17,16 +30,16 @@ export const TAXONOMY = [
     label:      "Sports",
     enumValue:  "SPORTS",
     children: [
-      { id: "SOCCER",      label: "Soccer"      },
-      { id: "BASKETBALL",  label: "Basketball"  },
-      { id: "BASEBALL",    label: "Baseball"    },
-      { id: "FOOTBALL",    label: "Football"    },
-      { id: "TENNIS",      label: "Tennis"      },
-      { id: "HOCKEY",      label: "Hockey"      },
-      { id: "RACING",      label: "Racing"      },
-      { id: "GOLF",        label: "Golf"        },
-      { id: "UFC_MMA",     label: "UFC / MMA"   },
-      { id: "OTHER",       label: "Others"      },
+      { id: "SOCCER",        label: "Soccer"      },
+      { id: "BASKETBALL",    label: "Basketball"  },
+      { id: "BASEBALL",      label: "Baseball"    },
+      { id: "FOOTBALL",      label: "Football"    },
+      { id: "TENNIS",        label: "Tennis"      },
+      { id: "HOCKEY",        label: "Hockey"      },
+      { id: "RACING",        label: "Racing"      },
+      { id: "GOLF",          label: "Golf"        },
+      { id: "UFC_MMA",       label: "UFC / MMA"   },
+      { id: "SPORTS_OTHER",  label: "Others"      },
     ],
   },
   {
@@ -34,13 +47,13 @@ export const TAXONOMY = [
     label:      "Entertainment",
     enumValue:  "ENTERTAINMENT",
     children: [
-      { id: "DISNEY",       label: "Disney"       },
-      { id: "MARVEL",       label: "Marvel"       },
-      { id: "STAR_WARS",    label: "Star Wars"    },
-      { id: "DC",           label: "DC"           },
-      { id: "HARRY_POTTER", label: "Harry Potter" },
-      { id: "FORTNITE",     label: "Fortnite"     },
-      { id: "OTHER",        label: "Others"       },
+      { id: "DISNEY",             label: "Disney"       },
+      { id: "MARVEL",             label: "Marvel"       },
+      { id: "STAR_WARS",          label: "Star Wars"    },
+      { id: "DC",                 label: "DC"           },
+      { id: "HARRY_POTTER",       label: "Harry Potter" },
+      { id: "FORTNITE",           label: "Fortnite"     },
+      { id: "ENTERTAINMENT_OTHER", label: "Others"      },
     ],
   },
   {
@@ -54,7 +67,7 @@ export const TAXONOMY = [
       { id: "YU_GI_OH",            label: "Yu-Gi-Oh"             },
       { id: "LORCANA",             label: "Disney Lorcana"       },
       { id: "RIFTBOUND",           label: "Riftbound"            },
-      { id: "OTHER",               label: "Others"               },
+      { id: "TCG_OTHER",           label: "Others"               },
     ],
   },
 ] as const;
@@ -68,6 +81,20 @@ export const SUBCATEGORY_TO_CATEGORY: Record<string, string> = Object.fromEntrie
 );
 
 const VALID_SUBCATEGORY_IDS = new Set(Object.keys(SUBCATEGORY_TO_CATEGORY));
+
+// Resolves a stored (category, subCategory) pair back to its taxonomy
+// label for display — e.g. ("ENTERTAINMENT", "ENTERTAINMENT_OTHER") →
+// "Others" — rather than ever showing a raw id straight from the
+// database. Matching is case-insensitive, same rationale as
+// resolveSubCategory. Falls back to a humanized version of the raw
+// subCategory string for anything not found in the taxonomy (an admin
+// can still type an arbitrary value via AdminEditSetModal, since this
+// column isn't a real enum) so display never breaks for those.
+export function subCategoryLabel(categoryEnumValue: string, subCategoryId: string): string {
+  const parent = TAXONOMY.find((t) => t.enumValue === categoryEnumValue);
+  const match = parent?.children.find((c) => c.id.toLowerCase() === subCategoryId.toLowerCase());
+  return match?.label ?? subCategoryId.replace(/_/g, " ").toUpperCase();
+}
 
 // Validates a subcategory value (as typed by hand into a set's config)
 // against the canonical ids above. Matching is case-insensitive so "tennis"
@@ -86,9 +113,10 @@ export function resolveSubCategory(raw: string): { valid: string | null; error: 
 // ─── URL SLUGS ────────────────────────────────────────────────────────────────
 // Used by /categories/[category]/[subcategory] (the category/subcategory
 // "See all" pages) — human-friendly, hyphenated-lowercase versions of the
-// enum/id values above. A subcategory id alone isn't globally unique (e.g.
-// "OTHER" exists under every category), so resolving one always needs the
-// parent category's slug too.
+// enum/id values above. Every subcategory id is globally unique (see the
+// comment above TAXONOMY), but slugToSubCategory still takes the parent
+// category too — a subcategory slug is only ever looked up in the context
+// of the /categories/[category]/... route it came from.
 
 export function categoryToSlug(categoryEnumValue: string): string {
   return categoryEnumValue.toLowerCase();
