@@ -1,5 +1,8 @@
 // app/api/admin/sets/[id]/route.ts
 //
+// GET   — a set's category/year/product catalog, just enough context for
+//         AdminEditGelModal to open the exact same Log a Gel form
+//         (components/set-detail/AddGelModal.tsx) the set's own page would.
 // PATCH — edits a CardSet's own name/year/brand/category/subcategory/
 // description. Separate from the checklist-row routes alongside it, which
 // edit individual ChecklistCard rows, not the set itself.
@@ -10,11 +13,47 @@ import { prisma } from "@/lib/prisma";
 import { Category } from "@prisma/client";
 import { resolveSubCategory, SUBCATEGORY_TO_CATEGORY } from "@/lib/taxonomy";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
+import { getProductLabel } from "@/lib/productTypes";
 
 function parseString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const adminUserId = await getAdminUserId();
+  if (!adminUserId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id: setId } = await params;
+
+  const [cardSet, setProducts] = await Promise.all([
+    prisma.cardSet.findUnique({ where: { id: setId }, select: { category: true, year: true } }),
+    prisma.setProduct.findMany({
+      where:   { cardSetId: setId },
+      orderBy: { createdAt: "asc" },
+      select:  { id: true, productType: true, productTypeOther: true },
+    }),
+  ]);
+  if (!cardSet) {
+    return NextResponse.json({ error: "Set not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    category: String(cardSet.category),
+    year:     cardSet.year,
+    products: setProducts.map((p) => ({
+      id:               p.id,
+      productType:      String(p.productType),
+      productTypeOther: p.productTypeOther,
+      label:            getProductLabel(String(p.productType), p.productTypeOther),
+    })),
+  });
 }
 
 export async function PATCH(

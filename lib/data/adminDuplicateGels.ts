@@ -55,6 +55,8 @@ const gelSelect = {
   isVerified:        true,
   duplicateFlag:     true,
   acquisitionMethod: true,
+  productType:       true,
+  productTypeOther:  true,
   serialNumber:      true,
   hitYear:           true,
   hitMonth:          true,
@@ -66,10 +68,12 @@ const gelSelect = {
   breakerName:       true,
   notes:             true,
   createdAt:         true,
+  userId:            true,
   user:              { select: userSelect },
   checklistCard: {
     select: {
       id:            true,
+      cardNumber:    true,
       playerName:    true,
       cardCategory:  true,
       cardTier:      true,
@@ -77,6 +81,8 @@ const gelSelect = {
       printRun:      true,
       variationName: true,
       team:          true,
+      cardSetId:     true,
+      cardSet:       { select: { name: true } },
     },
   },
 } as const;
@@ -87,19 +93,30 @@ function shapeUser(u: { id: string; username: string | null; handle: string | nu
 
 function shapeGel(pc: {
   id: string; isInHand: boolean; isVerified: boolean; duplicateFlag: unknown;
-  acquisitionMethod: unknown; serialNumber: number | null; hitYear: number | null;
+  acquisitionMethod: unknown; productType: unknown; productTypeOther: string | null;
+  serialNumber: number | null; hitYear: number | null;
   hitMonth: number | null; hitCity: string | null; hitCountry: string | null;
   cardFrontImageUrl: string | null; cardBackImageUrl: string | null;
   seller: string | null; breakerName: string | null; notes: string | null; createdAt: Date;
+  userId: string;
   user: { id: string; username: string | null; handle: string | null; email: string | null; name: string | null };
-  checklistCard: { id: string; playerName: string; cardCategory: unknown; cardTier: unknown; parallel: string | null; printRun: number | null; variationName: string | null; team: string | null };
+  checklistCard: {
+    id: string; cardNumber: string | null; playerName: string; cardCategory: unknown; cardTier: unknown;
+    parallel: string | null; printRun: number | null; variationName: string | null; team: string | null;
+    cardSetId: string; cardSet: { name: string };
+  };
 }): DuplicateFileGel {
   return {
     id:                  pc.id,
+    setId:               pc.checklistCard.cardSetId,
+    setName:             pc.checklistCard.cardSet.name,
+    userId:              pc.userId,
     isInHand:            pc.isInHand,
     isVerified:          pc.isVerified,
     duplicateFlag:       String(pc.duplicateFlag),
     acquisitionMethod:   pc.acquisitionMethod != null ? String(pc.acquisitionMethod) : null,
+    productType:         pc.productType != null ? String(pc.productType) : null,
+    productTypeOther:    pc.productTypeOther ?? null,
     serialNumber:        pc.serialNumber ?? null,
     hitYear:             pc.hitYear      ?? null,
     hitMonth:            pc.hitMonth     ?? null,
@@ -116,6 +133,7 @@ function shapeGel(pc: {
     loggedByUser:        shapeUser(pc.user),
     checklistCard: {
       id:            pc.checklistCard.id,
+      cardNumber:    pc.checklistCard.cardNumber ?? null,
       playerName:    pc.checklistCard.playerName,
       cardType:      String(pc.checklistCard.cardCategory),
       cardTier:      String(pc.checklistCard.cardTier),

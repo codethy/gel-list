@@ -82,6 +82,14 @@ interface AddGelModalProps {
   // reassign a logged gel to a different card), and submitting PATCHes
   // instead of POSTing.
   editingGel?: GelEntry | null;
+  // Overrides the PATCH url used when editingGel is set — defaults to the
+  // user-facing /api/sets/[id]/gels/[gelId]. components/admin/
+  // AdminEditGelModal.tsx passes /api/admin/gels/[gelId] here instead, so
+  // the Gel Review Queue's "Edit" action reuses this exact same form (and
+  // automatically stays in sync with any future changes to it) while still
+  // going through the admin route's no-ownership-check/no-reverify
+  // semantics.
+  editSubmitUrl?: string;
   // When set (and no editingGel), the modal opens straight into the
   // Single Gel / "My Own Gel" form — skipping the choice/mode screens —
   // prefilled and locked to this specific card+serial. Set from the
@@ -773,6 +781,7 @@ export default function AddGelModal({
   products,
   preselectedCardOption,
   editingGel,
+  editSubmitUrl,
   claimPrefill,
   coOwnPrefill,
   defaultHitCity,
@@ -1052,7 +1061,7 @@ export default function AddGelModal({
 
     try {
       const url = isEditing
-        ? `/api/sets/${setId}/gels/${editingGel!.id}`
+        ? (editSubmitUrl ?? `/api/sets/${setId}/gels/${editingGel!.id}`)
         : `/api/sets/${setId}/gels`;
 
       const res = await fetch(url, {

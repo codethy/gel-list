@@ -1,34 +1,45 @@
 // lib/data/adminGels.ts
 //
-// Data layer for /admin/gels — every logged gel across the whole platform,
-// grouped by set and then by "My Own Gel" vs "Someone Else's Gel"
-// (PortfolioCard.isInHand), each in reverse-chronological order (newest
-// first), so the developer always sees the newest pending submissions at
-// the top of each group.
+// Data layer for /admin/gels — the Gel Review Queue. A single, flat,
+// paginated, searchable list split into two tabs (Not Verified / Verified)
+// rather than grouped by set — see components/admin/AdminGelsClient.tsx.
+// Oldest-first within a tab, so the longest-waiting submissions surface
+// first.
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export interface AdminGelEntry {
-  id:                 string;
-  isInHand:           boolean;
-  isVerified:         boolean;
-  duplicateFlag:      string;
-  acquisitionMethod:  string | null;
-  serialNumber:       number | null;
-  hitYear:            number | null;
-  hitMonth:           number | null;
-  hitCity:            string | null;
-  hitCountry:         string | null;
-  cardFrontImageUrl:  string | null;
-  cardBackImageUrl:   string | null;
-  seller:             string | null;
-  breakerName:        string | null;
-  notes:              string | null;
-  createdAt:          string;
-  loggedByUsername:   string;
+  id:                  string;
+  // The gel's own set and owner — needed so the review queue can show a
+  // set-name badge per row (no more set-grouping) and so AdminEditGelModal
+  // can fetch that set's category/year/product catalog to open the exact
+  // same Log a Gel form the user themself would see.
+  setId:               string;
+  setName:             string;
+  userId:              string;
+  isInHand:            boolean;
+  isVerified:          boolean;
+  duplicateFlag:       string;
+  acquisitionMethod:   string | null;
+  productType:         string | null;
+  productTypeOther:    string | null;
+  serialNumber:        number | null;
+  hitYear:             number | null;
+  hitMonth:            number | null;
+  hitCity:             string | null;
+  hitCountry:          string | null;
+  cardFrontImageUrl:   string | null;
+  cardBackImageUrl:    string | null;
+  seller:              string | null;
+  breakerName:         string | null;
+  notes:               string | null;
+  createdAt:           string;
+  loggedByUsername:    string;
   loggedByDisplayName: string | null;
   checklistCard: {
     id:            string;
+    cardNumber:    string | null;
     playerName:    string;
     cardType:      string;
     cardTier:      string;
@@ -39,106 +50,141 @@ export interface AdminGelEntry {
   };
 }
 
-export interface AdminSetGroup {
-  setId:     string;
-  setName:   string;
-  ownGels:   AdminGelEntry[];
-  otherGels: AdminGelEntry[];
+const adminGelSelect = {
+  id:                true,
+  isInHand:          true,
+  isVerified:        true,
+  duplicateFlag:     true,
+  acquisitionMethod: true,
+  productType:       true,
+  productTypeOther:  true,
+  serialNumber:      true,
+  hitYear:           true,
+  hitMonth:          true,
+  hitCity:           true,
+  hitCountry:        true,
+  cardFrontImageUrl: true,
+  cardBackImageUrl:  true,
+  seller:            true,
+  breakerName:       true,
+  notes:             true,
+  createdAt:         true,
+  userId:            true,
+  user: {
+    select: { username: true, name: true },
+  },
+  cardSet: {
+    select: { id: true, name: true },
+  },
+  checklistCard: {
+    select: {
+      id:            true,
+      cardNumber:    true,
+      playerName:    true,
+      cardCategory:  true,
+      cardTier:      true,
+      parallel:      true,
+      printRun:      true,
+      variationName: true,
+      team:          true,
+    },
+  },
+} as const;
+
+type RawAdminGel = Prisma.PortfolioCardGetPayload<{ select: typeof adminGelSelect }>;
+
+function shapeAdminGel(pc: RawAdminGel): AdminGelEntry {
+  return {
+    id:                  pc.id,
+    setId:               pc.cardSet.id,
+    setName:             pc.cardSet.name,
+    userId:              pc.userId,
+    isInHand:            pc.isInHand,
+    isVerified:          pc.isVerified,
+    duplicateFlag:       String(pc.duplicateFlag),
+    acquisitionMethod:   pc.acquisitionMethod ?? null,
+    productType:         pc.productType ? String(pc.productType) : null,
+    productTypeOther:    pc.productTypeOther  ?? null,
+    serialNumber:        pc.serialNumber      ?? null,
+    hitYear:             pc.hitYear           ?? null,
+    hitMonth:            pc.hitMonth          ?? null,
+    hitCity:             pc.hitCity           ?? null,
+    hitCountry:          pc.hitCountry        ?? null,
+    cardFrontImageUrl:   pc.cardFrontImageUrl ?? null,
+    cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
+    seller:              pc.seller            ?? null,
+    breakerName:         pc.breakerName        ?? null,
+    notes:               pc.notes             ?? null,
+    createdAt:           pc.createdAt.toISOString(),
+    loggedByUsername:    pc.user.username ?? pc.user.name ?? "user",
+    loggedByDisplayName: pc.user.name ?? null,
+    checklistCard: {
+      id:            pc.checklistCard.id,
+      cardNumber:    pc.checklistCard.cardNumber ?? null,
+      playerName:    pc.checklistCard.playerName,
+      cardType:      String(pc.checklistCard.cardCategory),
+      cardTier:      String(pc.checklistCard.cardTier),
+      parallelType:  pc.checklistCard.parallel ?? null,
+      printRun:      pc.checklistCard.printRun ?? null,
+      variationName: pc.checklistCard.variationName ?? null,
+      team:          pc.checklistCard.team ?? null,
+    },
+  };
 }
 
-export async function getAllLoggedGelsGrouped(): Promise<AdminSetGroup[]> {
-  const portfolioCards = await prisma.portfolioCard.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id:                true,
-      isInHand:          true,
-      isVerified:        true,
-      duplicateFlag:     true,
-      acquisitionMethod: true,
-      serialNumber:      true,
-      hitYear:           true,
-      hitMonth:          true,
-      hitCity:           true,
-      hitCountry:        true,
-      cardFrontImageUrl: true,
-      cardBackImageUrl:  true,
-      seller:            true,
-      breakerName:       true,
-      notes:             true,
-      createdAt:         true,
-      user: {
-        select: { username: true, name: true },
-      },
-      cardSet: {
-        select: { id: true, name: true },
-      },
-      checklistCard: {
-        select: {
-          id:            true,
-          playerName:    true,
-          cardCategory:  true,
-          cardTier:      true,
-          parallel:      true,
-          printRun:      true,
-          variationName: true,
-          team:          true,
-        },
-      },
-    },
-  });
+export const REVIEW_QUEUE_PAGE_SIZE = 25;
 
-  // portfolioCards is already sorted newest-first, so building this map in
-  // iteration order naturally orders the groups themselves by whichever set
-  // most recently had a gel logged — and each group's ownGels/otherGels
-  // arrays, built by filtering in the same order, stay newest-first too.
-  const groupsBySetId = new Map<string, AdminSetGroup>();
+export interface ReviewQueuePage {
+  gels:       AdminGelEntry[];
+  total:      number;
+  page:       number;
+  pageSize:   number;
+  totalPages: number;
+}
 
-  for (const pc of portfolioCards) {
-    let group = groupsBySetId.get(pc.cardSet.id);
-    if (!group) {
-      group = { setId: pc.cardSet.id, setName: pc.cardSet.name, ownGels: [], otherGels: [] };
-      groupsBySetId.set(pc.cardSet.id, group);
-    }
+// The Gel Review Queue's single data source — one flat, oldest-first,
+// paginated (REVIEW_QUEUE_PAGE_SIZE per page) list, split by `status`
+// rather than grouped by set. `search` matches the card's player name,
+// its card number, or the set's name (any one, case-insensitive).
+export async function getReviewQueueGels(params: {
+  status: "UNVERIFIED" | "VERIFIED";
+  search?: string;
+  page?:   number;
+}): Promise<ReviewQueuePage> {
+  const page   = Math.max(1, Math.floor(params.page ?? 1));
+  const search = params.search?.trim();
 
-    const entry: AdminGelEntry = {
-      id:                  pc.id,
-      isInHand:            pc.isInHand,
-      isVerified:          pc.isVerified,
-      duplicateFlag:       String(pc.duplicateFlag),
-      acquisitionMethod:   pc.acquisitionMethod ?? null,
-      serialNumber:        pc.serialNumber      ?? null,
-      hitYear:             pc.hitYear           ?? null,
-      hitMonth:            pc.hitMonth          ?? null,
-      hitCity:             pc.hitCity           ?? null,
-      hitCountry:          pc.hitCountry        ?? null,
-      cardFrontImageUrl:   pc.cardFrontImageUrl ?? null,
-      cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
-      seller:              pc.seller            ?? null,
-      breakerName:         pc.breakerName        ?? null,
-      notes:               pc.notes             ?? null,
-      createdAt:           pc.createdAt.toISOString(),
-      loggedByUsername:    pc.user.username ?? pc.user.name ?? "user",
-      loggedByDisplayName: pc.user.name ?? null,
-      checklistCard: {
-        id:            pc.checklistCard.id,
-        playerName:    pc.checklistCard.playerName,
-        cardType:      String(pc.checklistCard.cardCategory),
-        cardTier:      String(pc.checklistCard.cardTier),
-        parallelType:  pc.checklistCard.parallel ?? null,
-        printRun:      pc.checklistCard.printRun ?? null,
-        variationName: pc.checklistCard.variationName ?? null,
-        team:          pc.checklistCard.team ?? null,
-      },
-    };
+  const where: Prisma.PortfolioCardWhereInput = {
+    isVerified: params.status === "VERIFIED",
+    ...(search ? {
+      OR: [
+        { checklistCard: { playerName: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+        { checklistCard: { cardNumber: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+        { cardSet:        { name:       { contains: search, mode: Prisma.QueryMode.insensitive } } },
+      ],
+    } : {}),
+  };
 
-    if (pc.isInHand) {
-      group.ownGels.push(entry);
-    } else {
-      group.otherGels.push(entry);
-    }
-  }
+  const [total, rawGels] = await Promise.all([
+    prisma.portfolioCard.count({ where }),
+    prisma.portfolioCard.findMany({
+      where,
+      // Oldest first within a tab — the longest-waiting submissions
+      // surface at the top of the queue.
+      orderBy: { createdAt: "asc" },
+      skip:    (page - 1) * REVIEW_QUEUE_PAGE_SIZE,
+      take:    REVIEW_QUEUE_PAGE_SIZE,
+      select:  adminGelSelect,
+    }),
+  ]);
 
-  return [...groupsBySetId.values()];
+  return {
+    gels:       rawGels.map(shapeAdminGel),
+    total,
+    page,
+    pageSize:   REVIEW_QUEUE_PAGE_SIZE,
+    totalPages: Math.max(1, Math.ceil(total / REVIEW_QUEUE_PAGE_SIZE)),
+  };
 }
 
 // How many VERIFIED gels a user needs before all their future gels

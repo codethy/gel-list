@@ -1,10 +1,17 @@
 // app/api/admin/gels/[gelId]/route.ts
 //
-// PATCH  — the developer edits any logged gel's details (no ownership check
-//          — that's the point of this being admin-only). Doesn't touch
-//          isVerified; verifying/rejecting is a separate action, see
-//          app/api/admin/gels/[gelId]/verify/route.ts.
-// DELETE — the developer removes any logged gel outright.
+// PATCH  — the admin edits any logged gel's details, via the exact same
+//          form (components/set-detail/AddGelModal.tsx, reused as-is by
+//          components/admin/AdminEditGelModal.tsx) and the exact same
+//          field set a user editing their own gel would see — so this
+//          route accepts and validates the same body shape
+//          app/api/sets/[id]/gels/[gelId]/route.ts does, no ownership
+//          check (that's the point of this being admin-only). Doesn't
+//          touch isVerified — verifying/rejecting is a separate action,
+//          see app/api/admin/gels/[gelId]/verify/route.ts, and an admin
+//          correcting a typo shouldn't silently flip a gel's review state
+//          either way.
+// DELETE — the admin removes any logged gel outright.
 //
 // Admin-only (see lib/admin.ts).
 
@@ -27,7 +34,7 @@ export async function PATCH(
 
   const existing = await prisma.portfolioCard.findUnique({
     where:  { id: gelId },
-    select: { id: true },
+    select: { id: true, checklistCard: { select: { cardTier: true } } },
   });
   if (!existing) {
     return NextResponse.json({ error: "Gel not found" }, { status: 404 });
@@ -43,6 +50,8 @@ export async function PATCH(
   const {
     loggedFor,
     acquisitionMethod,
+    productType,
+    productTypeOther,
     serialNumber,
     hitYear,
     hitMonth,
@@ -51,14 +60,20 @@ export async function PATCH(
     cardFrontImageUrl,
     cardBackImageUrl,
     seller,
+    breakerName,
     notes,
   } = body;
 
   const isInHand = loggedFor !== "OTHER";
 
+  // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
+  // flow) — same derivation as the user-facing edit route.
+  const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+
   if (typeof cardFrontImageUrl !== "string" || !cardFrontImageUrl) {
     return NextResponse.json({ error: "A card front image is required" }, { status: 400 });
   }
+
   if (!isInHand && (typeof notes !== "string" || !notes.trim())) {
     return NextResponse.json(
       { error: "Please add a note describing where you saw this card pulled" },
@@ -66,31 +81,114 @@ export async function PATCH(
     );
   }
 
+  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
+    return NextResponse.json({ error: "Please select how you got this card" }, { status: 400 });
+  }
+
+  if (acquisitionMethod === "BREAKER" && (typeof breakerName !== "string" || !breakerName.trim())) {
+    return NextResponse.json({ error: "Please fill in the breaker's name" }, { status: 400 });
+  }
+
+  if (productApplies && (typeof productType !== "string" || !productType)) {
+    return NextResponse.json({ error: "Please select which product this came from" }, { status: 400 });
+  }
+
+  const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
+  if (existing.checklistCard.cardTier === "NUMBERED" && validSerialNumber === null) {
+    return NextResponse.json(
+      { error: "This card is numbered — please fill in the serial number" },
+      { status: 400 }
+    );
+  }
+
   const portfolioCard = await prisma.portfolioCard.update({
     where: { id: gelId },
-    // Deliberately doesn't mention productType/productTypeOther — this
-    // admin quick-edit form doesn't have a "Which Product" field, and
-    // Prisma leaves a column untouched when it's absent from `data`, so
-    // omitting it here preserves whatever was set via the user-facing
-    // AddGelModal rather than silently wiping it on every admin edit.
     data: {
       isInHand,
       acquisitionMethod:
         typeof acquisitionMethod === "string" ? (acquisitionMethod as never) : null,
-      serialNumber: typeof serialNumber === "number" ? serialNumber : null,
+      productType:
+        productApplies && typeof productType === "string" ? (productType as never) : null,
+      productTypeOther:
+        productApplies && typeof productTypeOther === "string" ? productTypeOther : null,
+      serialNumber: validSerialNumber,
       hitYear:      typeof hitYear      === "number" ? hitYear      : null,
       hitMonth:     typeof hitMonth     === "number" ? hitMonth     : null,
       hitCity:      typeof hitCity      === "string" ? hitCity      : null,
       hitCountry:   typeof hitCountry   === "string" ? hitCountry   : null,
       cardFrontImageUrl: typeof cardFrontImageUrl === "string" ? cardFrontImageUrl : null,
       cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
-      seller: typeof seller === "string" ? seller : null,
-      notes:  typeof notes  === "string" ? notes  : null,
+      seller:      typeof seller      === "string" ? seller      : null,
+      breakerName: typeof breakerName === "string" ? breakerName : null,
+      notes:       typeof notes       === "string" ? notes       : null,
     },
-    select: { id: true, isInHand: true, isVerified: true },
+    select: {
+      id:                true,
+      checklistCardId:   true,
+      isInHand:          true,
+      isVerified:        true,
+      duplicateFlag:     true,
+      acquisitionMethod: true,
+      productType:       true,
+      productTypeOther:  true,
+      serialNumber:      true,
+      hitYear:           true,
+      hitMonth:          true,
+      hitCity:           true,
+      hitCountry:        true,
+      cardFrontImageUrl: true,
+      cardBackImageUrl:  true,
+      seller:            true,
+      breakerName:       true,
+      notes:             true,
+      checklistCard: {
+        select: {
+          playerName:    true,
+          cardCategory:  true,
+          cardTier:      true,
+          parallel:      true,
+          printRun:      true,
+          variationName: true,
+          team:          true,
+        },
+      },
+    },
   });
 
-  return NextResponse.json({ gel: portfolioCard });
+  // Same field-name compatibility shape as the user-facing edit route
+  // (app/api/sets/[id]/gels/[gelId]/route.ts) — AddGelModal's onSuccess
+  // expects a GelEntry, regardless of which route produced it.
+  const gel = {
+    id:                portfolioCard.id,
+    cardTemplateId:    portfolioCard.checklistCardId,
+    isInHand:          portfolioCard.isInHand,
+    isVerified:        portfolioCard.isVerified,
+    duplicateFlag:     String(portfolioCard.duplicateFlag),
+    acquisitionMethod: portfolioCard.acquisitionMethod ?? null,
+    productType:       portfolioCard.productType ? String(portfolioCard.productType) : null,
+    productTypeOther:  portfolioCard.productTypeOther  ?? null,
+    serialNumber:      portfolioCard.serialNumber      ?? null,
+    hitYear:           portfolioCard.hitYear           ?? null,
+    hitMonth:          portfolioCard.hitMonth           ?? null,
+    hitCity:           portfolioCard.hitCity           ?? null,
+    hitCountry:        portfolioCard.hitCountry        ?? null,
+    cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
+    cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
+    seller:            portfolioCard.seller            ?? null,
+    breakerName:       portfolioCard.breakerName        ?? null,
+    notes:             portfolioCard.notes             ?? null,
+    cardTemplate: {
+      playerName:    portfolioCard.checklistCard.playerName,
+      cardType:      String(portfolioCard.checklistCard.cardCategory),
+      cardTier:      String(portfolioCard.checklistCard.cardTier),
+      parallelType:  portfolioCard.checklistCard.parallel ?? null,
+      printRun:      portfolioCard.checklistCard.printRun ?? null,
+      variationName: portfolioCard.checklistCard.variationName ?? null,
+      team:          portfolioCard.checklistCard.team     ?? null,
+    },
+  };
+
+  return NextResponse.json({ gel });
 }
 
 export async function DELETE(

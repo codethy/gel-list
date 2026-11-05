@@ -6,14 +6,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminUserId } from "@/lib/admin";
-import { getAllLoggedGelsGrouped } from "@/lib/data/adminGels";
+import { getReviewQueueGels } from "@/lib/data/adminGels";
 import AdminGelsClient from "@/components/admin/AdminGelsClient";
 
 export default async function AdminGelsPage() {
   const adminUserId = await getAdminUserId();
   if (!adminUserId) notFound();
 
-  const groups = await getAllLoggedGelsGrouped();
+  // Server-rendered first page of the default "Not Verified" tab, no
+  // search — everything else (tab switches, search, pagination) is a
+  // client-side refetch against GET /api/admin/gels.
+  const initialPage = await getReviewQueueGels({ status: "UNVERIFIED", page: 1 });
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -23,10 +26,10 @@ export default async function AdminGelsPage() {
         </Link>
         <h1 className="text-2xl font-bold text-white mt-2 mb-1">Gel Review Queue</h1>
         <p className="text-sm text-slate-400 mb-8">
-          Every logged gel across the platform, grouped by set. Verify or reject
+          Every logged gel across the platform, oldest first. Verify or reject
           pending submissions, or edit/delete any entry.
         </p>
-        <AdminGelsClient initialGroups={groups} />
+        <AdminGelsClient initialPage={initialPage} />
       </div>
     </div>
   );
