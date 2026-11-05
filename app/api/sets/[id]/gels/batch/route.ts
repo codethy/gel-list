@@ -8,15 +8,17 @@
 //
 // Body fields:
 //   loggedFor, acquisitionMethod, productType, productTypeOther, seller,
-//   hitYear, hitMonth, hitCity, hitCountry — same meaning as the single
-//   route, shared across every card in this batch.
+//   breakerName (required when acquisitionMethod is "BREAKER" — shared
+//   across the whole batch, same as acquisitionMethod itself), hitYear,
+//   hitMonth, hitCity, hitCountry — same meaning as the single route,
+//   shared across every card in this batch.
 //   cards — required, non-empty array of:
 //     cardTemplateId     — required (see the single route's doc comment
 //                          for why this wire name, not checklistCardId)
 //     serialNumber       — optional number
 //     cardFrontImageUrl  — required
 //     cardBackImageUrl   — optional string
-//     notes              — optional for "SELF", required for "OTHER"
+//     notes              — always optional
 //
 // Duplicate handling is deliberately simpler than the single route: if ANY
 // card in the batch collides with an existing PortfolioCard (same
@@ -84,6 +86,10 @@ export async function POST(
     return NextResponse.json({ error: "Please select how you got these cards" }, { status: 400 });
   }
 
+  if (acquisitionMethod === "BREAKER" && (typeof breakerName !== "string" || !breakerName.trim())) {
+    return NextResponse.json({ error: "Please fill in the breaker's name" }, { status: 400 });
+  }
+
   if (productApplies && (typeof productType !== "string" || !productType)) {
     return NextResponse.json({ error: "Please select which product these cards came from" }, { status: 400 });
   }
@@ -102,12 +108,6 @@ export async function POST(
     }
     if (typeof c?.cardFrontImageUrl !== "string" || !c.cardFrontImageUrl) {
       return NextResponse.json({ error: "A card front image is required for every entry", cardIndex: i }, { status: 400 });
-    }
-    if (!isInHand && (typeof c?.notes !== "string" || !c.notes.trim())) {
-      return NextResponse.json(
-        { error: "Please add a note describing where you saw this card pulled", cardIndex: i },
-        { status: 400 }
-      );
     }
     cards.push({
       cardTemplateId,

@@ -3,8 +3,9 @@
 // Data layer for /admin/gels — the Gel Review Queue. A single, flat,
 // paginated, searchable list split into two tabs (Not Verified / Verified)
 // rather than grouped by set — see components/admin/AdminGelsClient.tsx.
-// Oldest-first within a tab, so the longest-waiting submissions surface
-// first.
+// Not Verified sorts oldest-first (the longest-waiting submissions surface
+// first); Verified sorts newest-first (the most recent decisions are what's
+// visible without paging back) — see getReviewQueueGels below.
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -142,10 +143,11 @@ export interface ReviewQueuePage {
   totalPages: number;
 }
 
-// The Gel Review Queue's single data source — one flat, oldest-first,
-// paginated (REVIEW_QUEUE_PAGE_SIZE per page) list, split by `status`
-// rather than grouped by set. `search` matches the card's player name,
-// its card number, or the set's name (any one, case-insensitive).
+// The Gel Review Queue's single data source — one flat, paginated
+// (REVIEW_QUEUE_PAGE_SIZE per page) list, split by `status` rather than
+// grouped by set (oldest-first for UNVERIFIED, newest-first for
+// VERIFIED — see the orderBy below). `search` matches the card's player
+// name, its card number, or the set's name (any one, case-insensitive).
 export async function getReviewQueueGels(params: {
   status: "UNVERIFIED" | "VERIFIED";
   search?: string;
@@ -169,9 +171,10 @@ export async function getReviewQueueGels(params: {
     prisma.portfolioCard.count({ where }),
     prisma.portfolioCard.findMany({
       where,
-      // Oldest first within a tab — the longest-waiting submissions
-      // surface at the top of the queue.
-      orderBy: { createdAt: "asc" },
+      // Not Verified: oldest first, so the longest-waiting submissions
+      // surface at the top of the queue. Verified: newest first, so the
+      // most recent decisions are what's visible without paging back.
+      orderBy: { createdAt: params.status === "VERIFIED" ? "desc" : "asc" },
       skip:    (page - 1) * REVIEW_QUEUE_PAGE_SIZE,
       take:    REVIEW_QUEUE_PAGE_SIZE,
       select:  adminGelSelect,

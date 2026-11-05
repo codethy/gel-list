@@ -40,10 +40,9 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //   cardFrontImageUrl  — required (every logged gel needs a front image)
 //   cardBackImageUrl   — optional string
 //   seller             — optional string
-//   breakerName        — optional string, meaningful when acquisitionMethod
-//                        is "BREAKER"
-//   notes              — optional for "SELF", required for "OTHER" (it's
-//                        where the user records where/who they saw pull it)
+//   breakerName        — required when acquisitionMethod is "BREAKER"
+//                        (either loggedFor), otherwise ignored.
+//   notes              — always optional
 //   acknowledgeDuplicate — optional boolean. Only meaningful when another
 //                        user already logged a gel with the same
 //                        checklistCardId + serialNumber (see below) — set
@@ -144,16 +143,16 @@ export async function POST(
     );
   }
 
-  if (!isInHand && (typeof notes !== "string" || !notes.trim())) {
+  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
     return NextResponse.json(
-      { error: "Please add a note describing where you saw this card pulled" },
+      { error: "Please select how you got this card" },
       { status: 400 }
     );
   }
 
-  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
+  if (acquisitionMethod === "BREAKER" && (typeof breakerName !== "string" || !breakerName.trim())) {
     return NextResponse.json(
-      { error: "Please select how you got this card" },
+      { error: "Please fill in the breaker's name" },
       { status: 400 }
     );
   }

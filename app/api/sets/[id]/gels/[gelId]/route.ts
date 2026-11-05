@@ -29,7 +29,7 @@ async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
 // editing a gel doesn't let you reassign it to a different checklist card):
 //   loggedFor, acquisitionMethod, serialNumber, hitYear, hitMonth, hitCity,
 //   hitCountry, cardFrontImageUrl (required), cardBackImageUrl, seller,
-//   notes (required when loggedFor is "OTHER")
+//   breakerName (required when acquisitionMethod is "BREAKER"), notes
 
 export async function PATCH(
   req: NextRequest,
@@ -86,16 +86,16 @@ export async function PATCH(
     );
   }
 
-  if (!isInHand && (typeof notes !== "string" || !notes.trim())) {
+  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
     return NextResponse.json(
-      { error: "Please add a note describing where you saw this card pulled" },
+      { error: "Please select how you got this card" },
       { status: 400 }
     );
   }
 
-  if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
+  if (acquisitionMethod === "BREAKER" && (typeof breakerName !== "string" || !breakerName.trim())) {
     return NextResponse.json(
-      { error: "Please select how you got this card" },
+      { error: "Please fill in the breaker's name" },
       { status: 400 }
     );
   }

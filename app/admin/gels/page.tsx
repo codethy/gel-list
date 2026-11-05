@@ -26,8 +26,10 @@ export default async function AdminGelsPage() {
         </Link>
         <h1 className="text-2xl font-bold text-white mt-2 mb-1">Gel Review Queue</h1>
         <p className="text-sm text-slate-400 mb-8">
-          Every logged gel across the platform, oldest first. Verify or reject
-          pending submissions, or edit/delete any entry.
+          Every logged gel across the platform. Not Verified shows the
+          longest-waiting submissions first; Verified shows the most recent
+          decisions first. Verify or reject pending submissions, or edit/
+          delete any entry.
         </p>
         <AdminGelsClient initialPage={initialPage} />
       </div>

@@ -74,13 +74,6 @@ export async function PATCH(
     return NextResponse.json({ error: "A card front image is required" }, { status: 400 });
   }
 
-  if (!isInHand && (typeof notes !== "string" || !notes.trim())) {
-    return NextResponse.json(
-      { error: "Please add a note describing where you saw this card pulled" },
-      { status: 400 }
-    );
-  }
-
   if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
     return NextResponse.json({ error: "Please select how you got this card" }, { status: 400 });
   }
