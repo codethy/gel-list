@@ -1,15 +1,17 @@
 // app/api/user/handle/route.ts
 //
 // PATCH /api/user/handle
-// Lets a signed-in user change their own @handle (see Profile page). The
-// handle is also what app/api/auth/[...nextauth]/route.ts auto-generates at
-// first sign-in — this just lets the user override that initial value.
+// Lets an ADMIN change their own @handle (see Profile page). Handles are
+// auto-generated at first sign-in (app/api/auth/[...nextauth]/route.ts's
+// createUser event) and are not meant to be user-chosen — regular users
+// get no handle-editing UI at all (see ProfileAccountCard.tsx's `isAdmin`
+// prop); this route enforces that server-side too, since the UI gate
+// alone isn't a security boundary.
 //
 // Body: { handle: string }
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -18,9 +20,9 @@ const HANDLE_MAX_LENGTH = 20;
 const HANDLE_PATTERN = /^[a-z0-9_]+$/;
 
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const adminUserId = await getAdminUserId();
+  if (!adminUserId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await req.json().catch(() => null);
@@ -50,7 +52,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const user = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: adminUserId },
       data: { handle: rawHandle },
       select: { handle: true },
     });

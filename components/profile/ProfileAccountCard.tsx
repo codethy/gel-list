@@ -1,12 +1,14 @@
 // components/profile/ProfileAccountCard.tsx
 //
 // The account-identity card at the top of a profile page: avatar, name +
-// handle, and read-only email/member-since. Used by both /profile (the
-// signed-in user's own, editable=true — avatar upload, name/handle editing)
-// and /u/[handle] (a public, read-only view of someone else's profile,
-// editable=false — no edit controls, no email). Replaces the old static
-// card + separate ProfileSignOutButton — sign-out already lives in the
-// Navbar, so neither page needs its own copy.
+// handle, bio, and read-only email/member-since. Used by both /profile
+// (the signed-in user's own, editable=true — avatar upload, name/bio
+// editing) and /u/[handle] (a public, read-only view of someone else's
+// profile, editable=false — no edit controls, no email). Handles are
+// auto-generated at first sign-in and not user-editable — the `isAdmin`
+// prop additionally unlocks handle editing, admin-only. Replaces the old
+// static card + separate ProfileSignOutButton — sign-out already lives
+// in the Navbar, so neither page needs its own copy.
 
 "use client";
 
@@ -40,6 +42,10 @@ interface ProfileAccountCardProps {
   // controls and the name/handle edit control. Defaults to true (the
   // signed-in user's own /profile).
   editable?: boolean;
+  // Handles are auto-generated at first sign-in and not meant to be
+  // user-chosen — only an admin viewing their own profile can still edit
+  // theirs. Defaults to false; irrelevant when editable is false.
+  isAdmin?: boolean;
 }
 
 export default function ProfileAccountCard({
@@ -50,6 +56,7 @@ export default function ProfileAccountCard({
   email,
   memberSince,
   editable = true,
+  isAdmin = false,
 }: ProfileAccountCardProps) {
   const router = useRouter();
   const { update: updateSession } = useSession();
@@ -181,7 +188,10 @@ export default function ProfileAccountCard({
       setIdentityError(`Name must be ${NAME_MIN_LENGTH}-${NAME_MAX_LENGTH} characters, letters/numbers/spaces only`);
       return;
     }
-    if (trimmedHandle.length < HANDLE_MIN_LENGTH || trimmedHandle.length > HANDLE_MAX_LENGTH || !HANDLE_PATTERN.test(trimmedHandle)) {
+    // Handles are auto-generated and not user-editable — only an admin
+    // viewing their own profile gets the handle input at all (see the
+    // form JSX below), so this validation only matters for them.
+    if (isAdmin && (trimmedHandle.length < HANDLE_MIN_LENGTH || trimmedHandle.length > HANDLE_MAX_LENGTH || !HANDLE_PATTERN.test(trimmedHandle))) {
       setIdentityError(`Handle must be ${HANDLE_MIN_LENGTH}-${HANDLE_MAX_LENGTH} characters, lowercase letters/numbers/underscores only`);
       return;
     }
@@ -198,7 +208,7 @@ export default function ProfileAccountCard({
           })
         );
       }
-      if (trimmedHandle !== handle) {
+      if (isAdmin && trimmedHandle !== handle) {
         requests.push(
           fetch("/api/user/handle", {
             method: "PATCH",
@@ -376,15 +386,17 @@ export default function ProfileAccountCard({
               placeholder="Name"
               className="w-full bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white text-center placeholder-slate-500 focus:outline-none focus:border-slate-500 transition-colors"
             />
-            <div className="flex items-center justify-center gap-1.5 w-full">
-              <span className="text-sm text-slate-500">@</span>
-              <input
-                value={handleInput}
-                onChange={(e) => setHandleInput(e.target.value.toLowerCase())}
-                placeholder="handle"
-                className="flex-1 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white text-center placeholder-slate-500 focus:outline-none focus:border-slate-500 transition-colors"
-              />
-            </div>
+            {isAdmin && (
+              <div className="flex items-center justify-center gap-1.5 w-full">
+                <span className="text-sm text-slate-500">@</span>
+                <input
+                  value={handleInput}
+                  onChange={(e) => setHandleInput(e.target.value.toLowerCase())}
+                  placeholder="handle"
+                  className="flex-1 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white text-center placeholder-slate-500 focus:outline-none focus:border-slate-500 transition-colors"
+                />
+              </div>
+            )}
 
             {identityError && (
               <p className="text-xs text-red-400 text-center">{identityError}</p>
@@ -416,7 +428,7 @@ export default function ProfileAccountCard({
                 <button
                   type="button"
                   onClick={openEdit}
-                  title="Edit name and handle"
+                  title={isAdmin ? "Edit name and handle" : "Edit name"}
                   className="text-slate-500 hover:text-white transition-colors text-sm"
                 >
                   ✎

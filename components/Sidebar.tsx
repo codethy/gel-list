@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { TAXONOMY } from "@/lib/taxonomy";
+import { InstagramIcon, FacebookIcon, MailIcon, INSTAGRAM_URL, FACEBOOK_URL } from "@/components/SocialIcons";
 
 export { TAXONOMY };
 
@@ -286,6 +288,43 @@ export default function Sidebar({ filters, onChange }: SidebarProps) {
           )}
 
         </div>
+
+        {/* ── Social / Contact ── */}
+        <div className="border-b border-[#1e1e1e]">
+          <div className="px-4 py-3">
+            <span className="text-sm font-semibold text-zinc-200 select-none">
+              Social
+            </span>
+          </div>
+          <div className="pb-2 flex flex-col gap-0.5">
+            <a
+              href={INSTAGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[#1a1a1a] transition-colors text-sm text-zinc-400 hover:text-white"
+            >
+              <InstagramIcon className="w-[18px] h-[18px] shrink-0" />
+              Instagram
+            </a>
+            <a
+              href={FACEBOOK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[#1a1a1a] transition-colors text-sm text-zinc-400 hover:text-white"
+            >
+              <FacebookIcon className="w-[18px] h-[18px] shrink-0" />
+              Facebook
+            </a>
+            <Link
+              href="/contact"
+              className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[#1a1a1a] transition-colors text-sm text-zinc-400 hover:text-white"
+            >
+              <MailIcon className="w-[18px] h-[18px] shrink-0" />
+              Contact Us
+            </Link>
+          </div>
+        </div>
+
       </div>
     </aside>
   );

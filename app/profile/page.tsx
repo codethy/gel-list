@@ -25,7 +25,7 @@ export default async function ProfilePage() {
   const [user, stats, favorites, allGels] = await Promise.all([
     prisma.user.findUnique({
       where:  { id: userId },
-      select: { createdAt: true, name: true, handle: true, profileImage: true, email: true, bio: true },
+      select: { createdAt: true, name: true, handle: true, profileImage: true, email: true, bio: true, isAdmin: true },
     }),
     getProfileStats(userId),
     getFavoriteGels(userId),
@@ -45,9 +45,11 @@ export default async function ProfilePage() {
 
         {/* ── Account card (left) + stat stack (right, height-matched) ──── */}
         <div className="flex flex-col sm:flex-row items-stretch gap-4">
-          {/* Account card — editable avatar, name, and handle. Sign-out
-              lives in the Navbar only, so it isn't duplicated here. Sized
-              to fill whatever height the stat stack beside it ends up at. */}
+          {/* Account card — editable avatar, name, and bio; handle is
+              auto-generated and only editable by an admin viewing their
+              own profile. Sign-out lives in the Navbar only, so it isn't
+              duplicated here. Sized to fill whatever height the stat
+              stack beside it ends up at. */}
           <ProfileAccountCard
             initialName={user?.name ?? session.user.name ?? ""}
             initialHandle={user?.handle ?? session.user.handle ?? null}
@@ -55,6 +57,7 @@ export default async function ProfilePage() {
             initialBio={user?.bio ?? null}
             email={user?.email ?? session.user.email ?? null}
             memberSince={memberSince ?? null}
+            isAdmin={user?.isAdmin ?? false}
           />
 
           <div className="flex flex-col gap-3 w-full sm:w-[240px]">

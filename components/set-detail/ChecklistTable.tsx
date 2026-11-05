@@ -904,15 +904,14 @@ export function CardImageModal({
                               Did you pull this?
                             </button>
                           )}
-                          <button
-                            type="button"
+                          <Link
+                            href="/contact#email"
                             role="menuitem"
-                            disabled
-                            title="Coming soon"
-                            className="w-full text-left px-3 py-2 text-sm text-slate-500 cursor-not-allowed"
+                            onClick={() => setMenuOpen(false)}
+                            className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
                           >
                             Report this gel
-                          </button>
+                          </Link>
                         </div>
                       )}
                     </div>
