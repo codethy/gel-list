@@ -757,7 +757,7 @@ function MultiCardBlock({
             ? "Notes"
             : acquisitionMethod === "BREAKER"
             ? "Notes (any additional information)"
-            : "Notes (e.g. eBay seller name, @username on Instagram...)"}
+            : "Notes (e.g. eBay seller name, @username on Instagram...) *"}
         </Label>
         <Textarea
           value={entry.notes}
@@ -1047,6 +1047,11 @@ export default function AddGelModal({
       return;
     }
 
+    if (isOther && form.acquisitionMethod !== "BREAKER" && !form.notes.trim()) {
+      setError("Please fill in the notes.");
+      return;
+    }
+
     if (productApplies && !form.productOptionId) {
       setError("Please select which product this came from.");
       return;
@@ -1247,6 +1252,10 @@ export default function AddGelModal({
         setError(`Entry #${i + 1}: this card is numbered — please fill in the serial number.`);
         return;
       }
+      if (isOther && form.acquisitionMethod !== "BREAKER" && !c.notes.trim()) {
+        setError(`Entry #${i + 1}: please fill in the notes.`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -1309,7 +1318,8 @@ export default function AddGelModal({
     multiCards.every((c) =>
       c.checklistCardId &&
       c.cardFrontImageUrl &&
-      (category === "TCG" || c.selectedCardOption?.cardTier !== "NUMBERED" || c.serialNumber)
+      (category === "TCG" || c.selectedCardOption?.cardTier !== "NUMBERED" || c.serialNumber) &&
+      (!isOther || form.acquisitionMethod === "BREAKER" || c.notes.trim())
     );
 
   return (
@@ -1588,7 +1598,7 @@ export default function AddGelModal({
                       (the "Did you buy/pull this?" button already decided
                       which) ──────────────────────────────────────────────── */}
                   <div>
-                    <Label>{isOther ? "Who pulled it? *" : "How did you get it? *"}</Label>
+                    <Label>{isOther ? "Where did you see it? *" : "How did you get it? *"}</Label>
                     <Select
                       value={form.acquisitionMethod}
                       disabled={Boolean(coOwnPrefill)}
@@ -1753,7 +1763,7 @@ export default function AddGelModal({
                         ? "Notes"
                         : form.acquisitionMethod === "BREAKER"
                         ? "Notes (any additional information)"
-                        : "Notes (e.g. eBay seller name, @username on Instagram...)"}
+                        : "Notes (e.g. eBay seller name, @username on Instagram...) *"}
                     </Label>
                     <Textarea
                       value={form.notes}
@@ -1766,7 +1776,7 @@ export default function AddGelModal({
                 <>
                   {/* ── Shared fields — every card below uses these ──────── */}
                   <div>
-                    <Label>{isOther ? "Who pulled it? *" : "How did you get it? *"}</Label>
+                    <Label>{isOther ? "Where did you see it? *" : "How did you get it? *"}</Label>
                     <Select
                       value={form.acquisitionMethod}
                       onChange={(e) => {
@@ -1963,6 +1973,7 @@ export default function AddGelModal({
                         !form.cardFrontImageUrl ||
                         !form.acquisitionMethod ||
                         (form.acquisitionMethod === "BREAKER" && !form.breakerName.trim()) ||
+                        (isOther && form.acquisitionMethod !== "BREAKER" && !form.notes.trim()) ||
                         (productApplies && !form.productOptionId) ||
                         (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber))
                   }

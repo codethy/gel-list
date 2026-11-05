@@ -82,6 +82,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Please fill in the breaker's name" }, { status: 400 });
   }
 
+  if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof notes !== "string" || !notes.trim())) {
+    return NextResponse.json({ error: "Please fill in the notes" }, { status: 400 });
+  }
+
   if (productApplies && (typeof productType !== "string" || !productType)) {
     return NextResponse.json({ error: "Please select which product this came from" }, { status: 400 });
   }

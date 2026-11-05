@@ -75,7 +75,7 @@ function GelRow({
         </p>
         <p className="text-[11px] text-slate-500 mt-0.5">
           {gel.acquisitionMethod
-            ? (gel.isInHand ? "How: " : "Who pulled it: ") +
+            ? (gel.isInHand ? "How: " : "Where: ") +
               (ACQUISITION_LABELS[gel.acquisitionMethod] ?? gel.acquisitionMethod) +
               (gel.seller ? ` from ${gel.seller}` : "") +
               (gel.breakerName ? ` — ${gel.breakerName}` : "")

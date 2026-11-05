@@ -74,6 +74,19 @@ export interface GelEntry {
   };
 }
 
+// Display labels for a "Someone Else's Gel"'s acquisitionMethod — the
+// enum values used there (BREAKER/EBAY/FRIEND/SOCIAL_MEDIA/OTHER) aren't
+// readable as-is (e.g. "SOCIAL_MEDIA"). Same mapping as
+// components/admin/AdminGelsClient.tsx's ACQUISITION_LABELS, kept in sync
+// by hand since the two components don't share a module.
+const ACQUISITION_LABELS: Record<string, string> = {
+  BREAKER:      "Breaker",
+  EBAY:         "eBay",
+  FRIEND:       "Friend",
+  SOCIAL_MEDIA: "Social Media",
+  OTHER:        "Others",
+};
+
 interface YourGelsProps {
   gels: GelEntry[];
   // Drives the "See All Your Gels" link below — /profile/gels filtered to
@@ -385,9 +398,21 @@ export function GelCard({
               <span className="font-bold text-white">Product:</span> {productLabel}
             </p>
           )}
-          {/* Suppressed when PULLED — "Pulled: {date}" above already says
-              this; still shown for BOUGHT, where it's not redundant. */}
-          {!isPulled && gel.acquisitionMethod && (
+          {/* "Someone Else's Gel" — labeled "Where:" (where the sighting was
+              seen), using the readable ACQUISITION_LABELS mapping instead
+              of the raw enum value. */}
+          {gel.isInHand === false && gel.acquisitionMethod && (
+            <p className="text-[11px] text-slate-500">
+              <span className="font-bold text-white">Where:</span>{" "}
+              {ACQUISITION_LABELS[gel.acquisitionMethod] ?? gel.acquisitionMethod}
+              {gel.seller ? ` from ${gel.seller}` : ""}
+              {gel.breakerName ? ` — ${gel.breakerName}` : ""}
+            </p>
+          )}
+          {/* Own gel — suppressed when PULLED — "Pulled: {date}" above
+              already says this; still shown for BOUGHT, where it's not
+              redundant. */}
+          {gel.isInHand !== false && !isPulled && gel.acquisitionMethod && (
             <p className="text-[11px] text-slate-500 capitalize">
               {gel.acquisitionMethod.toLowerCase()}
               {gel.seller ? ` from ${gel.seller}` : ""}

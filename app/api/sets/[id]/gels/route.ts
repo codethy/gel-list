@@ -42,7 +42,9 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //   seller             — optional string
 //   breakerName        — required when acquisitionMethod is "BREAKER"
 //                        (either loggedFor), otherwise ignored.
-//   notes              — always optional
+//   notes              — required for loggedFor "OTHER" unless
+//                        acquisitionMethod is "BREAKER"; always optional
+//                        for loggedFor "SELF".
 //   acknowledgeDuplicate — optional boolean. Only meaningful when another
 //                        user already logged a gel with the same
 //                        checklistCardId + serialNumber (see below) — set
@@ -153,6 +155,13 @@ export async function POST(
   if (acquisitionMethod === "BREAKER" && (typeof breakerName !== "string" || !breakerName.trim())) {
     return NextResponse.json(
       { error: "Please fill in the breaker's name" },
+      { status: 400 }
+    );
+  }
+
+  if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof notes !== "string" || !notes.trim())) {
+    return NextResponse.json(
+      { error: "Please fill in the notes" },
       { status: 400 }
     );
   }

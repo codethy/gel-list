@@ -18,7 +18,9 @@
 //     serialNumber       — optional number
 //     cardFrontImageUrl  — required
 //     cardBackImageUrl   — optional string
-//     notes              — always optional
+//     notes              — required for loggedFor "OTHER" unless
+//                          acquisitionMethod is "BREAKER"; always optional
+//                          for loggedFor "SELF".
 //
 // Duplicate handling is deliberately simpler than the single route: if ANY
 // card in the batch collides with an existing PortfolioCard (same
@@ -108,6 +110,9 @@ export async function POST(
     }
     if (typeof c?.cardFrontImageUrl !== "string" || !c.cardFrontImageUrl) {
       return NextResponse.json({ error: "A card front image is required for every entry", cardIndex: i }, { status: 400 });
+    }
+    if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof c?.notes !== "string" || !c.notes.trim())) {
+      return NextResponse.json({ error: "Please fill in the notes for every entry", cardIndex: i }, { status: 400 });
     }
     cards.push({
       cardTemplateId,

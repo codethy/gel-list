@@ -30,6 +30,8 @@ async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
 //   loggedFor, acquisitionMethod, serialNumber, hitYear, hitMonth, hitCity,
 //   hitCountry, cardFrontImageUrl (required), cardBackImageUrl, seller,
 //   breakerName (required when acquisitionMethod is "BREAKER"), notes
+//   (required for loggedFor "OTHER" unless acquisitionMethod is "BREAKER";
+//   always optional for loggedFor "SELF")
 
 export async function PATCH(
   req: NextRequest,
@@ -96,6 +98,13 @@ export async function PATCH(
   if (acquisitionMethod === "BREAKER" && (typeof breakerName !== "string" || !breakerName.trim())) {
     return NextResponse.json(
       { error: "Please fill in the breaker's name" },
+      { status: 400 }
+    );
+  }
+
+  if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof notes !== "string" || !notes.trim())) {
+    return NextResponse.json(
+      { error: "Please fill in the notes" },
       { status: 400 }
     );
   }
