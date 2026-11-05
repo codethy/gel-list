@@ -793,3 +793,19 @@ model RateLimitCounter {
 
   @@index([windowStart])
 }
+
+// ─── ABOUT US PAGE ──────────────────────────────────────────────────────────
+// Admin-editable header+copy blocks rendered in order on app/about/page.tsx
+// (see components/admin/AdminAboutClient.tsx for the editor). The page's
+// title and closing "Rip. Gel. Repeat." tagline are fixed in the page
+// template, not stored here — only the middle Q&A-style content is dynamic.
+model AboutUsSection {
+  id        String   @id @default(cuid())
+  heading   String?
+  body      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([order])
+}

@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { TAXONOMY } from "@/lib/taxonomy";
-import { InstagramIcon, FacebookIcon, MailIcon, INSTAGRAM_URL, FACEBOOK_URL } from "@/components/SocialIcons";
+import { InstagramIcon, FacebookIcon, InfoIcon, MailIcon, INSTAGRAM_URL, FACEBOOK_URL } from "@/components/SocialIcons";
 
 export { TAXONOMY };
 
@@ -315,6 +315,13 @@ export default function Sidebar({ filters, onChange }: SidebarProps) {
               <FacebookIcon className="w-[18px] h-[18px] shrink-0" />
               Facebook
             </a>
+            <Link
+              href="/about"
+              className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[#1a1a1a] transition-colors text-sm text-zinc-400 hover:text-white"
+            >
+              <InfoIcon className="w-[18px] h-[18px] shrink-0" />
+              About Us
+            </Link>
             <Link
               href="/contact"
               className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[#1a1a1a] transition-colors text-sm text-zinc-400 hover:text-white"
