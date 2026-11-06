@@ -29,9 +29,10 @@ async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
 // editing a gel doesn't let you reassign it to a different checklist card):
 //   loggedFor, acquisitionMethod, serialNumber, hitYear, hitMonth, hitCity,
 //   hitCountry, cardFrontImageUrl (required), cardBackImageUrl, seller,
-//   breakerName (required when acquisitionMethod is "BREAKER"), notes
-//   (required for loggedFor "OTHER" unless acquisitionMethod is "BREAKER";
-//   always optional for loggedFor "SELF")
+//   breakerName (required when acquisitionMethod is "BREAKER"),
+//   influencerHandle (required when acquisitionMethod is "INFLUENCER"),
+//   notes (required for loggedFor "OTHER" unless acquisitionMethod is
+//   "BREAKER" or "INFLUENCER"; always optional for loggedFor "SELF")
 
 export async function PATCH(
   req: NextRequest,
@@ -71,6 +72,7 @@ export async function PATCH(
     cardBackImageUrl,
     seller,
     breakerName,
+    influencerHandle,
     notes,
   } = body;
 
@@ -102,7 +104,14 @@ export async function PATCH(
     );
   }
 
-  if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof notes !== "string" || !notes.trim())) {
+  if (acquisitionMethod === "INFLUENCER" && (typeof influencerHandle !== "string" || !influencerHandle.trim())) {
+    return NextResponse.json(
+      { error: "Please fill in the influencer's handle" },
+      { status: 400 }
+    );
+  }
+
+  if (!isInHand && acquisitionMethod !== "BREAKER" && acquisitionMethod !== "INFLUENCER" && (typeof notes !== "string" || !notes.trim())) {
     return NextResponse.json(
       { error: "Please fill in the notes" },
       { status: 400 }
@@ -167,6 +176,8 @@ export async function PATCH(
         typeof seller === "string" ? seller : null,
       breakerName:
         typeof breakerName === "string" ? breakerName : null,
+      influencerHandle:
+        typeof influencerHandle === "string" ? influencerHandle : null,
       notes:
         typeof notes === "string" ? notes : null,
     },
@@ -188,6 +199,7 @@ export async function PATCH(
       cardBackImageUrl:  true,
       seller:            true,
       breakerName:       true,
+      influencerHandle:  true,
       notes:             true,
       checklistCard: {
         select: {
@@ -236,6 +248,7 @@ export async function PATCH(
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
+    influencerHandle:  portfolioCard.influencerHandle   ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {
       playerName:    portfolioCard.checklistCard.playerName,

@@ -92,6 +92,7 @@ export async function getChecklistRowExtras(
         productType:       true,
         productTypeOther:  true,
         breakerName:       true,
+        influencerHandle:  true,
         user:              { select: userSelect },
       },
     }),
@@ -188,6 +189,7 @@ export async function getChecklistRowExtras(
         location:   locationParts.length > 0 ? locationParts.join(", ") : null,
         product:    pc.productType ? getProductLabel(String(pc.productType), pc.productTypeOther) : null,
         breakerName: pc.breakerName ?? null,
+        influencerHandle: pc.influencerHandle ?? null,
       });
     }
 

@@ -36,6 +36,7 @@ function adaptToGelEntry(gel: AdminGelEntry): GelEntry {
     acquisitionMethod: gel.acquisitionMethod,
     seller:            gel.seller,
     breakerName:       gel.breakerName,
+    influencerHandle:  gel.influencerHandle,
     notes:             gel.notes,
     productType:       gel.productType,
     productTypeOther:  gel.productTypeOther,

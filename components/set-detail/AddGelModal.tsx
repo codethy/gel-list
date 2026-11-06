@@ -141,6 +141,9 @@ interface FormState {
   // Only meaningful when acquisitionMethod is "BREAKER" — shared across
   // every card in the Multiple Gels flow, same as acquisitionMethod itself.
   breakerName: string;
+  // Only meaningful when acquisitionMethod is "INFLUENCER" — same shared-
+  // across-the-batch scope as breakerName.
+  influencerHandle: string;
   notes: string;
 }
 
@@ -157,6 +160,7 @@ const EMPTY_FORM: FormState = {
   cardBackImageUrl:  "",
   seller:            "",
   breakerName:       "",
+  influencerHandle:  "",
   notes:             "",
 };
 
@@ -755,7 +759,7 @@ function MultiCardBlock({
         <Label>
           {!isOther
             ? "Notes"
-            : acquisitionMethod === "BREAKER"
+            : acquisitionMethod === "BREAKER" || acquisitionMethod === "INFLUENCER"
             ? "Notes (any additional information)"
             : "Notes (e.g. eBay seller name, @username on Instagram...) *"}
         </Label>
@@ -883,6 +887,7 @@ export default function AddGelModal({
         cardBackImageUrl:  editingGel.cardBackImageUrl   ?? "",
         seller:            editingGel.seller             ?? "",
         breakerName:       editingGel.breakerName         ?? "",
+        influencerHandle:  editingGel.influencerHandle    ?? "",
         notes:             editingGel.notes               ?? "",
       });
       // GelEntry.cardTemplate has no cardNumber (it's locked anyway, so the
@@ -1017,6 +1022,7 @@ export default function AddGelModal({
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+      influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
       notes:             form.notes  || null,
       ...extra,
     };
@@ -1047,7 +1053,12 @@ export default function AddGelModal({
       return;
     }
 
-    if (isOther && form.acquisitionMethod !== "BREAKER" && !form.notes.trim()) {
+    if (form.acquisitionMethod === "INFLUENCER" && !form.influencerHandle.trim()) {
+      setError("Please fill in the influencer's handle.");
+      return;
+    }
+
+    if (isOther && form.acquisitionMethod !== "BREAKER" && form.acquisitionMethod !== "INFLUENCER" && !form.notes.trim()) {
       setError("Please fill in the notes.");
       return;
     }
@@ -1176,6 +1187,7 @@ export default function AddGelModal({
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+      influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
       notes:             form.notes  || null,
     };
   }
@@ -1233,6 +1245,11 @@ export default function AddGelModal({
       return;
     }
 
+    if (form.acquisitionMethod === "INFLUENCER" && !form.influencerHandle.trim()) {
+      setError("Please fill in the influencer's handle.");
+      return;
+    }
+
     if (productApplies && !form.productOptionId) {
       setError("Please select which product these cards came from.");
       return;
@@ -1252,7 +1269,7 @@ export default function AddGelModal({
         setError(`Entry #${i + 1}: this card is numbered — please fill in the serial number.`);
         return;
       }
-      if (isOther && form.acquisitionMethod !== "BREAKER" && !c.notes.trim()) {
+      if (isOther && form.acquisitionMethod !== "BREAKER" && form.acquisitionMethod !== "INFLUENCER" && !c.notes.trim()) {
         setError(`Entry #${i + 1}: please fill in the notes.`);
         return;
       }
@@ -1278,6 +1295,7 @@ export default function AddGelModal({
           hitCountry: form.hitCountry || null,
           seller:     form.seller || null,
           breakerName: form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+          influencerHandle: form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
           cards: multiCards.map((c) => ({
             cardTemplateId:    c.checklistCardId,
             serialNumber:      c.serialNumber ? parseInt(c.serialNumber) : null,
@@ -1313,13 +1331,14 @@ export default function AddGelModal({
   const canSubmitMulti =
     Boolean(form.acquisitionMethod) &&
     (form.acquisitionMethod !== "BREAKER" || form.breakerName.trim()) &&
+    (form.acquisitionMethod !== "INFLUENCER" || form.influencerHandle.trim()) &&
     (!productApplies || Boolean(form.productOptionId)) &&
     multiCards.length > 0 &&
     multiCards.every((c) =>
       c.checklistCardId &&
       c.cardFrontImageUrl &&
       (category === "TCG" || c.selectedCardOption?.cardTier !== "NUMBERED" || c.serialNumber) &&
-      (!isOther || form.acquisitionMethod === "BREAKER" || c.notes.trim())
+      (!isOther || form.acquisitionMethod === "BREAKER" || form.acquisitionMethod === "INFLUENCER" || c.notes.trim())
     );
 
   return (
@@ -1656,6 +1675,27 @@ export default function AddGelModal({
                     )}
                   </AnimatePresence>
 
+                  {/* ── Influencer's Handle (conditional on INFLUENCER, OTHER flow only) ── */}
+                  <AnimatePresence>
+                    {form.acquisitionMethod === "INFLUENCER" && (
+                      <motion.div
+                        key="influencerHandle"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Influencer&apos;s Handle (e.g. YouTube channel name, Instagram username etc.) *</Label>
+                        <Input
+                          value={form.influencerHandle}
+                          onChange={setField("influencerHandle")}
+                          placeholder="e.g. @username, channel name..."
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   {/* ── Which Product (shown for SELF always, and for OTHER
                       when the source is a breaker — enabled once "Pulled"
                       or "Breaker" is selected) ───────────────────────────── */}
@@ -1762,7 +1802,7 @@ export default function AddGelModal({
                     <Label>
                       {!isOther
                         ? "Notes"
-                        : form.acquisitionMethod === "BREAKER"
+                        : form.acquisitionMethod === "BREAKER" || form.acquisitionMethod === "INFLUENCER"
                         ? "Notes (any additional information)"
                         : "Notes (e.g. eBay seller name, @username on Instagram...) *"}
                     </Label>
@@ -1826,6 +1866,26 @@ export default function AddGelModal({
                           value={form.breakerName}
                           onChange={setField("breakerName")}
                           placeholder="e.g. @username, breaker's name..."
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {form.acquisitionMethod === "INFLUENCER" && (
+                      <motion.div
+                        key="influencerHandle"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Influencer&apos;s Handle (e.g. YouTube channel name, Instagram username etc.) *</Label>
+                        <Input
+                          value={form.influencerHandle}
+                          onChange={setField("influencerHandle")}
+                          placeholder="e.g. @username, channel name..."
                         />
                       </motion.div>
                     )}
@@ -1975,7 +2035,8 @@ export default function AddGelModal({
                         !form.cardFrontImageUrl ||
                         !form.acquisitionMethod ||
                         (form.acquisitionMethod === "BREAKER" && !form.breakerName.trim()) ||
-                        (isOther && form.acquisitionMethod !== "BREAKER" && !form.notes.trim()) ||
+                        (form.acquisitionMethod === "INFLUENCER" && !form.influencerHandle.trim()) ||
+                        (isOther && form.acquisitionMethod !== "BREAKER" && form.acquisitionMethod !== "INFLUENCER" && !form.notes.trim()) ||
                         (productApplies && !form.productOptionId) ||
                         (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber))
                   }

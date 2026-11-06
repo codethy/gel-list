@@ -102,6 +102,7 @@ export interface CreateGelRowInput {
   cardBackImageUrl:  string | null;
   seller:            string | null;
   breakerName:       string | null;
+  influencerHandle:  string | null;
   notes:             string | null;
 }
 
@@ -123,6 +124,7 @@ export interface ShapedGel {
   cardBackImageUrl:  string | null;
   seller:            string | null;
   breakerName:       string | null;
+  influencerHandle:  string | null;
   notes:             string | null;
   cardTemplate: {
     playerName:    string;
@@ -161,6 +163,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardBackImageUrl:  input.cardBackImageUrl,
       seller:            input.seller,
       breakerName:       input.breakerName,
+      influencerHandle:  input.influencerHandle,
       notes:             input.notes,
     },
     select: {
@@ -181,6 +184,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardBackImageUrl:  true,
       seller:            true,
       breakerName:       true,
+      influencerHandle:  true,
       notes:             true,
       checklistCard: {
         select: {
@@ -214,6 +218,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
+    influencerHandle:  portfolioCard.influencerHandle   ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {
       playerName:    portfolioCard.checklistCard.playerName,

@@ -457,6 +457,11 @@ model PortfolioCard {
   // alongside seller, same pattern.
   breakerName String? @db.VarChar(150)
 
+  // The influencer's handle (YouTube channel, Instagram username, etc.) —
+  // only meaningful when acquisitionMethod is INFLUENCER. Same required/
+  // display pattern as breakerName above.
+  influencerHandle String? @db.VarChar(150)
+
   // Product info
   productType           ProductType?
   productTypeOther      String?      @db.VarChar(150)

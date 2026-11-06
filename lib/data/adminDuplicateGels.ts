@@ -66,6 +66,7 @@ const gelSelect = {
   cardBackImageUrl:  true,
   seller:            true,
   breakerName:       true,
+  influencerHandle:  true,
   notes:             true,
   createdAt:         true,
   userId:            true,
@@ -97,7 +98,7 @@ function shapeGel(pc: {
   serialNumber: number | null; hitYear: number | null;
   hitMonth: number | null; hitCity: string | null; hitCountry: string | null;
   cardFrontImageUrl: string | null; cardBackImageUrl: string | null;
-  seller: string | null; breakerName: string | null; notes: string | null; createdAt: Date;
+  seller: string | null; breakerName: string | null; influencerHandle: string | null; notes: string | null; createdAt: Date;
   userId: string;
   user: { id: string; username: string | null; handle: string | null; email: string | null; name: string | null };
   checklistCard: {
@@ -126,6 +127,7 @@ function shapeGel(pc: {
     cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
     seller:              pc.seller ?? null,
     breakerName:         pc.breakerName ?? null,
+    influencerHandle:    pc.influencerHandle ?? null,
     notes:               pc.notes  ?? null,
     createdAt:           pc.createdAt.toISOString(),
     loggedByUsername:    pc.user.username ?? pc.user.name ?? "user",

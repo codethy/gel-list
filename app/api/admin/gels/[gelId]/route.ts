@@ -61,6 +61,7 @@ export async function PATCH(
     cardBackImageUrl,
     seller,
     breakerName,
+    influencerHandle,
     notes,
   } = body;
 
@@ -82,7 +83,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Please fill in the breaker's name" }, { status: 400 });
   }
 
-  if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof notes !== "string" || !notes.trim())) {
+  if (acquisitionMethod === "INFLUENCER" && (typeof influencerHandle !== "string" || !influencerHandle.trim())) {
+    return NextResponse.json({ error: "Please fill in the influencer's handle" }, { status: 400 });
+  }
+
+  if (!isInHand && acquisitionMethod !== "BREAKER" && acquisitionMethod !== "INFLUENCER" && (typeof notes !== "string" || !notes.trim())) {
     return NextResponse.json({ error: "Please fill in the notes" }, { status: 400 });
   }
 
@@ -117,6 +122,7 @@ export async function PATCH(
       cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
       seller:      typeof seller      === "string" ? seller      : null,
       breakerName: typeof breakerName === "string" ? breakerName : null,
+      influencerHandle: typeof influencerHandle === "string" ? influencerHandle : null,
       notes:       typeof notes       === "string" ? notes       : null,
     },
     select: {
@@ -137,6 +143,7 @@ export async function PATCH(
       cardBackImageUrl:  true,
       seller:            true,
       breakerName:       true,
+      influencerHandle:  true,
       notes:             true,
       checklistCard: {
         select: {
@@ -173,6 +180,7 @@ export async function PATCH(
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
+    influencerHandle:  portfolioCard.influencerHandle   ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {
       playerName:    portfolioCard.checklistCard.playerName,

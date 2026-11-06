@@ -21,7 +21,9 @@
 //   productType/productTypeOther — as the main route, only when
 //                        acquisitionMethod is "PULLED".
 //   hitYear/hitMonth/hitCity/hitCountry, cardFrontImageUrl (required),
-//   cardBackImageUrl, seller, breakerName, notes — same as the main route.
+//   cardBackImageUrl, seller, breakerName, influencerHandle, notes — same
+//   as the main route (in practice always null here, since
+//   acquisitionMethod is locked to PULLED/BOUGHT).
 //
 // No confirm-dialog round-trip: filling out and submitting this whole
 // form already is the confirmation, unlike the generic duplicate/claim
@@ -70,6 +72,7 @@ export async function POST(
     cardBackImageUrl,
     seller,
     breakerName,
+    influencerHandle,
     notes,
   } = body;
 
@@ -127,6 +130,7 @@ export async function POST(
     cardBackImageUrl:  typeof cardBackImageUrl === "string" ? cardBackImageUrl : null,
     seller:            typeof seller === "string" ? seller : null,
     breakerName:       typeof breakerName === "string" ? breakerName : null,
+    influencerHandle:  typeof influencerHandle === "string" ? influencerHandle : null,
     notes:             typeof notes === "string" ? notes : null,
   });
 

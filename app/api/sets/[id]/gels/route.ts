@@ -43,9 +43,12 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //   seller             — optional string
 //   breakerName        — required when acquisitionMethod is "BREAKER"
 //                        (either loggedFor), otherwise ignored.
+//   influencerHandle   — required when acquisitionMethod is "INFLUENCER"
+//                        (loggedFor "OTHER" only — SELF never sends this
+//                        value), otherwise ignored.
 //   notes              — required for loggedFor "OTHER" unless
-//                        acquisitionMethod is "BREAKER"; always optional
-//                        for loggedFor "SELF".
+//                        acquisitionMethod is "BREAKER" or "INFLUENCER";
+//                        always optional for loggedFor "SELF".
 //   acknowledgeDuplicate — optional boolean. Only meaningful when another
 //                        user already logged a gel with the same
 //                        checklistCardId + serialNumber (see below) — set
@@ -116,6 +119,7 @@ export async function POST(
     cardBackImageUrl,
     seller,
     breakerName,
+    influencerHandle,
     notes,
     acknowledgeDuplicate,
   } = body;
@@ -160,7 +164,14 @@ export async function POST(
     );
   }
 
-  if (!isInHand && acquisitionMethod !== "BREAKER" && (typeof notes !== "string" || !notes.trim())) {
+  if (acquisitionMethod === "INFLUENCER" && (typeof influencerHandle !== "string" || !influencerHandle.trim())) {
+    return NextResponse.json(
+      { error: "Please fill in the influencer's handle" },
+      { status: 400 }
+    );
+  }
+
+  if (!isInHand && acquisitionMethod !== "BREAKER" && acquisitionMethod !== "INFLUENCER" && (typeof notes !== "string" || !notes.trim())) {
     return NextResponse.json(
       { error: "Please fill in the notes" },
       { status: 400 }
@@ -260,6 +271,7 @@ export async function POST(
     cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
     seller:            typeof seller === "string" ? seller : null,
     breakerName:       typeof breakerName === "string" ? breakerName : null,
+    influencerHandle:  typeof influencerHandle === "string" ? influencerHandle : null,
     notes:             typeof notes  === "string" ? notes  : null,
   });
 

@@ -45,6 +45,9 @@ export interface CardHistoryEvent {
   // Only meaningful when the acquisition was via a breaker (BREAKER/
   // BREAKER_OWNED) — who the breaker was.
   breakerName?: string | null;
+  // Only meaningful when the acquisition was via an influencer
+  // (INFLUENCER) — their handle (YouTube channel, Instagram username, etc.).
+  influencerHandle?: string | null;
 }
 
 export type CardStatus = "Available" | "Owned" | "Surfaced";
@@ -411,6 +414,11 @@ function CardHistoryDrawer({ history }: { history: CardHistoryEvent[] }) {
                       {event.breakerName && (
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           <span className="font-bold text-white">Breaker:</span> {event.breakerName}
+                        </p>
+                      )}
+                      {event.influencerHandle && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          <span className="font-bold text-white">Influencer:</span> {event.influencerHandle}
                         </p>
                       )}
                     </div>

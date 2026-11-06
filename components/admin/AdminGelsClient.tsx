@@ -79,7 +79,8 @@ function GelRow({
             ? (gel.isInHand ? "How: " : "Where: ") +
               (ACQUISITION_LABELS[gel.acquisitionMethod] ?? gel.acquisitionMethod) +
               (gel.seller ? ` from ${gel.seller}` : "") +
-              (gel.breakerName ? ` — ${gel.breakerName}` : "")
+              (gel.breakerName ? ` — ${gel.breakerName}` : "") +
+              (gel.influencerHandle ? ` — ${gel.influencerHandle}` : "")
             : null}
         </p>
         {gel.notes && (

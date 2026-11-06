@@ -39,6 +39,9 @@ export interface GelEntry {
   // Only meaningful when acquisitionMethod is "BREAKER" — who the breaker
   // was, shown alongside seller in the acquisition line below.
   breakerName?: string | null;
+  // Only meaningful when acquisitionMethod is "INFLUENCER" — their handle,
+  // shown the same way breakerName is.
+  influencerHandle?: string | null;
   notes?: string | null;
   productType?: string | null;
   productTypeOther?: string | null;
@@ -408,6 +411,7 @@ export function GelCard({
               {ACQUISITION_LABELS[gel.acquisitionMethod] ?? gel.acquisitionMethod}
               {gel.seller ? ` from ${gel.seller}` : ""}
               {gel.breakerName ? ` — ${gel.breakerName}` : ""}
+              {gel.influencerHandle ? ` — ${gel.influencerHandle}` : ""}
             </p>
           )}
           {/* Own gel — suppressed when PULLED — "Pulled: {date}" above

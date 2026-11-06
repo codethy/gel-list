@@ -48,6 +48,7 @@ export interface SetDetailData {
     cardBackImageUrl:  string | null;
     seller:            string | null;
     breakerName:       string | null;
+    influencerHandle:  string | null;
     notes:             string | null;
     productType:       string | null;
     productTypeOther:  string | null;
@@ -81,6 +82,7 @@ export interface SetDetailData {
     cardBackImageUrl:  string | null;
     seller:            string | null;
     breakerName:       string | null;
+    influencerHandle:  string | null;
     notes:             string | null;
     productType:       string | null;
     productTypeOther:  string | null;
@@ -555,6 +557,7 @@ export async function getSetDetail(
         cardBackImageUrl:  true,
         seller:            true,
         breakerName:       true,
+        influencerHandle:  true,
         notes:             true,
         productType:       true,
         productTypeOther:  true,
@@ -596,6 +599,7 @@ export async function getSetDetail(
         cardBackImageUrl:  true,
         seller:            true,
         breakerName:       true,
+        influencerHandle:  true,
         notes:             true,
         productType:       true,
         productTypeOther:  true,
@@ -646,6 +650,7 @@ export async function getSetDetail(
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
     breakerName:       pc.breakerName        ?? null,
+    influencerHandle:  pc.influencerHandle   ?? null,
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
     productTypeOther:  pc.productTypeOther  ?? null,
@@ -677,6 +682,7 @@ export async function getSetDetail(
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
     breakerName:       pc.breakerName        ?? null,
+    influencerHandle:  pc.influencerHandle   ?? null,
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
     productTypeOther:  pc.productTypeOther  ?? null,
