@@ -193,3 +193,9 @@ export async function getReviewQueueGels(params: {
 // How many VERIFIED gels a user needs before all their future gels
 // auto-verify — see app/api/admin/gels/[gelId]/verify/route.ts.
 export const AUTO_VERIFY_THRESHOLD = 5;
+
+// Lightweight count for the admin home page's "Gel Review Queue" badge —
+// avoids pulling a full page of gel rows just to show a number.
+export async function getUnverifiedGelCount(): Promise<number> {
+  return prisma.portfolioCard.count({ where: { isVerified: false } });
+}

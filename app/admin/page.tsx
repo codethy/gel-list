@@ -7,13 +7,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminUserId } from "@/lib/admin";
 import { getAdminChecklistSets, type AdminChecklistSet } from "@/lib/data/adminChecklist";
+import { getUnverifiedGelCount } from "@/lib/data/adminGels";
 import { TAXONOMY } from "@/lib/taxonomy";
 
 export default async function AdminHomePage() {
   const adminUserId = await getAdminUserId();
   if (!adminUserId) notFound();
 
-  const sets = await getAdminChecklistSets();
+  const [sets, unverifiedCount] = await Promise.all([
+    getAdminChecklistSets(),
+    getUnverifiedGelCount(),
+  ]);
 
   // Category -> subcategory -> sets, following the same order as the
   // Sidebar's filter list — a category or subcategory with no sets yet is
@@ -38,10 +42,17 @@ export default async function AdminHomePage() {
 
         <Link
           href="/admin/gels"
-          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
+          className="flex items-center justify-between gap-3 rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
         >
-          <p className="font-semibold text-white">Gel Review Queue</p>
-          <p className="text-sm text-slate-400">Verify, reject, edit, or delete logged gels across every set.</p>
+          <div>
+            <p className="font-semibold text-white">Gel Review Queue</p>
+            <p className="text-sm text-slate-400">Verify, reject, edit, or delete logged gels across every set.</p>
+          </div>
+          {unverifiedCount > 0 && (
+            <span className="shrink-0 min-w-[1.5rem] h-6 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">
+              {unverifiedCount > 99 ? "99+" : unverifiedCount}
+            </span>
+          )}
         </Link>
 
         <Link
@@ -62,10 +73,18 @@ export default async function AdminHomePage() {
 
         <Link
           href="/admin/about"
-          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
         >
           <p className="font-semibold text-white">About Us</p>
           <p className="text-sm text-slate-400">Edit the header and copy blocks shown on the public About Us page.</p>
+        </Link>
+
+        <Link
+          href="/admin/users"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+        >
+          <p className="font-semibold text-white">User Count</p>
+          <p className="text-sm text-slate-400">A live counter of how many accounts have been created.</p>
         </Link>
 
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
