@@ -25,6 +25,7 @@ export interface CardHistoryEvent {
     | "EBAY"
     | "FRIEND"
     | "SOCIAL_MEDIA"
+    | "INFLUENCER"
     | "OTHER"
     // "Acquired this myself some other way" — the SELF-flow's "Other"
     // option. Distinct from OTHER below (a sighting reported some other
@@ -204,6 +205,7 @@ const EVENT_META: Record<
   EBAY:            { label: "Seen on eBay",            color: "text-orange-300",  dotColor: "bg-orange-500"  },
   FRIEND:          { label: "Seen via a friend",       color: "text-orange-300",  dotColor: "bg-orange-500"  },
   SOCIAL_MEDIA:    { label: "Seen on social media",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
+  INFLUENCER:      { label: "Seen from an influencer", color: "text-orange-300",  dotColor: "bg-orange-500"  },
   OTHER:           { label: "Seen elsewhere",          color: "text-orange-300",  dotColor: "bg-orange-500"  },
   TRANSFERRED_OUT: { label: "Transferred out",       color: "text-amber-300",   dotColor: "bg-amber-500"   },
   TRANSFERRED_IN:  { label: "Received via transfer", color: "text-teal-300",    dotColor: "bg-teal-500"    },

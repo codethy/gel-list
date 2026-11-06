@@ -26,7 +26,8 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //                        saw someone else pull/sell online. Drives isInHand.
 //   acquisitionMethod  — optional enum string. For loggedFor "SELF":
 //                        "PULLED" | "BOUGHT". For "OTHER": "BREAKER" |
-//                        "EBAY" | "FRIEND" | "SOCIAL_MEDIA" | "OTHER".
+//                        "EBAY" | "FRIEND" | "SOCIAL_MEDIA" | "INFLUENCER" |
+//                        "OTHER".
 //   productType        — optional ProductType enum string (e.g. "HOBBY_BOX")
 //                        — only stored when loggedFor is "SELF" and
 //                        acquisitionMethod is "PULLED"; ignored otherwise.

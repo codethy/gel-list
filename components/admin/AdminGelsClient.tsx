@@ -14,6 +14,7 @@ const ACQUISITION_LABELS: Record<string, string> = {
   EBAY:         "eBay",
   FRIEND:       "Friend",
   SOCIAL_MEDIA: "Social Media",
+  INFLUENCER:   "Influencer",
   OTHER:        "Others",
 };
 

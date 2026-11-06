@@ -75,8 +75,8 @@ export interface GelEntry {
 }
 
 // Display labels for a "Someone Else's Gel"'s acquisitionMethod — the
-// enum values used there (BREAKER/EBAY/FRIEND/SOCIAL_MEDIA/OTHER) aren't
-// readable as-is (e.g. "SOCIAL_MEDIA"). Same mapping as
+// enum values used there (BREAKER/EBAY/FRIEND/SOCIAL_MEDIA/INFLUENCER/OTHER)
+// aren't readable as-is (e.g. "SOCIAL_MEDIA"). Same mapping as
 // components/admin/AdminGelsClient.tsx's ACQUISITION_LABELS, kept in sync
 // by hand since the two components don't share a module.
 const ACQUISITION_LABELS: Record<string, string> = {
@@ -84,6 +84,7 @@ const ACQUISITION_LABELS: Record<string, string> = {
   EBAY:         "eBay",
   FRIEND:       "Friend",
   SOCIAL_MEDIA: "Social Media",
+  INFLUENCER:   "Influencer",
   OTHER:        "Others",
 };
 
