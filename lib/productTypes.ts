@@ -24,6 +24,10 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "FANATICS_FEST", label: "Fanatics Fest" },
   { value: "HONG_BAO_BOX", label: "Hong Bao Box" },
   { value: "LOGOFRACTOR", label: "Logofractor" },
+  { value: "PRE_RIFT_KIT", label: "Pre-Rift Kit" },
+  { value: "VAULT", label: "Vault" },
+  { value: "SHOWDOWN_DECK", label: "Showdown Deck" },
+  { value: "SLEEVED_PACK", label: "Sleeved Booster Pack" },
   { value: "OTHER", label: "Other" },
 ];
 
