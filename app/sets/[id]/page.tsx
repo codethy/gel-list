@@ -61,6 +61,7 @@ export default async function SetDetailPage({ params }: PageProps) {
       totalChaseCardsInSet={data.totalChaseCardsInSet}
       imageUrl={data.imageUrl}
       initialGels={data.userGels}
+      initialYourGelsPinnedIds={data.yourGelsPinnedIds}
       recentPulls={data.recentPulls}
       initialRows={data.checklistRows}
       initialMeta={data.checklistMeta}

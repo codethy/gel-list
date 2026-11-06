@@ -8,6 +8,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { playerSubtitle, CardImageModal, VerificationBadge, type CardImageTarget, type DuplicateFlag } from "./ChecklistTable";
 import { getProductLabel } from "@/lib/productTypes";
+import ManageYourGelsModal from "./ManageYourGelsModal";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -92,13 +93,25 @@ const ACQUISITION_LABELS: Record<string, string> = {
 };
 
 interface YourGelsProps {
+  // What's actually rendered — capped to maxDisplay, already resolved
+  // from pinnedIds (or the maxDisplay-most-recent default) by the parent.
   gels: GelEntry[];
+  // Every gel the viewer owns in this set, unfiltered — the search pool
+  // for ManageYourGelsModal's "pick which ones to show" list.
+  allGels: GelEntry[];
+  // The viewer's current display-selection, in order — empty means
+  // "no customization yet, just showing the most recent maxDisplay."
+  pinnedIds: string[];
+  maxDisplay: number;
   // Drives the "See All Your Gels" link below — /profile/gels filtered to
   // just this set.
   setId: string;
   onAddGelClick: () => void; // callback to open the Add Gel modal
   onEditGel: (gel: GelEntry) => void; // callback to open the Add Gel modal in edit mode
   onDeleteGel: (gelId: string) => Promise<void>; // performs the delete + removes it from state
+  // Replaces the whole display selection+order in one call — see
+  // ManageYourGelsModal and app/api/sets/[id]/your-gels-pins/route.ts.
+  onSetPinnedIds: (orderedPortfolioCardIds: string[]) => Promise<void>;
 }
 
 // ─── CARD TYPE BADGE ─────────────────────────────────────────────────────────
@@ -501,8 +514,10 @@ function EmptyGelsState({ onAddGelClick }: { onAddGelClick: () => void }) {
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
-export default function YourGels({ gels, setId, onAddGelClick, onEditGel, onDeleteGel }: YourGelsProps) {
+export default function YourGels({ gels, allGels, pinnedIds, maxDisplay, setId, onAddGelClick, onEditGel, onDeleteGel, onSetPinnedIds }: YourGelsProps) {
   const [imageTarget, setImageTarget] = useState<CardImageTarget | null>(null);
+  const [manageOpen, setManageOpen]   = useState(false);
+  const canCustomize = allGels.length > maxDisplay;
 
   return (
     <section className="space-y-4">
@@ -510,14 +525,14 @@ export default function YourGels({ gels, setId, onAddGelClick, onEditGel, onDele
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-white">Your Gels</h2>
-          {gels.length > 0 && (
+          {allGels.length > 0 && (
             <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/30">
-              {gels.length}
+              {allGels.length}
             </span>
           )}
         </div>
 
-        {gels.length > 0 && (
+        {allGels.length > 0 && (
           <div className="flex items-center gap-2">
             <button
               onClick={onAddGelClick}
@@ -538,6 +553,14 @@ export default function YourGels({ gels, setId, onAddGelClick, onEditGel, onDele
               </svg>
               Add Gel
             </button>
+            {canCustomize && (
+              <button
+                onClick={() => setManageOpen(true)}
+                className="px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-600/50 hover:border-slate-500/60 transition-all duration-150"
+              >
+                {pinnedIds.length === 0 ? "Choose Gels to Display" : "Manage Display"}
+              </button>
+            )}
             <Link
               href={`/profile/gels?setId=${setId}`}
               className="flex items-center gap-0.5 px-2 py-1 rounded-md text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors duration-150"
@@ -553,7 +576,7 @@ export default function YourGels({ gels, setId, onAddGelClick, onEditGel, onDele
 
       {/* ── Content ─────────────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
-        {gels.length === 0 ? (
+        {allGels.length === 0 ? (
           <EmptyGelsState key="empty" onAddGelClick={onAddGelClick} />
         ) : (
           <motion.div
@@ -571,6 +594,17 @@ export default function YourGels({ gels, setId, onAddGelClick, onEditGel, onDele
         target={imageTarget}
         onClose={() => setImageTarget(null)}
       />
+
+      {canCustomize && (
+        <ManageYourGelsModal
+          isOpen={manageOpen}
+          onClose={() => setManageOpen(false)}
+          allGels={allGels}
+          selectedIds={pinnedIds.length > 0 ? pinnedIds : gels.map((g) => g.id)}
+          maxDisplay={maxDisplay}
+          onSave={onSetPinnedIds}
+        />
+      )}
     </section>
   );
 }

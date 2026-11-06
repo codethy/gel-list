@@ -22,6 +22,9 @@ import type { SetPacksOpenedSummary } from "@/lib/data/productOpenings";
 // prepended locally (see handleGelSuccess below).
 const RECENT_PULLS_LIMIT = 12;
 
+// Matches YOUR_GELS_DISPLAY_LIMIT in lib/data/sets.ts.
+const YOUR_GELS_DISPLAY_LIMIT = 6;
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
 interface SetDetailClientProps {
@@ -44,6 +47,10 @@ interface SetDetailClientProps {
 
   // User's gels for this set
   initialGels: GelEntry[];
+  // The viewer's YourGelsPin order for this set, if they've customized
+  // which YOUR_GELS_DISPLAY_LIMIT of initialGels "Your Gels" shows — see
+  // lib/data/sets.ts's yourGelsPinnedIds.
+  initialYourGelsPinnedIds: string[];
   recentPulls: GelEntry[];
 
   // Checklist (first page, pre-fetched server-side)
@@ -80,6 +87,7 @@ export default function SetDetailClient({
   totalChaseCardsInSet,
   imageUrl,
   initialGels,
+  initialYourGelsPinnedIds,
   recentPulls: initialRecentPulls,
   initialRows,
   initialMeta,
@@ -95,6 +103,18 @@ export default function SetDetailClient({
 
   // ── Gel state ──────────────────────────────────────────────────────────────
   const [gels, setGels] = useState<GelEntry[]>(initialGels);
+  // "Your Gels" display picks for this set — empty until the user
+  // customizes via YourGels' "Manage Display" modal (only offered once
+  // gels.length exceeds YOUR_GELS_DISPLAY_LIMIT). Derived display list
+  // (not its own state) so it automatically stays correct as `gels`
+  // changes from logging/editing/deleting — a pinned id that no longer
+  // resolves to a gel (e.g. deleted) is silently dropped by the .filter.
+  const [yourGelsPinnedIds, setYourGelsPinnedIds] = useState<string[]>(initialYourGelsPinnedIds);
+  const displayedYourGels = yourGelsPinnedIds.length > 0
+    ? yourGelsPinnedIds
+        .map((id) => gels.find((g) => g.id === id))
+        .filter((g): g is GelEntry => Boolean(g))
+    : gels.slice(0, YOUR_GELS_DISPLAY_LIMIT);
   // Live feed across every user — lifted into state (rather than used
   // straight from the prop) so a gel logged in this same session appears
   // immediately instead of needing a page refresh to re-fetch it.
@@ -313,6 +333,23 @@ export default function SetDetailClient({
     [setId]
   );
 
+  // ── "Your Gels" display picks — one endpoint replaces the whole
+  // selection+order in a single call, so add/remove/reorder in the
+  // "Manage Display" modal all funnel through here. ─────────────────────────
+  const handleSetYourGelsPins = useCallback(
+    async (orderedPortfolioCardIds: string[]) => {
+      setYourGelsPinnedIds(orderedPortfolioCardIds); // optimistic
+      const res = await fetch(`/api/sets/${setId}/your-gels-pins`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ orderedPortfolioCardIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setYourGelsPinnedIds(data.pinnedIds);
+    },
+    [setId]
+  );
+
   // ── Checklist filter/page change ───────────────────────────────────────────
   const handleFilterChange = useCallback(
     async (filters: {
@@ -392,11 +429,15 @@ export default function SetDetailClient({
             grid above it instead of its own section. */}
         <div className="pt-6">
           <YourGels
-            gels={gels}
+            gels={displayedYourGels}
+            allGels={gels}
+            pinnedIds={yourGelsPinnedIds}
+            maxDisplay={YOUR_GELS_DISPLAY_LIMIT}
             setId={setId}
             onAddGelClick={() => handleAddGelClick()}
             onEditGel={handleEditGelClick}
             onDeleteGel={handleDeleteGel}
+            onSetPinnedIds={handleSetYourGelsPins}
           />
         </div>
 

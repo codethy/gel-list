@@ -15,6 +15,37 @@ import { getUserGelDefaults } from "@/lib/data/userGelDefaults";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
+interface UserGelShape {
+  id:                string;
+  cardTemplateId:    string;
+  isInHand:          boolean;
+  isVerified:        boolean;
+  duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING";
+  acquisitionMethod: string | null;
+  serialNumber:      number | null;
+  hitYear:           number | null;
+  hitMonth:          number | null;
+  hitCity:           string | null;
+  hitCountry:        string | null;
+  cardFrontImageUrl: string | null;
+  cardBackImageUrl:  string | null;
+  seller:            string | null;
+  breakerName:       string | null;
+  influencerHandle:  string | null;
+  notes:             string | null;
+  productType:       string | null;
+  productTypeOther:  string | null;
+  cardTemplate: {
+    playerName:    string;
+    cardType:      string;
+    cardTier:      string;
+    parallelType:  string | null;
+    printRun:      number | null;
+    variationName: string | null;
+    team:          string | null;
+  };
+}
+
 export interface SetDetailData {
   setId:                string;
   setName:              string;
@@ -32,36 +63,16 @@ export interface SetDetailData {
   totalChaseCardsInSet: number | null;
   imageUrl:             string | null;
 
-  userGels: {
-    id:                string;
-    cardTemplateId:    string;
-    isInHand:          boolean;
-    isVerified:        boolean;
-    duplicateFlag:     "NONE" | "PENDING" | "VERIFIED_DUPLICATE" | "CLAIMING";
-    acquisitionMethod: string | null;
-    serialNumber:      number | null;
-    hitYear:           number | null;
-    hitMonth:          number | null;
-    hitCity:           string | null;
-    hitCountry:        string | null;
-    cardFrontImageUrl: string | null;
-    cardBackImageUrl:  string | null;
-    seller:            string | null;
-    breakerName:       string | null;
-    influencerHandle:  string | null;
-    notes:             string | null;
-    productType:       string | null;
-    productTypeOther:  string | null;
-    cardTemplate: {
-      playerName:    string;
-      cardType:      string;
-      cardTier:      string;
-      parallelType:  string | null;
-      printRun:      number | null;
-      variationName: string | null;
-      team:          string | null;
-    };
-  }[];
+  // The full set of the viewer's own gels for this set — used as the
+  // search pool in the "Manage Your Gels Display" modal. Unlimited.
+  userGels: UserGelShape[];
+  // The viewer's YourGelsPin order for this set, if they've customized
+  // which YOUR_GELS_DISPLAY_LIMIT of their gels "Your Gels" shows — just
+  // ids; the client already has the full gel objects in userGels, so it
+  // resolves ids -> gels itself rather than the server sending duplicate
+  // shapes. Empty until the user customizes, in which case the client
+  // falls back to the most recent YOUR_GELS_DISPLAY_LIMIT of userGels.
+  yourGelsPinnedIds: string[];
 
   // Most recently logged gels across every user for this set — shown in
   // the "Recent Pulls" feed above "Your Gels". Same shape as userGels plus
@@ -513,6 +524,12 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
 
 const RECENT_PULLS_LIMIT = 12;
 
+// How many gels "Your Gels" shows at once — see YourGelsPin in
+// prisma/schema.prisma and yourGelsPinnedIds below. Exported so the API
+// route that manages pins (app/api/sets/[id]/your-gels-pins) can
+// enforce the same cap.
+export const YOUR_GELS_DISPLAY_LIMIT = 6;
+
 export async function getSetDetail(
   setId:  string,
   userId: string | null
@@ -528,6 +545,7 @@ export async function getSetDetail(
     userLikes,
     ownPacksOpened,
     userGelDefaults,
+    yourGelsPins,
   ] = await Promise.all([
     // PortfolioCard relates to ChecklistCard directly. Always run this
     // query with the same shape (rather than branching to a plain `[]`
@@ -631,6 +649,15 @@ export async function getSetDetail(
     getUserPacksOpenedOwn(setId, userId),
 
     userId ? getUserGelDefaults(userId) : Promise.resolve({ lastGelCity: null, lastGelCountry: null }),
+
+    // This viewer's "Your Gels" display picks for this set, if any —
+    // same userId-can-never-be-"" trick as above. Empty until the user
+    // has customized (see YOUR_GELS_DISPLAY_LIMIT below).
+    prisma.yourGelsPin.findMany({
+      where:   { userId: userId ?? "", cardSetId: setId },
+      orderBy: { order: "asc" },
+      select:  { portfolioCardId: true },
+    }),
   ]);
 
   // ── Shape user gels ────────────────────────────────────────────────────
@@ -664,6 +691,8 @@ export async function getSetDetail(
       team:          pc.checklistCard.team     ?? null,
     },
   }));
+
+  const yourGelsPinnedIds = yourGelsPins.map((p) => p.portfolioCardId);
 
   // ── Shape "Recent Pulls" ───────────────────────────────────────────────
   const recentPulls = recentPullsRaw.map((pc) => ({
@@ -733,6 +762,7 @@ export async function getSetDetail(
     totalChaseCardsInSet: cached.totalChaseCardsInSet,
     imageUrl:             cached.imageUrl,
     userGels,
+    yourGelsPinnedIds,
     recentPulls,
     checklistRows,
     checklistMeta:        cached.checklistMeta,

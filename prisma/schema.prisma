@@ -108,6 +108,7 @@ model User {
   // ✅ NEW: needed for Chain of Custody — tracks cards transferred from this user
   sentTransfers       CardTransfer[]     @relation("TransferSender")
   favoriteGels        FavoriteGel[]
+  yourGelsPins        YourGelsPin[]
   productOpenings     ProductOpening[]
   filedDuplicateFiles DuplicateGelFile[] @relation("DuplicateFiledBy")
   notifications       Notification[]
@@ -196,6 +197,7 @@ model CardSet {
   products        SetProduct[]
   featuredOn      HomepageFeaturedSet[]
   productOpenings ProductOpening[]
+  yourGelsPins    YourGelsPin[]
 }
 
 // Admin-curated selection of sets shown on the home page for each category
@@ -506,6 +508,7 @@ model PortfolioCard {
   // ✅ NEW: chain of custody transfers originating from this portfolio entry
   transfers               CardTransfer[]
   favoritedBy             FavoriteGel[]
+  yourGelsPinnedBy        YourGelsPin[]
   duplicateFileAsFiled    DuplicateGelFile? @relation("DuplicateFiledGel")
   duplicateFileAsExisting DuplicateGelFile? @relation("DuplicateExistingGel")
 }
@@ -631,6 +634,31 @@ model FavoriteGel {
 
   @@unique([userId, portfolioCardId])
   @@index([userId, order])
+}
+
+// ─── YOUR GELS PIN ──────────────────────────────────────────────────────────
+// A user's hand-picked selection of which of THEIR OWN gels in one specific
+// set show in that set's "Your Gels" section, once they own more than
+// YOUR_GELS_DISPLAY_LIMIT gels there (see lib/data/sets.ts) — same
+// pick-and-reorder shape as FavoriteGel above, just scoped to one set
+// instead of being global across the whole profile. `order` drives the
+// display sequence. cardSetId is redundant with portfolioCard.cardSetId
+// (a gel never changes sets) but kept directly on this row so "every pin
+// for this user in this set" is a plain indexed lookup, no join needed.
+model YourGelsPin {
+  id              String   @id @default(cuid())
+  userId          String
+  cardSetId       String
+  portfolioCardId String
+  order           Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardSet       CardSet       @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  portfolioCard PortfolioCard @relation(fields: [portfolioCardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, portfolioCardId])
+  @@index([userId, cardSetId, order])
 }
 
 // ─── RIP SESSION ────────────────────────────────────────────────────────────
