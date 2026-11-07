@@ -812,7 +812,15 @@ model ChecklistCard {
   unverifiedHits UnverifiedHit[]
   duplicateFiles DuplicateGelFile[]
 
-  @@unique([cardSetId, cardNumber, parallel])
+  // variationName is part of the uniqueness key (not just cardNumber+
+  // parallel) so two genuinely different inserts can legitimately share
+  // the same parallel name under the same cardNumber — e.g. a "Gold
+  // Rainbow /50" base-card parallel and a "Gold Rainbow /50" autograph
+  // insert parallel for the same player are different physical cards,
+  // told apart by variationName both here and in the checklist UI (see
+  // playerSubtitle in ChecklistTable.tsx, which already shows
+  // variationName alongside parallel whenever both are set).
+  @@unique([cardSetId, cardNumber, parallel, variationName])
   @@index([cardSetId, sortOrder])
 }
 
