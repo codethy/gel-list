@@ -303,6 +303,19 @@ export default function SetDetailClient({
           },
           ...prev,
         ].slice(0, RECENT_PULLS_LIMIT));
+      } else {
+        // Editing a gel that's still visible in "Recent Pulls" (its own
+        // "someone else's gel" sighting, edited from there — see
+        // RecentPulls.tsx) should update in place rather than go stale
+        // until the next refresh. loggedByName/Handle aren't part of the
+        // edit response, so carry over whatever was already shown.
+        setRecentPulls((prev) =>
+          prev.map((g) =>
+            g.id === gel.id
+              ? { ...gel, loggedByName: g.loggedByName, loggedByHandle: g.loggedByHandle }
+              : g
+          )
+        );
       }
 
       // "Log a Gel"'s remembered City/Country defaults — only "my own gel"
@@ -325,12 +338,23 @@ export default function SetDetailClient({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Failed to delete gel");
       }
+      // A gel counts toward "Chases Pulled" if it's owned outright, or if
+      // it's a "someone else's gel" sighting the developer has already
+      // verified (see chasesPulledInSet's definition in lib/data/sets.ts)
+      // — look it up in whichever list the delete came from ("Your Gels"
+      // or "Recent Pulls", the only two places this can be triggered from)
+      // before removing it, so an unverified sighting's delete doesn't
+      // decrement a total it was never counted toward.
+      const target = gels.find((g) => g.id === gelId) ?? recentPulls.find((g) => g.id === gelId);
+      const wasCounted = target ? target.isInHand !== false || target.isVerified === true : false;
+
       setGels((prev) => prev.filter((g) => g.id !== gelId));
-      // Every gel in "Your Gels" is isInHand: true, so it always counted
-      // toward the set-wide total — removing it always decrements that too.
-      setChasesPulled((prev) => Math.max(0, prev - 1));
+      setRecentPulls((prev) => prev.filter((g) => g.id !== gelId));
+      if (wasCounted) {
+        setChasesPulled((prev) => Math.max(0, prev - 1));
+      }
     },
-    [setId]
+    [setId, gels, recentPulls]
   );
 
   // ── "Your Gels" display picks — one endpoint replaces the whole
@@ -419,7 +443,13 @@ export default function SetDetailClient({
         />
 
         {/* ── Recent Pulls (all users, above Your Gels) ──────────────── */}
-        <RecentPulls gels={recentPulls} onClaimGel={handleClaimGel} onCoOwnClaim={handleCoOwnClaim} />
+        <RecentPulls
+          gels={recentPulls}
+          onClaimGel={handleClaimGel}
+          onCoOwnClaim={handleCoOwnClaim}
+          onEditGel={handleEditGelClick}
+          onDeleteGel={handleDeleteGel}
+        />
 
         {/* ── 2. Your Gels ──────────────────────────────────────────── */}
         {/* pt-6 (padding, not margin) so this adds to — rather than

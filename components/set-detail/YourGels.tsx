@@ -240,6 +240,16 @@ export function GelCard({
                 gelId: gel.id,
                 gelUserId: gel.userId,
                 acquisitionMethod: gel.acquisitionMethod ?? null,
+                hitYear: gel.hitYear ?? null,
+                hitMonth: gel.hitMonth ?? null,
+                hitCity: gel.hitCity ?? null,
+                hitCountry: gel.hitCountry ?? null,
+                productType: gel.productType ?? null,
+                productTypeOther: gel.productTypeOther ?? null,
+                seller: gel.seller ?? null,
+                breakerName: gel.breakerName ?? null,
+                influencerHandle: gel.influencerHandle ?? null,
+                notes: gel.notes ?? null,
               })
             }
             aria-label={`View card image for ${gel.cardTemplate.playerName}`}

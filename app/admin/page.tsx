@@ -6,9 +6,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAdminUserId } from "@/lib/admin";
-import { getAdminChecklistSets, type AdminChecklistSet } from "@/lib/data/adminChecklist";
+import { getAdminChecklistSets } from "@/lib/data/adminChecklist";
 import { getUnverifiedGelCount } from "@/lib/data/adminGels";
 import { TAXONOMY } from "@/lib/taxonomy";
+import AdminChecklistSetBrowser from "@/components/admin/AdminChecklistSetBrowser";
 
 export default async function AdminHomePage() {
   const adminUserId = await getAdminUserId();
@@ -91,47 +92,12 @@ export default async function AdminHomePage() {
           Edit a set&apos;s checklist
         </h2>
 
-        {byCategory.length === 0 && (
+        {byCategory.length === 0 ? (
           <p className="text-sm text-slate-500">No sets yet.</p>
+        ) : (
+          <AdminChecklistSetBrowser byCategory={byCategory} />
         )}
-
-        <div className="flex flex-col gap-8">
-          {byCategory.map((cat) => (
-            <div key={cat.label}>
-              <h3 className="text-base font-bold text-white mb-3">{cat.label}</h3>
-              <div className="flex flex-col gap-5">
-                {cat.subcategories.map((sub) => (
-                  <div key={sub.label}>
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      {sub.label}
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      {sub.sets.map((s) => (
-                        <SetLink key={s.id} set={s} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
-  );
-}
-
-function SetLink({ set }: { set: AdminChecklistSet }) {
-  return (
-    <Link
-      href={`/admin/sets/${set.id}/checklist`}
-      className="flex items-center justify-between rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-3 hover:border-slate-500 transition-colors"
-    >
-      <div>
-        <p className="font-medium text-white">{set.name}</p>
-        <p className="text-xs text-slate-500">{set.year} &bull; {set.brand}</p>
-      </div>
-      <span className="text-sm text-slate-400 tabular-nums">{set.cardCount.toLocaleString()} cards</span>
-    </Link>
   );
 }

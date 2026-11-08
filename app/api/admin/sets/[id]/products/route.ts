@@ -84,6 +84,7 @@ export async function POST(
     label:            getProductLabel(String(created.productType), created.productTypeOther),
     packKinds:        [] as { id: string; packsCount: number; cardsPerPack: number }[],
     packsPerUnit:     0,
+    openedQuantity:   0,
   };
 
   revalidateSetDetailCache(setId);

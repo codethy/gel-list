@@ -91,6 +91,21 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
     }
   };
 
+  // Derived live from `products` state (not a separate server-fetched
+  // summary) so adding/removing a product or editing its pack kinds is
+  // immediately reflected — same math as getPacksOpenedGlobal in
+  // lib/data/productOpenings.ts, just computed client-side from the data
+  // already on hand.
+  const totalPacksOpened = products.reduce(
+    (sum, p) => sum + p.openedQuantity * (p.packsPerUnit > 0 ? p.packsPerUnit : 1),
+    0
+  );
+  const totalCardsPulled = products.reduce(
+    (sum, p) => sum + p.openedQuantity * p.packKinds.reduce((s, k) => s + k.packsCount * k.cardsPerPack, 0),
+    0
+  );
+  const packsOpenedLabel = products.length === 1 && products[0].packsPerUnit === 1 ? "Boxes Opened" : "Packs Opened";
+
   return (
     <div className="mt-10">
       <div className="flex items-center justify-between mb-4">
@@ -108,12 +123,26 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
         </button>
       </div>
 
+      {products.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 mb-4 max-w-md">
+          <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 px-4 py-3">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{packsOpenedLabel}</p>
+            <p className="text-xl font-bold text-white tabular-nums">{totalPacksOpened.toLocaleString()}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 px-4 py-3">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Cards Pulled</p>
+            <p className="text-xl font-bold text-white tabular-nums">{totalCardsPulled.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-xl border border-slate-700/50">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800/60 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               <th className="px-4 py-3">Product</th>
               <th className="px-4 py-3">Packs</th>
+              <th className="px-4 py-3">Opened</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -129,6 +158,13 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
                     </span>
                   ) : (
                     <span className="text-slate-600 italic">Not set</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-400 tabular-nums">
+                  {p.openedQuantity > 0 ? (
+                    `${p.openedQuantity.toLocaleString()} opened`
+                  ) : (
+                    <span className="text-slate-600 italic">None yet</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -152,7 +188,7 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
             ))}
             {products.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
                   No products added yet.
                 </td>
               </tr>

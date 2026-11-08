@@ -7,6 +7,19 @@ import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChecklistCardOption, ClaimPrefill, CoOwnPrefill } from "./AddGelModal";
+import { getProductLabel } from "@/lib/productTypes";
+
+// Display labels for a "Someone Else's Gel"'s acquisitionMethod — same
+// mapping as YourGels.tsx's ACQUISITION_LABELS, kept in sync by hand since
+// the two components don't share a module.
+const ACQUISITION_LABELS: Record<string, string> = {
+  BREAKER:      "Breaker",
+  EBAY:         "eBay",
+  FRIEND:       "Friend",
+  SOCIAL_MEDIA: "Social Media",
+  INFLUENCER:   "Influencer",
+  OTHER:        "Others",
+};
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +91,18 @@ export interface LoggedGel {
   // owner-exclusion gating (hidden for the viewer's own gel).
   userId: string;
   cardHistory: CardHistoryEvent[];
+  // Hit-context fields — shown in CardImageModal's info block (see
+  // CardImageTarget below), same fields/labels as GelCard in YourGels.tsx.
+  hitYear: number | null;
+  hitMonth: number | null;
+  hitCity: string | null;
+  hitCountry: string | null;
+  productType: string | null;
+  productTypeOther: string | null;
+  seller: string | null;
+  breakerName: string | null;
+  influencerHandle: string | null;
+  notes: string | null;
 }
 
 export interface ChecklistRow {
@@ -568,6 +593,16 @@ function LoggedGelsModal({
                                     gelId: gel.id,
                                     gelUserId: gel.userId,
                                     acquisitionMethod: gel.acquisitionMethod,
+                                    hitYear: gel.hitYear,
+                                    hitMonth: gel.hitMonth,
+                                    hitCity: gel.hitCity,
+                                    hitCountry: gel.hitCountry,
+                                    productType: gel.productType,
+                                    productTypeOther: gel.productTypeOther,
+                                    seller: gel.seller,
+                                    breakerName: gel.breakerName,
+                                    influencerHandle: gel.influencerHandle,
+                                    notes: gel.notes,
                                   });
                                 }}
                                 aria-label={`View card image for ${label}`}
@@ -696,6 +731,20 @@ export interface CardImageTarget {
   gelId?: string;
   gelUserId?: string;
   acquisitionMethod?: string | null;
+  // Hit-context info — shown as a block under the title/subtitle, above
+  // the Front/Back images, whenever the target came from a real logged
+  // gel (same Recent-Pulls/Logged-Gels-popup scope as the fields above).
+  // Same fields/labels as GelCard's own info block in YourGels.tsx.
+  hitYear?: number | null;
+  hitMonth?: number | null;
+  hitCity?: string | null;
+  hitCountry?: string | null;
+  productType?: string | null;
+  productTypeOther?: string | null;
+  seller?: string | null;
+  breakerName?: string | null;
+  influencerHandle?: string | null;
+  notes?: string | null;
 }
 
 export function CardImageModal({
@@ -717,6 +766,21 @@ export function CardImageModal({
   onCoOwnClaim?: (prefill: CoOwnPrefill) => void;
 }) {
   const hasImage = Boolean(target?.imageUrl || target?.cardBackImageUrl);
+
+  // ── Hit-context info block — same fields/labels as GelCard's own info
+  // block in YourGels.tsx, just read from `target` instead of a GelEntry.
+  const hitDate =
+    target?.hitYear && target?.hitMonth
+      ? `${new Date(target.hitYear, target.hitMonth - 1).toLocaleString("default", { month: "short" })} ${target.hitYear}`
+      : target?.hitYear
+      ? String(target.hitYear)
+      : null;
+  const hitLocationParts = [target?.hitCity, target?.hitCountry].filter(Boolean);
+  const hitLocation = hitLocationParts.length > 0 ? hitLocationParts.join(", ") : null;
+  const hitProductLabel = target?.productType ? getProductLabel(target.productType, target.productTypeOther ?? null) : null;
+  const isPulled = target?.acquisitionMethod === "PULLED";
+  const isOwnGelTarget = target?.isInHand !== false;
+
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -938,6 +1002,52 @@ export function CardImageModal({
                   </button>
                 </div>
               </div>
+
+              {(hitDate || hitLocation || hitProductLabel || target.acquisitionMethod || target.notes) && (
+                <div className="space-y-1 pb-3 border-b border-slate-700/50">
+                  {hitDate && (
+                    <p className="text-[11px] text-slate-500">
+                      <span className="font-bold text-white">Pulled:</span> {hitDate}
+                    </p>
+                  )}
+                  {hitLocation && (
+                    <p className="text-[11px] text-slate-500">
+                      <span className="font-bold text-white">Location:</span> {hitLocation}
+                    </p>
+                  )}
+                  {hitProductLabel && (
+                    <p className="text-[11px] text-slate-500">
+                      <span className="font-bold text-white">Product:</span> {hitProductLabel}
+                    </p>
+                  )}
+                  {/* "Someone Else's Gel" — labeled "Where:" (where the
+                      sighting was seen), using the readable
+                      ACQUISITION_LABELS mapping instead of the raw enum
+                      value — same as GelCard's own info block. */}
+                  {!isOwnGelTarget && target.acquisitionMethod && (
+                    <p className="text-[11px] text-slate-500">
+                      <span className="font-bold text-white">Where:</span>{" "}
+                      {ACQUISITION_LABELS[target.acquisitionMethod] ?? target.acquisitionMethod}
+                      {target.seller ? ` from ${target.seller}` : ""}
+                      {target.breakerName ? ` — ${target.breakerName}` : ""}
+                      {target.influencerHandle ? ` — ${target.influencerHandle}` : ""}
+                    </p>
+                  )}
+                  {/* Own gel — suppressed when PULLED, same as GelCard. */}
+                  {isOwnGelTarget && !isPulled && target.acquisitionMethod && (
+                    <p className="text-[11px] text-slate-500 capitalize">
+                      {target.acquisitionMethod.toLowerCase()}
+                      {target.seller ? ` from ${target.seller}` : ""}
+                      {target.breakerName ? ` — ${target.breakerName}` : ""}
+                    </p>
+                  )}
+                  {target.notes && (
+                    <p className="text-[11px] text-slate-500 italic">
+                      {target.notes}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {target.imageUrl && (

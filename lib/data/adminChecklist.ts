@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { CardCategory, CardTier, Prisma } from "@prisma/client";
 import { getProductLabel } from "@/lib/productTypes";
 import { findMatchingChecklistCardIds } from "@/lib/data/checklistSearch";
+import { getPacksOpenedGlobal } from "@/lib/data/productOpenings";
 
 export interface AdminChecklistSet {
   id:          string;
@@ -53,6 +54,12 @@ export interface AdminProductRow {
   // configured yet (treated as 1 pack per unit elsewhere, for the "X
   // Packs/Boxes Opened" calculation — see lib/data/productOpenings.ts).
   packsPerUnit:     number;
+  // Total units of this product every user has logged opening (see
+  // ProductOpening in prisma/schema.prisma) — 0 for a freshly-added
+  // product. AdminProductsClient.tsx derives its "Packs Opened"/"Cards
+  // Pulled" summary from this plus packKinds, so it stays correct live as
+  // products are added/removed, without a second round trip.
+  openedQuantity:   number;
 }
 
 export interface AdminChecklistMeta {
@@ -116,8 +123,19 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
   });
   if (!cardSet) return null;
 
-  const cardsPage = await getAdminChecklistCardsPage(setId, {});
-  const products = await getAdminProducts(setId);
+  const [cardsPage, products, packsOpenedGlobal] = await Promise.all([
+    getAdminChecklistCardsPage(setId, {}),
+    getAdminProducts(setId),
+    getPacksOpenedGlobal(setId),
+  ]);
+
+  const openedQuantityByProductId = new Map(
+    packsOpenedGlobal.products.map((p) => [p.setProductId, p.totalQuantity])
+  );
+  const productsWithOpenings = products.map((p) => ({
+    ...p,
+    openedQuantity: openedQuantityByProductId.get(p.id) ?? 0,
+  }));
 
   return {
     set: {
@@ -130,7 +148,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
       description: cardSet.description,
     },
     cardsPage,
-    products,
+    products: productsWithOpenings,
   };
 }
 
@@ -412,5 +430,8 @@ export async function getAdminProducts(setId: string): Promise<AdminProductRow[]
     label:            getProductLabel(String(p.productType), p.productTypeOther),
     packKinds:        p.packKinds,
     packsPerUnit:     p.packKinds.reduce((sum, k) => sum + k.packsCount, 0),
+    // Merged in by getAdminChecklistForSet (the only caller) — 0 here is
+    // just the shape's default until that merge happens.
+    openedQuantity:   0,
   }));
 }
