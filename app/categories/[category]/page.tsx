@@ -35,30 +35,45 @@ export default async function CategoryOverviewPage({ params }: PageProps) {
         </h1>
 
         <div className="flex flex-col">
-          {sections.map((section) => (
-            <section key={section.subCategoryId} className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-white tracking-tight">
-                  {section.label}
-                </h2>
-                <SeeAllLink
-                  href={`/categories/${categoryToSlug(parent.enumValue)}/${subCategoryToSlug(section.subCategoryId)}`}
-                />
-              </div>
-
-              {section.sets.length === 0 ? (
-                <p className="text-zinc-600 text-sm py-6">
-                  No sets yet — more will be added here in the future.
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {section.sets.map((set) => (
-                    <SetCard key={set.id} set={set} />
-                  ))}
+          {(() => {
+            // The first section with any sets at all is the one whose
+            // first row actually renders above the fold — an earlier
+            // section with zero sets renders a text message instead of a
+            // grid, so index alone can't tell us which section is really
+            // first.
+            const firstNonEmptySectionId = sections.find((s) => s.sets.length > 0)?.subCategoryId;
+            return sections.map((section) => (
+              <section key={section.subCategoryId} className="mb-10">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-white tracking-tight">
+                    {section.label}
+                  </h2>
+                  <SeeAllLink
+                    href={`/categories/${categoryToSlug(parent.enumValue)}/${subCategoryToSlug(section.subCategoryId)}`}
+                  />
                 </div>
-              )}
-            </section>
-          ))}
+
+                {section.sets.length === 0 ? (
+                  <p className="text-zinc-600 text-sm py-6">
+                    No sets yet — more will be added here in the future.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {/* 5 matches this grid's widest breakpoint
+                        (xl:grid-cols-5) — the most cards that could ever
+                        be in the first visible row. */}
+                    {section.sets.map((set, i) => (
+                      <SetCard
+                        key={set.id}
+                        set={set}
+                        priority={section.subCategoryId === firstNonEmptySectionId && i < 5}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ));
+          })()}
         </div>
       </div>
     </div>

@@ -38,7 +38,7 @@ export function SkeletonCard() {
   );
 }
 
-export function SetCard({ set }: { set: SetItem }) {
+export function SetCard({ set, priority = false }: { set: SetItem; priority?: boolean }) {
   return (
     <Link
       href={`/sets/${set.id}`}
@@ -52,6 +52,7 @@ export function SetCard({ set }: { set: SetItem }) {
             alt={set.name}
             fill
             sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 180px"
+            priority={priority}
             className="object-contain"
           />
         ) : (

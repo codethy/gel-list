@@ -22,10 +22,16 @@ function CategorySection({
   label,
   sets,
   seeAllHref,
+  // Only the very first section rendered on the page has its first row
+  // actually above the fold on load — later sections (Entertainment, TCG,
+  // ...) are scrolled past, so they never get `priority`, regardless of
+  // their own position within this function.
+  isFirstSection = false,
 }: {
   label:      string;
   sets:       SetItem[];
   seeAllHref?: string;
+  isFirstSection?: boolean;
 }) {
   if (sets.length === 0) return null;
   return (
@@ -37,8 +43,10 @@ function CategorySection({
         {seeAllHref && <SeeAllLink href={seeAllHref} />}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-        {sets.map((set) => (
-          <SetCard key={set.id} set={set} />
+        {sets.map((set, i) => (
+          // 5 matches this grid's widest breakpoint (xl:grid-cols-5) — the
+          // most cards that could ever be in the first visible row.
+          <SetCard key={set.id} set={set} priority={isFirstSection && i < 5} />
         ))}
       </div>
     </section>
@@ -275,14 +283,23 @@ function HomeContent() {
 
         {!loading && sets.length > 0 && (
           <div className="flex flex-col">
-            {visibleCategories.map((catId) => (
-              <CategorySection
-                key={catId}
-                label={CATEGORY_LABELS[catId] ?? catId}
-                sets={grouped[catId] ?? []}
-                seeAllHref={isCurated ? `/categories/${categoryToSlug(catId)}` : undefined}
-              />
-            ))}
+            {(() => {
+              // The first category with any sets at all is the one whose
+              // first row actually renders above the fold — a category
+              // ahead of it in the list but with zero sets renders
+              // nothing (see CategorySection's early return), so index
+              // alone can't tell us which section is really first.
+              const firstNonEmptyCatId = visibleCategories.find((catId) => (grouped[catId] ?? []).length > 0);
+              return visibleCategories.map((catId) => (
+                <CategorySection
+                  key={catId}
+                  label={CATEGORY_LABELS[catId] ?? catId}
+                  sets={grouped[catId] ?? []}
+                  seeAllHref={isCurated ? `/categories/${categoryToSlug(catId)}` : undefined}
+                  isFirstSection={catId === firstNonEmptyCatId}
+                />
+              ));
+            })()}
 
             {Object.entries(grouped)
               .filter(([catId]) => !(CATEGORY_ORDER as readonly string[]).includes(catId))

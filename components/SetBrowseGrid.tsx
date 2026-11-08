@@ -86,7 +86,11 @@ export default function SetBrowseGrid({ subCategoryId, emptyMessage }: SetBrowse
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-        {sets.map((set) => <SetCard key={set.id} set={set} />)}
+        {/* 5 matches this grid's widest breakpoint (xl:grid-cols-5) — the
+            most cards that could ever be in the first visible row. This is
+            the only grid on the page it's used on, so its own first row is
+            always the one above the fold. */}
+        {sets.map((set, i) => <SetCard key={set.id} set={set} priority={i < 5} />)}
       </div>
 
       {loadingMore && (

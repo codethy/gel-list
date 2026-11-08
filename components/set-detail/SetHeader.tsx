@@ -176,7 +176,7 @@ export default function SetHeader({
                   alt={`${setName} set image`}
                   fill
                   sizes="(max-width: 768px) 160px, 208px"
-                  preload
+                  priority
                   className="object-contain"
                 />
               ) : (
