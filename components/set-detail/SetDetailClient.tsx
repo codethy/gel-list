@@ -262,14 +262,12 @@ export default function SetDetailClient({
       // opened for an edit) is still the pre-close value here — handleSubmit
       // calls onSuccess before the modal closes and resets it.
       const isCreate = editingGel === null;
-      let isNewGel = false;
 
       setGels((prev) => {
         if (isSurfaced) {
           return prev.filter((g) => g.id !== gel.id);
         }
         const alreadyExists = prev.some((g) => g.id === gel.id);
-        isNewGel = !alreadyExists;
         return alreadyExists
           ? prev.map((g) => (g.id === gel.id ? gel : g))
           : [gel, ...prev];
@@ -281,11 +279,24 @@ export default function SetDetailClient({
             : r
         )
       );
-      // A brand-new own gel always counts toward the set-wide "Chases
-      // Pulled" total immediately; a "someone else's gel" report doesn't
-      // until the developer verifies it over on /admin/gels.
-      if (isNewGel && !isSurfaced) {
+      // An owned gel always counts toward the set-wide "Chases Pulled"
+      // total; a "someone else's gel" report only counts once verified
+      // (see chasesPulledInSet's definition in lib/data/sets.ts). A
+      // trusted user's (User.isVerifiedUser) gel is auto-verified at
+      // creation — so a freshly-created "someone else's gel" sighting can
+      // already be counted, not just an owned one — and editing a gel
+      // that flips from unverified to verified (e.g. the user became
+      // trusted in between) should bump the total too. Compared against
+      // its own pre-edit snapshot (editingGel) rather than just checking
+      // "was this a create", so both transitions are caught uniformly.
+      const wasAlreadyCounted = isCreate
+        ? false
+        : editingGel.isInHand !== false || editingGel.isVerified === true;
+      const isNowCounted = !isSurfaced || gel.isVerified === true;
+      if (isNowCounted && !wasAlreadyCounted) {
         setChasesPulled((prev) => prev + 1);
+      } else if (!isNowCounted && wasAlreadyCounted) {
+        setChasesPulled((prev) => Math.max(0, prev - 1));
       }
 
       // "Recent Pulls" is a live feed across every user, both own gels and
