@@ -11,8 +11,22 @@
 import { useState } from "react";
 import AdminAddProductModal, { type ProductSelection } from "./AdminAddProductModal";
 import AdminProductPacksModal from "./AdminProductPacksModal";
+import AdminAdjustOpenedModal from "./AdminAdjustOpenedModal";
 import { getProductLabel } from "@/lib/productTypes";
 import type { AdminProductRow } from "@/lib/data/adminChecklist";
+
+// The "CARDS" column — how many cards are in each pack. Most products
+// only ever have one pack kind (one cardsPerPack value); a product that
+// mixes pack sizes (e.g. base packs + bonus packs) shows the range
+// instead of picking one arbitrarily.
+function cardsPerPackLabel(product: AdminProductRow): string {
+  if (product.packKinds.length === 0) return "Not set";
+  const values = product.packKinds.map((k) => k.cardsPerPack);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return `${min.toLocaleString()} card${min === 1 ? "" : "s"}`;
+  return `${min}–${max} cards`;
+}
 
 interface AdminProductsClientProps {
   setId:           string;
@@ -24,6 +38,24 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
   const [modalOpen, setModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [packsProduct, setPacksProduct] = useState<AdminProductRow | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<{ product: AdminProductRow; mode: "add" | "remove" } | null>(null);
+
+  const handleAdjustOpened = async (amount: number): Promise<string | void> => {
+    if (!adjustTarget) return;
+    const delta = adjustTarget.mode === "add" ? amount : -amount;
+    const res = await fetch(`/api/admin/sets/${setId}/products/${adjustTarget.product.id}/opened`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ delta }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return data.error ?? "Failed to update";
+
+    setProducts((prev) =>
+      prev.map((p) => (p.id === adjustTarget.product.id ? { ...p, openedQuantity: data.openedQuantity } : p))
+    );
+    setAdjustTarget(null);
+  };
 
   const handlePacksSubmit = async (
     packKinds: { packsCount: number; cardsPerPack: number }[]
@@ -142,6 +174,7 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
             <tr className="bg-slate-800/60 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               <th className="px-4 py-3">Product</th>
               <th className="px-4 py-3">Packs</th>
+              <th className="px-4 py-3">Cards</th>
               <th className="px-4 py-3">Opened</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -160,12 +193,40 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
                     <span className="text-slate-600 italic">Not set</span>
                   )}
                 </td>
+                <td className="px-4 py-3 text-slate-400">
+                  {cardsPerPackLabel(p)}
+                </td>
                 <td className="px-4 py-3 text-slate-400 tabular-nums">
-                  {p.openedQuantity > 0 ? (
-                    `${p.openedQuantity.toLocaleString()} opened`
-                  ) : (
-                    <span className="text-slate-600 italic">None yet</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span>
+                      {p.openedQuantity > 0 ? (
+                        `${p.openedQuantity.toLocaleString()} opened`
+                      ) : (
+                        <span className="text-slate-600 italic">None yet</span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => setAdjustTarget({ product: p, mode: "add" })}
+                      aria-label={`Add opened ${p.label}`}
+                      title="Add"
+                      className="w-5 h-5 flex items-center justify-center rounded-md border border-slate-700/50 text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setAdjustTarget({ product: p, mode: "remove" })}
+                      disabled={p.openedQuantity === 0}
+                      aria-label={`Remove opened ${p.label}`}
+                      title="Minus"
+                      className="w-5 h-5 flex items-center justify-center rounded-md border border-slate-700/50 text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14" />
+                      </svg>
+                    </button>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end items-center gap-2">
@@ -188,7 +249,7 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
             ))}
             {products.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                   No products added yet.
                 </td>
               </tr>
@@ -209,6 +270,14 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
         onClose={() => setPacksProduct(null)}
         onSubmit={handlePacksSubmit}
         product={packsProduct}
+      />
+
+      <AdminAdjustOpenedModal
+        isOpen={adjustTarget !== null}
+        onClose={() => setAdjustTarget(null)}
+        onSubmit={handleAdjustOpened}
+        product={adjustTarget?.product ?? null}
+        mode={adjustTarget?.mode ?? "add"}
       />
     </div>
   );

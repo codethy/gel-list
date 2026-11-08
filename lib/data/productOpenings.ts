@@ -62,10 +62,11 @@ export async function getPacksOpenedGlobal(setId: string): Promise<GlobalPacksOp
     where:   { cardSetId: setId },
     orderBy: { createdAt: "asc" },
     select: {
-      id:               true,
-      productType:      true,
-      productTypeOther: true,
-      packKinds:        { select: { packsCount: true, cardsPerPack: true } },
+      id:                    true,
+      productType:           true,
+      productTypeOther:      true,
+      adminOpenedAdjustment: true,
+      packKinds:             { select: { packsCount: true, cardsPerPack: true } },
     },
   });
 
@@ -100,12 +101,18 @@ export async function getPacksOpenedGlobal(setId: string): Promise<GlobalPacksOp
       : 1;
     const label = getProductLabel(String(p.productType), p.productTypeOther);
 
+    // The real sum of every user's own logged quantity, plus the admin's
+    // manual correction (see adminOpenedAdjustment in prisma/schema.prisma)
+    // — clamped at 0 so a large negative correction can't show a negative
+    // "opened" count.
+    const totalQuantity = Math.max(0, (totalByProduct.get(p.id) ?? 0) + p.adminOpenedAdjustment);
+
     return {
-      setProductId:  p.id,
+      setProductId: p.id,
       label,
-      pluralLabel:   pluralizeProductLabel(label),
+      pluralLabel:  pluralizeProductLabel(label),
       packsPerUnit,
-      totalQuantity: totalByProduct.get(p.id) ?? 0,
+      totalQuantity,
     };
   });
 

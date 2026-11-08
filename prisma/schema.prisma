@@ -383,6 +383,14 @@ model SetProduct {
   productTypeOther String? // only meaningful when productType is OTHER
   createdAt        DateTime    @default(now())
 
+  // Manual add/subtract correction to this product's "opened" total, on
+  // top of the sum of every user's own logged ProductOpening.quantity —
+  // for when the admin knows real-world opens happened (or should be
+  // removed) that aren't otherwise reflected. Applied in
+  // getPacksOpenedGlobal (lib/data/productOpenings.ts), which clamps the
+  // resulting total at 0 rather than enforcing a floor here.
+  adminOpenedAdjustment Int @default(0)
+
   cardSet   CardSet           @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
   packKinds ProductPackKind[]
   openings  ProductOpening[]
