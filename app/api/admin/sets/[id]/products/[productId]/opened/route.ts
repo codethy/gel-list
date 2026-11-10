@@ -6,8 +6,12 @@
 // getPacksOpenedGlobal in lib/data/productOpenings.ts, which is what
 // actually applies this adjustment everywhere the total is shown (this
 // admin page's Products table, and the public "X Packs Opened" box).
-// Body: { delta: number } — a non-zero integer; positive to add,
-// negative to remove.
+// Body: { delta: number, breakerId?: string | null } — delta is a non-zero
+// integer; positive to add, negative to remove. breakerId (only meaningful
+// when delta > 0) additionally attributes this quantity to a BreakerProfile
+// — creates one new BreakerProductOpening row (additive history, not an
+// upsert), feeding that breaker's own admin breakdown popup. Silently
+// ignored if the id doesn't resolve to a real profile.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminUserId } from "@/lib/admin";
@@ -38,12 +42,22 @@ export async function PATCH(
   if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
     return NextResponse.json({ error: "delta must be a non-zero whole number" }, { status: 400 });
   }
+  const breakerId = typeof body?.breakerId === "string" && body.breakerId ? body.breakerId : null;
 
   const updated = await prisma.setProduct.update({
     where: { id: productId },
     data:  { adminOpenedAdjustment: { increment: delta } },
     select: { adminOpenedAdjustment: true },
   });
+
+  if (delta > 0 && breakerId) {
+    const breaker = await prisma.breakerProfile.findUnique({ where: { id: breakerId }, select: { id: true } });
+    if (breaker) {
+      await prisma.breakerProductOpening.create({
+        data: { breakerProfileId: breakerId, setProductId: productId, quantity: delta },
+      });
+    }
+  }
 
   const sum = await prisma.productOpening.aggregate({
     where: { setProductId: productId },

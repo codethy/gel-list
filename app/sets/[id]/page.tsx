@@ -69,9 +69,14 @@ export default async function SetDetailPage({ params }: PageProps) {
       availableCategories={data.availableCategories}
       availableTiers={data.availableTiers}
       products={data.products}
+      breakers={data.breakers}
       initialPacksOpened={data.packsOpened}
       userLastGelCity={data.userLastGelCity}
       userLastGelCountry={data.userLastGelCountry}
+      userLastSightingMethod={data.userLastSightingMethod}
+      userLastSightingMonth={data.userLastSightingMonth}
+      userLastSightingYear={data.userLastSightingYear}
+      userLastSightingCountry={data.userLastSightingCountry}
     />
   );
 }

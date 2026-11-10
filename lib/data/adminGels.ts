@@ -34,6 +34,7 @@ export interface AdminGelEntry {
   cardBackImageUrl:    string | null;
   seller:              string | null;
   breakerName:         string | null;
+  breakerProfileId:    string | null;
   influencerHandle:    string | null;
   notes:               string | null;
   createdAt:           string;
@@ -69,6 +70,7 @@ const adminGelSelect = {
   cardBackImageUrl:  true,
   seller:            true,
   breakerName:       true,
+  breakerProfileId:  true,
   influencerHandle:  true,
   notes:             true,
   createdAt:         true,
@@ -117,6 +119,7 @@ function shapeAdminGel(pc: RawAdminGel): AdminGelEntry {
     cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
     seller:              pc.seller            ?? null,
     breakerName:         pc.breakerName        ?? null,
+    breakerProfileId:    pc.breakerProfileId   ?? null,
     influencerHandle:    pc.influencerHandle   ?? null,
     notes:               pc.notes             ?? null,
     createdAt:           pc.createdAt.toISOString(),

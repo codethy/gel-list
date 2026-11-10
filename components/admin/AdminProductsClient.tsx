@@ -31,22 +31,23 @@ function cardsPerPackLabel(product: AdminProductRow): string {
 interface AdminProductsClientProps {
   setId:           string;
   initialProducts: AdminProductRow[];
+  initialBreakerProfiles: { id: string; name: string }[];
 }
 
-export default function AdminProductsClient({ setId, initialProducts }: AdminProductsClientProps) {
+export default function AdminProductsClient({ setId, initialProducts, initialBreakerProfiles }: AdminProductsClientProps) {
   const [products, setProducts] = useState<AdminProductRow[]>(initialProducts);
   const [modalOpen, setModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [packsProduct, setPacksProduct] = useState<AdminProductRow | null>(null);
   const [adjustTarget, setAdjustTarget] = useState<{ product: AdminProductRow; mode: "add" | "remove" } | null>(null);
 
-  const handleAdjustOpened = async (amount: number): Promise<string | void> => {
+  const handleAdjustOpened = async (amount: number, breakerProfileId: string | null): Promise<string | void> => {
     if (!adjustTarget) return;
     const delta = adjustTarget.mode === "add" ? amount : -amount;
     const res = await fetch(`/api/admin/sets/${setId}/products/${adjustTarget.product.id}/opened`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ delta }),
+      body:    JSON.stringify({ delta, breakerId: breakerProfileId }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return data.error ?? "Failed to update";
@@ -278,6 +279,7 @@ export default function AdminProductsClient({ setId, initialProducts }: AdminPro
         onSubmit={handleAdjustOpened}
         product={adjustTarget?.product ?? null}
         mode={adjustTarget?.mode ?? "add"}
+        breakers={initialBreakerProfiles}
       />
     </div>
   );

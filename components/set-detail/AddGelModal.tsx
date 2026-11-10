@@ -8,6 +8,7 @@ import type { GelEntry } from "./YourGels";
 import { playerSubtitle } from "./ChecklistTable";
 import { useUploadThing } from "@/lib/uploadthing";
 import { COUNTRIES } from "@/lib/countries";
+import BreakerSearch from "@/components/BreakerSearch";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,9 @@ interface AddGelModalProps {
   // range (through the current year).
   setYear: number;
   products: ProductOption[];
+  // Breaker profiles with >=1 attributed opening in this set — the
+  // searchable "Breaker's Name" dropdown options (see BreakerSearch).
+  breakers?: { id: string; name: string }[];
   // The full option — not just an id — since the modal no longer holds
   // every checklist card in memory to look one up by id (see
   // ChecklistCardSearch). Set when opened from a specific checklist row's
@@ -108,6 +112,14 @@ interface AddGelModalProps {
   // never "Someone Else's Gel".
   defaultHitCity?:    string | null;
   defaultHitCountry?: string | null;
+  // This user's own most recently submitted source/month/year/country from
+  // "Someone Else's Gel" — see lib/data/userGelDefaults.ts. Pre-fills a
+  // fresh "Someone Else's Gel" log, never "My Own Gel". Kept fully separate
+  // from defaultHitCity/Country above.
+  defaultSightingMethod?:  string | null;
+  defaultSightingMonth?:   number | null;
+  defaultSightingYear?:    number | null;
+  defaultSightingCountry?: string | null;
 }
 
 // ─── LOGGED FOR ───────────────────────────────────────────────────────────────
@@ -141,6 +153,10 @@ interface FormState {
   // Only meaningful when acquisitionMethod is "BREAKER" — shared across
   // every card in the Multiple Gels flow, same as acquisitionMethod itself.
   breakerName: string;
+  // Set only when `breakerName` above was picked from the searchable
+  // dropdown of an existing BreakerProfile (see BreakerSearch) — "" means
+  // no profile link, even if the typed text happens to match one's name.
+  breakerProfileId: string;
   // Only meaningful when acquisitionMethod is "INFLUENCER" — same shared-
   // across-the-batch scope as breakerName.
   influencerHandle: string;
@@ -160,6 +176,7 @@ const EMPTY_FORM: FormState = {
   cardBackImageUrl:  "",
   seller:            "",
   breakerName:       "",
+  breakerProfileId:  "",
   influencerHandle:  "",
   notes:             "",
 };
@@ -783,6 +800,7 @@ export default function AddGelModal({
   category,
   setYear,
   products,
+  breakers = [],
   preselectedCardOption,
   editingGel,
   editSubmitUrl,
@@ -790,6 +808,10 @@ export default function AddGelModal({
   coOwnPrefill,
   defaultHitCity,
   defaultHitCountry,
+  defaultSightingMethod,
+  defaultSightingMonth,
+  defaultSightingYear,
+  defaultSightingCountry,
 }: AddGelModalProps) {
   const [form, setForm]           = useState<FormState>(EMPTY_FORM);
   const [selectedCardOption, setSelectedCardOption] = useState<ChecklistCardOption | null>(null);
@@ -887,6 +909,7 @@ export default function AddGelModal({
         cardBackImageUrl:  editingGel.cardBackImageUrl   ?? "",
         seller:            editingGel.seller             ?? "",
         breakerName:       editingGel.breakerName         ?? "",
+        breakerProfileId:  editingGel.breakerProfileId    ?? "",
         influencerHandle:  editingGel.influencerHandle    ?? "",
         notes:             editingGel.notes               ?? "",
       });
@@ -1022,6 +1045,7 @@ export default function AddGelModal({
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+      breakerProfileId:  form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
       influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
       notes:             form.notes  || null,
       ...extra,
@@ -1187,6 +1211,7 @@ export default function AddGelModal({
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+      breakerProfileId:  form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
       influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
       notes:             form.notes  || null,
     };
@@ -1295,6 +1320,7 @@ export default function AddGelModal({
           hitCountry: form.hitCountry || null,
           seller:     form.seller || null,
           breakerName: form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
+          breakerProfileId: form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
           influencerHandle: form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
           cards: multiCards.map((c) => ({
             cardTemplateId:    c.checklistCardId,
@@ -1401,13 +1427,18 @@ export default function AddGelModal({
                     onClick={() => {
                       setLoggedFor("SELF");
                       // Only "My Own Gel" pre-fills City/Country from this
-                      // user's own remembered last submission.
+                      // user's own remembered last submission. hitMonth/
+                      // hitYear are explicitly cleared too, in case
+                      // "Someone Else's Gel" was clicked first (prefilling
+                      // them from its own separate memory) before Back.
                       setForm((prev) => ({
                         ...prev,
                         acquisitionMethod: "",
                         seller: "",
                         hitCity:    defaultHitCity    ?? "",
                         hitCountry: defaultHitCountry ?? "",
+                        hitMonth:   "",
+                        hitYear:    "",
                       }));
                       setStep("mode");
                     }}
@@ -1429,15 +1460,18 @@ export default function AddGelModal({
                     type="button"
                     onClick={() => {
                       setLoggedFor("OTHER");
-                      // Someone else's gel never gets the SELF-only City/
-                      // Country defaults — clear them in case "My Own Gel"
-                      // was clicked first (prefilling them) before Back.
+                      // Someone else's gel never gets the SELF-only City
+                      // default (hitCity stays blank even here) — but DOES
+                      // get its own separate remembered source/month/year/
+                      // country from this user's own most recent sighting.
                       setForm((prev) => ({
                         ...prev,
-                        acquisitionMethod: "",
-                        seller: "",
-                        hitCity: "",
-                        hitCountry: "",
+                        acquisitionMethod: defaultSightingMethod  ?? "",
+                        seller:            "",
+                        hitCity:           "",
+                        hitMonth:          defaultSightingMonth   != null ? String(defaultSightingMonth) : "",
+                        hitYear:           defaultSightingYear    != null ? String(defaultSightingYear)  : "",
+                        hitCountry:        defaultSightingCountry ?? "",
                       }));
                       setStep("mode");
                     }}
@@ -1666,10 +1700,13 @@ export default function AddGelModal({
                         className="overflow-hidden"
                       >
                         <Label>Breaker&apos;s Name *</Label>
-                        <Input
+                        <BreakerSearch
                           value={form.breakerName}
-                          onChange={setField("breakerName")}
-                          placeholder="e.g. @username, breaker's name..."
+                          breakerProfileId={form.breakerProfileId}
+                          onChange={(name, id) =>
+                            setForm((prev) => ({ ...prev, breakerName: name, breakerProfileId: id }))
+                          }
+                          options={breakers}
                         />
                       </motion.div>
                     )}
@@ -1862,10 +1899,13 @@ export default function AddGelModal({
                         className="overflow-hidden"
                       >
                         <Label>Breaker&apos;s Name *</Label>
-                        <Input
+                        <BreakerSearch
                           value={form.breakerName}
-                          onChange={setField("breakerName")}
-                          placeholder="e.g. @username, breaker's name..."
+                          breakerProfileId={form.breakerProfileId}
+                          onChange={(name, id) =>
+                            setForm((prev) => ({ ...prev, breakerName: name, breakerProfileId: id }))
+                          }
+                          options={breakers}
                         />
                       </motion.div>
                     )}

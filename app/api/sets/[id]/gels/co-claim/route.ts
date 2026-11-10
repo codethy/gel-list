@@ -130,6 +130,7 @@ export async function POST(
     cardBackImageUrl:  typeof cardBackImageUrl === "string" ? cardBackImageUrl : null,
     seller:            typeof seller === "string" ? seller : null,
     breakerName:       typeof breakerName === "string" ? breakerName : null,
+    breakerProfileId:  null, // co-claim is always PULLED/BOUGHT, never BREAKER
     influencerHandle:  typeof influencerHandle === "string" ? influencerHandle : null,
     notes:             typeof notes === "string" ? notes : null,
   });

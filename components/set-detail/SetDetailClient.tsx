@@ -63,6 +63,10 @@ interface SetDetailClientProps {
   // This set's admin-curated product catalog — powers "Which Product"
   products: ProductOption[];
 
+  // Breaker profiles with >=1 attributed opening in this set — powers the
+  // searchable "Breaker's Name" dropdown in Log a Gel.
+  breakers: { id: string; name: string }[];
+
   // "X Packs/Boxes Opened" box + its two linked popups
   initialPacksOpened: SetPacksOpenedSummary;
 
@@ -70,6 +74,13 @@ interface SetDetailClientProps {
   // lib/data/userGelDefaults.ts.
   userLastGelCity:    string | null;
   userLastGelCountry: string | null;
+
+  // Pre-fills "Log a Gel"'s "Someone Else's Gel" fields (source/month/
+  // year/country) — separate memory bucket, see lib/data/userGelDefaults.ts.
+  userLastSightingMethod:  string | null;
+  userLastSightingMonth:   number | null;
+  userLastSightingYear:    number | null;
+  userLastSightingCountry: string | null;
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -95,9 +106,14 @@ export default function SetDetailClient({
   availableCategories,   // ✅ NEW
   availableTiers,
   products,
+  breakers,
   initialPacksOpened,
   userLastGelCity: initialUserLastGelCity,
   userLastGelCountry: initialUserLastGelCountry,
+  userLastSightingMethod: initialUserLastSightingMethod,
+  userLastSightingMonth: initialUserLastSightingMonth,
+  userLastSightingYear: initialUserLastSightingYear,
+  userLastSightingCountry: initialUserLastSightingCountry,
 }: SetDetailClientProps) {
   const { data: session, status: sessionStatus } = useSession();
 
@@ -125,6 +141,13 @@ export default function SetDetailClient({
   // a refresh re-fetches it from the user's stored lastGelCity/lastGelCountry.
   const [lastGelCity, setLastGelCity]       = useState(initialUserLastGelCity);
   const [lastGelCountry, setLastGelCountry] = useState(initialUserLastGelCountry);
+  // Same lifted-into-state treatment for "Someone Else's Gel"'s own
+  // remembered defaults — kept in a fully separate bucket from the two
+  // SELF-only ones above.
+  const [lastSightingMethod, setLastSightingMethod]   = useState(initialUserLastSightingMethod);
+  const [lastSightingMonth, setLastSightingMonth]     = useState(initialUserLastSightingMonth);
+  const [lastSightingYear, setLastSightingYear]       = useState(initialUserLastSightingYear);
+  const [lastSightingCountry, setLastSightingCountry] = useState(initialUserLastSightingCountry);
   // Set-wide "Chases Pulled" total (see lib/data/sets.ts) — distinct from
   // gels.length, which is just this viewer's own collection. Bumped
   // optimistically only when the viewer logs their OWN gel for the first
@@ -336,6 +359,11 @@ export default function SetDetailClient({
       if (!isSurfaced) {
         if (gel.hitCity)    setLastGelCity(gel.hitCity);
         if (gel.hitCountry) setLastGelCountry(gel.hitCountry);
+      } else {
+        if (gel.acquisitionMethod) setLastSightingMethod(gel.acquisitionMethod);
+        if (gel.hitMonth != null)  setLastSightingMonth(gel.hitMonth);
+        if (gel.hitYear != null)   setLastSightingYear(gel.hitYear);
+        if (gel.hitCountry)        setLastSightingCountry(gel.hitCountry);
       }
     },
     [editingGel, session]
@@ -511,12 +539,17 @@ export default function SetDetailClient({
         category={category}
         setYear={year}
         products={products}
+        breakers={breakers}
         preselectedCardOption={preselectedCardOption}
         editingGel={editingGel}
         claimPrefill={claimPrefill}
         coOwnPrefill={coOwnPrefill}
         defaultHitCity={lastGelCity}
         defaultHitCountry={lastGelCountry}
+        defaultSightingMethod={lastSightingMethod}
+        defaultSightingMonth={lastSightingMonth}
+        defaultSightingYear={lastSightingYear}
+        defaultSightingCountry={lastSightingCountry}
       />
 
       {/* ── 5. Packs Opened: breakdown + log-your-openings modals ──────── */}

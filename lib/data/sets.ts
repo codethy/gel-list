@@ -11,7 +11,7 @@ import {
   type GlobalPacksOpenedSummary,
   type SetPacksOpenedSummary,
 } from "@/lib/data/productOpenings";
-import { getUserGelDefaults } from "@/lib/data/userGelDefaults";
+import { getUserGelDefaults, getUserSightingDefaults } from "@/lib/data/userGelDefaults";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,7 @@ interface UserGelShape {
   cardBackImageUrl:  string | null;
   seller:            string | null;
   breakerName:       string | null;
+  breakerProfileId:  string | null;
   influencerHandle:  string | null;
   notes:             string | null;
   productType:       string | null;
@@ -165,6 +166,11 @@ export interface SetDetailData {
     label:            string;
   }[];
 
+  // Breaker profiles with at least one admin-attributed opening in this
+  // set — the searchable "Breaker's Name" dropdown options in Log a Gel.
+  // See lib/data/breakerProfiles.ts.
+  breakers: { id: string; name: string }[];
+
   // "X Packs/Boxes Opened" box + its breakdown/log modals — see
   // lib/data/productOpenings.ts.
   packsOpened: SetPacksOpenedSummary;
@@ -174,6 +180,15 @@ export interface SetDetailData {
   // lib/data/userGelDefaults.ts. Both null when signed out or never set.
   userLastGelCity:    string | null;
   userLastGelCountry: string | null;
+
+  // Pre-fills the "Log a Gel" form's "Someone Else's Gel" fields (source/
+  // month/year/country) from this user's own most recent sighting
+  // submission — see lib/data/userGelDefaults.ts. Kept fully separate from
+  // userLastGelCity/Country above. All null when signed out or never set.
+  userLastSightingMethod:  string | null;
+  userLastSightingMonth:   number | null;
+  userLastSightingYear:    number | null;
+  userLastSightingCountry: string | null;
 }
 
 // ─── CACHING ──────────────────────────────────────────────────────────────────
@@ -225,6 +240,7 @@ interface CachedSetDetail {
   availableCategories:  string[];
   availableTiers:       string[];
   products:             SetDetailData["products"];
+  breakers:             SetDetailData["breakers"];
   packsOpenedGlobal:    GlobalPacksOpenedSummary;
 }
 
@@ -339,6 +355,7 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
         unlimitedPrintRunCount,
         chasesPulledInSet,
         setProducts,
+        breakers,
       ] = await Promise.all([
         // First page — just this page's representative (grouped) cards,
         // fetched by id (see 1b above for how they were chosen) rather
@@ -418,6 +435,16 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
           where:   { cardSetId: setId },
           orderBy: { createdAt: "asc" },
           select:  { id: true, productType: true, productTypeOther: true },
+        }),
+
+        // Breaker profiles with >=1 attributed opening in THIS set — the
+        // set-scoped "Breaker's Name" dropdown options in Log a Gel. See
+        // lib/data/breakerProfiles.ts's getBreakerOptionsForSet (same
+        // query, kept here inline to share this Promise.all batch).
+        prisma.breakerProfile.findMany({
+          where:   { productOpenings: { some: { setProduct: { cardSetId: setId } } } },
+          select:  { id: true, name: true },
+          orderBy: { name: "asc" },
         }),
       ]);
 
@@ -510,6 +537,7 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
           productTypeOther: p.productTypeOther,
           label:            getProductLabel(String(p.productType), p.productTypeOther),
         })),
+        breakers,
         packsOpenedGlobal,
       };
     },
@@ -545,6 +573,7 @@ export async function getSetDetail(
     userLikes,
     ownPacksOpened,
     userGelDefaults,
+    userSightingDefaults,
     yourGelsPins,
   ] = await Promise.all([
     // PortfolioCard relates to ChecklistCard directly. Always run this
@@ -575,6 +604,7 @@ export async function getSetDetail(
         cardBackImageUrl:  true,
         seller:            true,
         breakerName:       true,
+        breakerProfileId:  true,
         influencerHandle:  true,
         notes:             true,
         productType:       true,
@@ -617,6 +647,7 @@ export async function getSetDetail(
         cardBackImageUrl:  true,
         seller:            true,
         breakerName:       true,
+        breakerProfileId:  true,
         influencerHandle:  true,
         notes:             true,
         productType:       true,
@@ -650,6 +681,10 @@ export async function getSetDetail(
 
     userId ? getUserGelDefaults(userId) : Promise.resolve({ lastGelCity: null, lastGelCountry: null }),
 
+    userId
+      ? getUserSightingDefaults(userId)
+      : Promise.resolve({ lastSightingMethod: null, lastSightingMonth: null, lastSightingYear: null, lastSightingCountry: null }),
+
     // This viewer's "Your Gels" display picks for this set, if any —
     // same userId-can-never-be-"" trick as above. Empty until the user
     // has customized (see YOUR_GELS_DISPLAY_LIMIT below).
@@ -677,6 +712,7 @@ export async function getSetDetail(
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
     breakerName:       pc.breakerName        ?? null,
+    breakerProfileId:  pc.breakerProfileId   ?? null,
     influencerHandle:  pc.influencerHandle   ?? null,
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
@@ -711,6 +747,7 @@ export async function getSetDetail(
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
     breakerName:       pc.breakerName        ?? null,
+    breakerProfileId:  pc.breakerProfileId   ?? null,
     influencerHandle:  pc.influencerHandle   ?? null,
     notes:             pc.notes             ?? null,
     productType:       pc.productType != null ? String(pc.productType) : null,
@@ -770,8 +807,13 @@ export async function getSetDetail(
     availableCategories:  cached.availableCategories,
     availableTiers:       cached.availableTiers,
     products:             cached.products,
+    breakers:             cached.breakers,
     packsOpened,
     userLastGelCity:    userGelDefaults.lastGelCity,
     userLastGelCountry: userGelDefaults.lastGelCountry,
+    userLastSightingMethod:  userSightingDefaults.lastSightingMethod,
+    userLastSightingMonth:   userSightingDefaults.lastSightingMonth,
+    userLastSightingYear:    userSightingDefaults.lastSightingYear,
+    userLastSightingCountry: userSightingDefaults.lastSightingCountry,
   };
 }

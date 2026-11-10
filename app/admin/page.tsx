@@ -82,10 +82,18 @@ export default async function AdminHomePage() {
 
         <Link
           href="/admin/users"
-          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
         >
           <p className="font-semibold text-white">User Count</p>
           <p className="text-sm text-slate-400">A live counter of how many accounts have been created.</p>
+        </Link>
+
+        <Link
+          href="/admin/breaker-profiles"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+        >
+          <p className="font-semibold text-white">Breaker Profiles</p>
+          <p className="text-sm text-slate-400">Manage breaker profiles and see how many boxes/gels each has attributed.</p>
         </Link>
 
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">

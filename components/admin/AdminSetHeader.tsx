@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import AdminEditSetModal, { type AdminSetDetails } from "./AdminEditSetModal";
 
 export default function AdminSetHeader({
@@ -44,13 +45,21 @@ export default function AdminSetHeader({
           Add, edit, or delete checklist rows to fix import mistakes.
         </p>
       </div>
-      <button
-        type="button"
-        onClick={() => setModalOpen(true)}
-        className="shrink-0 px-4 py-2 rounded-xl border border-slate-700/50 text-sm text-slate-300 hover:bg-slate-800/60 transition-colors"
-      >
-        Edit Set Details
-      </button>
+      <div className="flex shrink-0 gap-2">
+        <Link
+          href="/admin/breaker-profiles"
+          className="px-4 py-2 rounded-xl border border-slate-700/50 text-sm text-slate-300 hover:bg-slate-800/60 transition-colors"
+        >
+          Breaker Profiles
+        </Link>
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="px-4 py-2 rounded-xl border border-slate-700/50 text-sm text-slate-300 hover:bg-slate-800/60 transition-colors"
+        >
+          Edit Set Details
+        </button>
+      </div>
 
       <AdminEditSetModal
         isOpen={modalOpen}

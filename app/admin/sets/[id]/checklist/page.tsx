@@ -15,6 +15,7 @@ import {
 import AdminSetHeader from "@/components/admin/AdminSetHeader";
 import AdminChecklistClient from "@/components/admin/AdminChecklistClient";
 import AdminProductsClient from "@/components/admin/AdminProductsClient";
+import { listBreakerProfiles } from "@/lib/data/breakerProfiles";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -25,7 +26,10 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
   if (!adminUserId) notFound();
 
   const { id } = await params;
-  const detail = await getAdminChecklistForSet(id);
+  const [detail, breakerProfiles] = await Promise.all([
+    getAdminChecklistForSet(id),
+    listBreakerProfiles(),
+  ]);
   if (!detail) notFound();
 
   return (
@@ -48,6 +52,7 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
         <AdminProductsClient
           setId={detail.set.id}
           initialProducts={detail.products}
+          initialBreakerProfiles={breakerProfiles.map(({ id, name }) => ({ id, name }))}
         />
       </div>
     </div>

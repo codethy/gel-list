@@ -40,6 +40,9 @@ export interface GelEntry {
   // Only meaningful when acquisitionMethod is "BREAKER" — who the breaker
   // was, shown alongside seller in the acquisition line below.
   breakerName?: string | null;
+  // Set only when breakerName above was linked to an existing BreakerProfile
+  // (picked from the searchable dropdown) — see prisma/schema.prisma.
+  breakerProfileId?: string | null;
   // Only meaningful when acquisitionMethod is "INFLUENCER" — their handle,
   // shown the same way breakerName is.
   influencerHandle?: string | null;

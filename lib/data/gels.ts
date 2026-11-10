@@ -102,12 +102,14 @@ export interface CreateGelRowInput {
   cardBackImageUrl:  string | null;
   seller:            string | null;
   breakerName:       string | null;
+  breakerProfileId:  string | null;
   influencerHandle:  string | null;
   notes:             string | null;
 }
 
 export interface ShapedGel {
   id:                string;
+  userId:            string;
   cardTemplateId:    string;
   isInHand:          boolean;
   isVerified:        boolean;
@@ -124,6 +126,7 @@ export interface ShapedGel {
   cardBackImageUrl:  string | null;
   seller:            string | null;
   breakerName:       string | null;
+  breakerProfileId:  string | null;
   influencerHandle:  string | null;
   notes:             string | null;
   cardTemplate: {
@@ -163,11 +166,13 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardBackImageUrl:  input.cardBackImageUrl,
       seller:            input.seller,
       breakerName:       input.breakerName,
+      breakerProfile:    input.breakerProfileId != null ? { connect: { id: input.breakerProfileId } } : undefined,
       influencerHandle:  input.influencerHandle,
       notes:             input.notes,
     },
     select: {
       id:                true,
+      userId:            true,
       checklistCardId:   true,
       isInHand:          true,
       isVerified:        true,
@@ -184,6 +189,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardBackImageUrl:  true,
       seller:            true,
       breakerName:       true,
+      breakerProfileId:  true,
       influencerHandle:  true,
       notes:             true,
       checklistCard: {
@@ -202,6 +208,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
 
   return {
     id:                portfolioCard.id,
+    userId:            portfolioCard.userId,
     cardTemplateId:    portfolioCard.checklistCardId,
     isInHand:          portfolioCard.isInHand,
     isVerified:        portfolioCard.isVerified,
@@ -218,6 +225,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
+    breakerProfileId:  portfolioCard.breakerProfileId   ?? null,
     influencerHandle:  portfolioCard.influencerHandle   ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {

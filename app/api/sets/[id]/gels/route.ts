@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
-import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
+import { rememberGelLocationDefaults, rememberSightingDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
 import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicateFile, isGelAlreadyFiled, GelAlreadyFiledError } from "@/lib/data/gels";
 
@@ -119,6 +119,7 @@ export async function POST(
     cardBackImageUrl,
     seller,
     breakerName,
+    breakerProfileId,
     influencerHandle,
     notes,
     acknowledgeDuplicate,
@@ -251,6 +252,19 @@ export async function POST(
   });
   const isVerified = isFilingDuplicate ? false : (loggingUser?.isVerifiedUser ?? false);
 
+  // Re-derived server-side, never trusted from the client directly — only
+  // accept a BreakerProfile link when acquisitionMethod is BREAKER and the
+  // profile actually has at least one attributed opening in THIS set (see
+  // lib/data/breakerProfiles.ts's getBreakerOptionsForSet, which drives the
+  // dropdown this id is supposed to have come from).
+  const resolvedBreakerProfileId =
+    acquisitionMethod === "BREAKER" && typeof breakerProfileId === "string" && breakerProfileId
+      ? (await prisma.breakerProductOpening.findFirst({
+          where:  { breakerProfileId, setProduct: { cardSetId: setId } },
+          select: { id: true },
+        })) ? breakerProfileId : null
+      : null;
+
   // ── 5. Create the PortfolioCard ──────────────────────────────────────────────
   const gel = await createGelRow({
     userId,
@@ -271,16 +285,26 @@ export async function POST(
     cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
     seller:            typeof seller === "string" ? seller : null,
     breakerName:       typeof breakerName === "string" ? breakerName : null,
+    breakerProfileId:  resolvedBreakerProfileId,
     influencerHandle:  typeof influencerHandle === "string" ? influencerHandle : null,
     notes:             typeof notes  === "string" ? notes  : null,
   });
 
-  // Only "my own gel" submissions update the remembered City/Country
-  // defaults — a "someone else's gel" report isn't this user's own location.
+  // "My own gel" submissions update the remembered City/Country defaults;
+  // "someone else's gel" sightings update a separate remembered
+  // source/month/year/country bucket instead — see lib/data/userGelDefaults.ts.
   if (isInHand) {
     await rememberGelLocationDefaults(
       userId,
       typeof hitCity === "string" ? hitCity : null,
+      typeof hitCountry === "string" ? hitCountry : null
+    );
+  } else {
+    await rememberSightingDefaults(
+      userId,
+      acquisitionMethod,
+      typeof hitMonth   === "number" ? hitMonth   : null,
+      typeof hitYear    === "number" ? hitYear    : null,
       typeof hitCountry === "string" ? hitCountry : null
     );
   }

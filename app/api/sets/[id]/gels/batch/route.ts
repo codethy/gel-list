@@ -36,7 +36,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
-import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
+import { rememberGelLocationDefaults, rememberSightingDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
 import { findDuplicateMatch, shapeDuplicateResponse, createGelRow } from "@/lib/data/gels";
 
@@ -74,6 +74,7 @@ export async function POST(
     productTypeOther,
     seller,
     breakerName,
+    breakerProfileId,
     influencerHandle,
     hitYear,
     hitMonth,
@@ -196,6 +197,15 @@ export async function POST(
   });
   const isVerified = loggingUser?.isVerifiedUser ?? false;
 
+  // Re-derived server-side, same rule as the single route.
+  const resolvedBreakerProfileId =
+    acquisitionMethod === "BREAKER" && typeof breakerProfileId === "string" && breakerProfileId
+      ? (await prisma.breakerProductOpening.findFirst({
+          where:  { breakerProfileId, setProduct: { cardSetId: setId } },
+          select: { id: true },
+        })) ? breakerProfileId : null
+      : null;
+
   const sharedFields = {
     userId,
     setId,
@@ -211,6 +221,7 @@ export async function POST(
     hitCountry:        typeof hitCountry === "string" ? hitCountry : null,
     seller:            typeof seller     === "string" ? seller     : null,
     breakerName:       typeof breakerName === "string" ? breakerName : null,
+    breakerProfileId:  resolvedBreakerProfileId,
     influencerHandle:  typeof influencerHandle === "string" ? influencerHandle : null,
   };
 
@@ -229,6 +240,8 @@ export async function POST(
 
   if (isInHand) {
     await rememberGelLocationDefaults(userId, sharedFields.hitCity, sharedFields.hitCountry);
+  } else {
+    await rememberSightingDefaults(userId, acquisitionMethod, sharedFields.hitMonth, sharedFields.hitYear, sharedFields.hitCountry);
   }
 
   revalidateSetDetailCache(setId);

@@ -12,7 +12,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { rememberGelLocationDefaults } from "@/lib/data/userGelDefaults";
+import { rememberGelLocationDefaults, rememberSightingDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
 import { prepareGelDeletionCleanup } from "@/lib/data/gels";
 import { maybeSendPendingCoOwnershipNotifications } from "@/lib/data/notifications";
@@ -72,6 +72,7 @@ export async function PATCH(
     cardBackImageUrl,
     seller,
     breakerName,
+    breakerProfileId,
     influencerHandle,
     notes,
   } = body;
@@ -142,6 +143,15 @@ export async function PATCH(
   });
   const isVerified = loggingUser?.isVerifiedUser ?? false;
 
+  // Re-derived server-side, same rule as the create route.
+  const resolvedBreakerProfileId =
+    acquisitionMethod === "BREAKER" && typeof breakerProfileId === "string" && breakerProfileId
+      ? (await prisma.breakerProductOpening.findFirst({
+          where:  { breakerProfileId, setProduct: { cardSetId: setId } },
+          select: { id: true },
+        })) ? breakerProfileId : null
+      : null;
+
   const portfolioCard = await prisma.portfolioCard.update({
     where: { id: gelId },
     data: {
@@ -176,6 +186,7 @@ export async function PATCH(
         typeof seller === "string" ? seller : null,
       breakerName:
         typeof breakerName === "string" ? breakerName : null,
+      breakerProfileId: resolvedBreakerProfileId,
       influencerHandle:
         typeof influencerHandle === "string" ? influencerHandle : null,
       notes:
@@ -183,6 +194,7 @@ export async function PATCH(
     },
     select: {
       id:                true,
+      userId:            true,
       checklistCardId:   true,
       isInHand:          true,
       isVerified:        true,
@@ -199,6 +211,7 @@ export async function PATCH(
       cardBackImageUrl:  true,
       seller:            true,
       breakerName:       true,
+      breakerProfileId:  true,
       influencerHandle:  true,
       notes:             true,
       checklistCard: {
@@ -217,6 +230,8 @@ export async function PATCH(
 
   if (isInHand) {
     await rememberGelLocationDefaults(userId, hitCity, hitCountry);
+  } else {
+    await rememberSightingDefaults(userId, acquisitionMethod, hitMonth, hitYear, hitCountry);
   }
 
   // A CO_OWNERSHIP file may have been waiting on exactly this gel to be
@@ -232,6 +247,7 @@ export async function PATCH(
   // Same field-name compatibility note as POST — see that route for why.
   const gel = {
     id:                portfolioCard.id,
+    userId:            portfolioCard.userId,
     cardTemplateId:    portfolioCard.checklistCardId,
     isInHand:          portfolioCard.isInHand,
     isVerified:        portfolioCard.isVerified,
@@ -248,6 +264,7 @@ export async function PATCH(
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
+    breakerProfileId:  portfolioCard.breakerProfileId   ?? null,
     influencerHandle:  portfolioCard.influencerHandle   ?? null,
     notes:             portfolioCard.notes             ?? null,
     cardTemplate: {

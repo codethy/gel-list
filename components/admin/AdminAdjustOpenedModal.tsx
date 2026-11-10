@@ -10,18 +10,22 @@
 
 import { useState } from "react";
 import { Label, Input } from "@/components/set-detail/AddGelModal";
+import BreakerSearch, { type BreakerOption } from "@/components/BreakerSearch";
 import type { AdminProductRow } from "@/lib/data/adminChecklist";
 
 interface AdminAdjustOpenedModalProps {
   isOpen:   boolean;
   onClose:  () => void;
-  onSubmit: (amount: number) => Promise<string | void>;
+  onSubmit: (amount: number, breakerProfileId: string | null) => Promise<string | void>;
   product:  AdminProductRow | null;
   mode:     "add" | "remove";
+  breakers: BreakerOption[];
 }
 
-export default function AdminAdjustOpenedModal({ isOpen, onClose, onSubmit, product, mode }: AdminAdjustOpenedModalProps) {
+export default function AdminAdjustOpenedModal({ isOpen, onClose, onSubmit, product, mode, breakers }: AdminAdjustOpenedModalProps) {
   const [amount, setAmount]         = useState("");
+  const [breakerName, setBreakerName]           = useState("");
+  const [breakerProfileId, setBreakerProfileId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
@@ -35,17 +39,21 @@ export default function AdminAdjustOpenedModal({ isOpen, onClose, onSubmit, prod
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
-    const result = await onSubmit(parsed);
+    const result = await onSubmit(parsed, mode === "add" ? (breakerProfileId || null) : null);
     setSubmitting(false);
     if (result) {
       setError(result);
     } else {
       setAmount("");
+      setBreakerName("");
+      setBreakerProfileId("");
     }
   }
 
   function handleClose() {
     setAmount("");
+    setBreakerName("");
+    setBreakerProfileId("");
     setError(null);
     onClose();
   }
@@ -74,6 +82,19 @@ export default function AdminAdjustOpenedModal({ isOpen, onClose, onSubmit, prod
               autoFocus
             />
           </div>
+
+          {mode === "add" && (
+            <div>
+              <Label>Breaker (optional)</Label>
+              <BreakerSearch
+                value={breakerName}
+                breakerProfileId={breakerProfileId}
+                onChange={(name, id) => { setBreakerName(name); setBreakerProfileId(id); }}
+                options={breakers}
+                placeholder="Leave blank if not from a breaker..."
+              />
+            </div>
+          )}
 
           {error && <p className="text-xs text-red-400">{error}</p>}
 

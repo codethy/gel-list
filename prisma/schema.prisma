@@ -95,6 +95,16 @@ model User {
   lastGelCity    String?
   lastGelCountry String?
 
+  // Remembered from this user's own most recent "Someone Else's Gel"
+  // submission — pre-fills the sighting fields the next time they log a
+  // sighting. Deliberately separate from lastGelCity/lastGelCountry above
+  // (SELF-only memory) since the two flows track different things, per an
+  // explicit requirement that the two stay independent.
+  lastSightingMethod  String?
+  lastSightingMonth   Int?
+  lastSightingYear    Int?
+  lastSightingCountry String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -391,11 +401,47 @@ model SetProduct {
   // resulting total at 0 rather than enforcing a floor here.
   adminOpenedAdjustment Int @default(0)
 
-  cardSet   CardSet           @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
-  packKinds ProductPackKind[]
-  openings  ProductOpening[]
+  cardSet         CardSet                 @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  packKinds       ProductPackKind[]
+  openings        ProductOpening[]
+  breakerOpenings BreakerProductOpening[]
 
   @@index([cardSetId])
+}
+
+// An admin's profile for a breaker, created so box openings attributed to
+// them (via the "+" opened-quantity adjustment on an admin set's Products
+// table) and gels logged against them (via the searchable "Breaker's Name"
+// field in Log a Gel) can be tracked accurately per breaker — see
+// lib/data/breakerProfiles.ts for the aggregation that powers the admin
+// breakdown popup.
+model BreakerProfile {
+  id                     String   @id @default(cuid())
+  name                   String   @unique
+  country                String
+  isOfficialToppsPartner Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  productOpenings BreakerProductOpening[]
+  gels            PortfolioCard[]
+}
+
+// One admin "+" attribution of N opened units of a product to a breaker —
+// additive history (one row per click), never an upsert, so the same
+// breaker can be credited again later without losing the earlier record.
+model BreakerProductOpening {
+  id               String   @id @default(cuid())
+  breakerProfileId String
+  setProductId     String
+  quantity         Int
+  createdAt        DateTime @default(now())
+
+  breakerProfile BreakerProfile @relation(fields: [breakerProfileId], references: [id], onDelete: Cascade)
+  setProduct     SetProduct     @relation(fields: [setProductId], references: [id], onDelete: Cascade)
+
+  @@index([breakerProfileId])
+  @@index([setProductId])
 }
 
 // One "kind" of pack bundled inside a unit of a SetProduct — most products
@@ -471,6 +517,14 @@ model PortfolioCard {
   // alongside seller, same pattern.
   breakerName String? @db.VarChar(150)
 
+  // Only set when the user explicitly picked an existing BreakerProfile
+  // from the searchable dropdown (scoped to breakers with attribution in
+  // this gel's own set) — never inferred from breakerName text-matching.
+  // Purely additive to breakerName above (which stays the display source
+  // of truth everywhere) — this is what powers BreakerProfile's own
+  // "gels hit" breakdown.
+  breakerProfileId String?
+
   // The influencer's handle (YouTube channel, Instagram username, etc.) —
   // only meaningful when acquisitionMethod is INFLUENCER. Same required/
   // display pattern as breakerName above.
@@ -513,12 +567,15 @@ model PortfolioCard {
   checklistCard           ChecklistCard     @relation(fields: [checklistCardId], references: [id])
   cardSet                 CardSet           @relation(fields: [cardSetId], references: [id])
   ripSession              RipSession?       @relation(fields: [ripSessionId], references: [id])
+  breakerProfile          BreakerProfile?   @relation(fields: [breakerProfileId], references: [id], onDelete: SetNull)
   // ✅ NEW: chain of custody transfers originating from this portfolio entry
   transfers               CardTransfer[]
   favoritedBy             FavoriteGel[]
   yourGelsPinnedBy        YourGelsPin[]
   duplicateFileAsFiled    DuplicateGelFile? @relation("DuplicateFiledGel")
   duplicateFileAsExisting DuplicateGelFile? @relation("DuplicateExistingGel")
+
+  @@index([breakerProfileId])
 }
 
 enum DuplicateFlag {

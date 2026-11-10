@@ -36,6 +36,7 @@ function adaptToGelEntry(gel: AdminGelEntry): GelEntry {
     acquisitionMethod: gel.acquisitionMethod,
     seller:            gel.seller,
     breakerName:       gel.breakerName,
+    breakerProfileId:  gel.breakerProfileId,
     influencerHandle:  gel.influencerHandle,
     notes:             gel.notes,
     productType:       gel.productType,
@@ -58,6 +59,7 @@ interface SetEditContext {
   category: string;
   year:     number;
   products: ProductOption[];
+  breakers: { id: string; name: string }[];
 }
 
 export default function AdminEditGelModal({
@@ -84,7 +86,7 @@ export default function AdminEditGelModal({
     fetch(`/api/admin/sets/${gel.setId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data) => {
-        if (!cancelled) setContext({ category: data.category, year: data.year, products: data.products });
+        if (!cancelled) setContext({ category: data.category, year: data.year, products: data.products, breakers: data.breakers ?? [] });
       })
       .catch(() => {
         if (!cancelled) setLoadError(true);
@@ -131,6 +133,7 @@ export default function AdminEditGelModal({
       category={context.category}
       setYear={context.year}
       products={context.products}
+      breakers={context.breakers}
       editingGel={adaptToGelEntry(gel)}
       editSubmitUrl={`/api/admin/gels/${gel.id}`}
     />

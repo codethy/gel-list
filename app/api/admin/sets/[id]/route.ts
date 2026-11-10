@@ -14,6 +14,7 @@ import { Category } from "@prisma/client";
 import { resolveSubCategory, SUBCATEGORY_TO_CATEGORY } from "@/lib/taxonomy";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
 import { getProductLabel } from "@/lib/productTypes";
+import { getBreakerOptionsForSet } from "@/lib/data/breakerProfiles";
 
 function parseString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -32,13 +33,14 @@ export async function GET(
 
   const { id: setId } = await params;
 
-  const [cardSet, setProducts] = await Promise.all([
+  const [cardSet, setProducts, breakers] = await Promise.all([
     prisma.cardSet.findUnique({ where: { id: setId }, select: { category: true, year: true } }),
     prisma.setProduct.findMany({
       where:   { cardSetId: setId },
       orderBy: { createdAt: "asc" },
       select:  { id: true, productType: true, productTypeOther: true },
     }),
+    getBreakerOptionsForSet(setId),
   ]);
   if (!cardSet) {
     return NextResponse.json({ error: "Set not found" }, { status: 404 });
@@ -53,6 +55,7 @@ export async function GET(
       productTypeOther: p.productTypeOther,
       label:            getProductLabel(String(p.productType), p.productTypeOther),
     })),
+    breakers,
   });
 }
 
