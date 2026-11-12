@@ -134,9 +134,11 @@ export async function POST(
   // value) and "Breaker" (either flow, since a break can be either an
   // owned pull or a reported sighting) — re-derived server-side rather
   // than trusting the client honored the form's enabled/disabled state.
-  const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
-  // Only required for "Pulled" — a breaker often can't say exactly which
-  // product a given card came from, so it stays optional for BREAKER.
+  // "Which Product" is always available for a "someone else's gel" report
+  // (any source) — the reporting user may still know which product it
+  // came from. For "my own gel" it's only relevant to "Pulled"/"Breaker".
+  const productApplies = !isInHand || acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — stays optional everywhere else.
   const productRequired = acquisitionMethod === "PULLED";
 
   // ── 3. Validate required fields ──────────────────────────────────────────────

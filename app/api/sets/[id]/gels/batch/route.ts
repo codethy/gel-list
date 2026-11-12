@@ -86,8 +86,11 @@ export async function POST(
   const isInHand = loggedFor !== "OTHER";
   // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
   // flow) — re-derived server-side rather than trusting the client.
-  const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
-  // Only required for "Pulled" — optional whenever the source is a breaker.
+  // "Which Product" is always available for a "someone else's gel" report
+  // (any source) — the reporting user may still know which product it
+  // came from. For "my own gel" it's only relevant to "Pulled"/"Breaker".
+  const productApplies = !isInHand || acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — stays optional everywhere else.
   const productRequired = acquisitionMethod === "PULLED";
 
   if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {

@@ -774,11 +774,13 @@ export default function AddGelModal({
 
   const isEditing = Boolean(editingGel);
   const isOther   = loggedFor === "OTHER";
-  // "Which Product" applies to "Pulled" (SELF only — OTHER never offers
-  // it) and "Breaker" (either flow, since a break can be an owned pull or
-  // a reported sighting) — shared by the single-flow fields, the
-  // multi-flow shared fields, and buildBody/handleMultiSubmit below.
-  const productApplies = form.acquisitionMethod === "PULLED" || form.acquisitionMethod === "BREAKER";
+  // "Which Product" is always available for "Someone Else's Gel" — the
+  // reporting user may still know which product it came from regardless of
+  // where they saw it, not just when the source is a breaker. For "My Own
+  // Gel" it's only relevant to "Pulled" or "Breaker" (unchanged). Shared by
+  // the single-flow fields, the multi-flow shared fields, and
+  // buildBody/handleMultiSubmit below.
+  const productApplies = isOther || form.acquisitionMethod === "PULLED" || form.acquisitionMethod === "BREAKER";
   // Only required for "Pulled" — a breaker often can't say exactly which
   // product a given card came from, so "Which Product" stays available but
   // optional whenever the source is a breaker.
@@ -1576,9 +1578,12 @@ export default function AddGelModal({
                         setForm((prev) => ({
                           ...prev,
                           acquisitionMethod: value,
-                          // "Which Product" applies to "Pulled"/"Breaker" —
-                          // clear any selection made while it was briefly enabled.
-                          productOptionId: value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
+                          // "Which Product" is always available for OTHER
+                          // (any source), so switching between sources there
+                          // never clears it; for SELF it's only ever enabled
+                          // for "Pulled"/"Breaker" — clear a selection made
+                          // while it was briefly enabled if switching away.
+                          productOptionId: isOther || value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
                         }));
                       }}
                     >
@@ -1659,32 +1664,31 @@ export default function AddGelModal({
                     )}
                   </AnimatePresence>
 
-                  {/* ── Which Product (shown for SELF always, and for OTHER
-                      when the source is a breaker — enabled once "Pulled"
-                      or "Breaker" is selected) ───────────────────────────── */}
-                  {(!isOther || form.acquisitionMethod === "BREAKER") && (
-                    <div>
-                      <Label>Which Product{productRequired ? " *" : ""}</Label>
-                      <Select
-                        value={form.productOptionId}
-                        onChange={setField("productOptionId")}
-                        disabled={!productApplies}
-                      >
-                        {!productApplies ? (
+                  {/* ── Which Product — always shown; enabled for SELF once
+                      "Pulled" or "Breaker" is selected, and always enabled
+                      (optional) for OTHER regardless of which source is
+                      chosen ───────────────────────────────────────────── */}
+                  <div>
+                    <Label>Which Product{productRequired ? " *" : ""}</Label>
+                    <Select
+                      value={form.productOptionId}
+                      onChange={setField("productOptionId")}
+                      disabled={!productApplies}
+                    >
+                      {!productApplies ? (
+                        <option value="" className="bg-slate-900">Select product...</option>
+                      ) : products.length === 0 ? (
+                        <option value="" className="bg-slate-900">No products added for this set yet</option>
+                      ) : (
+                        <>
                           <option value="" className="bg-slate-900">Select product...</option>
-                        ) : products.length === 0 ? (
-                          <option value="" className="bg-slate-900">No products added for this set yet</option>
-                        ) : (
-                          <>
-                            <option value="" className="bg-slate-900">Select product...</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
-                            ))}
-                          </>
-                        )}
-                      </Select>
-                    </div>
-                  )}
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
+                          ))}
+                        </>
+                      )}
+                    </Select>
+                  </div>
 
                   {/* ── Seller (conditional on BOUGHT, "my own gel" flow only —
                       the "someone else's gel" flow captures this in Notes instead) ── */}
@@ -1867,29 +1871,27 @@ export default function AddGelModal({
                     )}
                   </AnimatePresence>
 
-                  {(!isOther || form.acquisitionMethod === "BREAKER") && (
-                    <div>
-                      <Label>Which Product{productRequired ? " *" : ""}</Label>
-                      <Select
-                        value={form.productOptionId}
-                        onChange={setField("productOptionId")}
-                        disabled={!productApplies}
-                      >
-                        {!productApplies ? (
+                  <div>
+                    <Label>Which Product{productRequired ? " *" : ""}</Label>
+                    <Select
+                      value={form.productOptionId}
+                      onChange={setField("productOptionId")}
+                      disabled={!productApplies}
+                    >
+                      {!productApplies ? (
+                        <option value="" className="bg-slate-900">Select product...</option>
+                      ) : products.length === 0 ? (
+                        <option value="" className="bg-slate-900">No products added for this set yet</option>
+                      ) : (
+                        <>
                           <option value="" className="bg-slate-900">Select product...</option>
-                        ) : products.length === 0 ? (
-                          <option value="" className="bg-slate-900">No products added for this set yet</option>
-                        ) : (
-                          <>
-                            <option value="" className="bg-slate-900">Select product...</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
-                            ))}
-                          </>
-                        )}
-                      </Select>
-                    </div>
-                  )}
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id} className="bg-slate-900">{p.label}</option>
+                          ))}
+                        </>
+                      )}
+                    </Select>
+                  </div>
 
                   <AnimatePresence>
                     {!isOther && form.acquisitionMethod === "BOUGHT" && (
