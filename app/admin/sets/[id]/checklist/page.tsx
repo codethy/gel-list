@@ -52,7 +52,7 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
         <AdminProductsClient
           setId={detail.set.id}
           initialProducts={detail.products}
-          initialBreakerProfiles={breakerProfiles.map(({ id, name }) => ({ id, name }))}
+          initialBreakerProfiles={breakerProfiles.map(({ id, name, country }) => ({ id, name, country }))}
         />
       </div>
     </div>

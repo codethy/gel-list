@@ -87,6 +87,8 @@ export async function POST(
   // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
   // flow) — re-derived server-side rather than trusting the client.
   const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — optional whenever the source is a breaker.
+  const productRequired = acquisitionMethod === "PULLED";
 
   if (typeof acquisitionMethod !== "string" || !acquisitionMethod) {
     return NextResponse.json({ error: "Please select how you got these cards" }, { status: 400 });
@@ -100,7 +102,7 @@ export async function POST(
     return NextResponse.json({ error: "Please fill in the influencer's handle" }, { status: 400 });
   }
 
-  if (productApplies && (typeof productType !== "string" || !productType)) {
+  if (productRequired && (typeof productType !== "string" || !productType)) {
     return NextResponse.json({ error: "Please select which product these cards came from" }, { status: 400 });
   }
 

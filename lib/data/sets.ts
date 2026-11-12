@@ -169,7 +169,7 @@ export interface SetDetailData {
   // Breaker profiles with at least one admin-attributed opening in this
   // set — the searchable "Breaker's Name" dropdown options in Log a Gel.
   // See lib/data/breakerProfiles.ts.
-  breakers: { id: string; name: string }[];
+  breakers: { id: string; name: string; country: string }[];
 
   // "X Packs/Boxes Opened" box + its breakdown/log modals — see
   // lib/data/productOpenings.ts.
@@ -443,7 +443,7 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
         // query, kept here inline to share this Promise.all batch).
         prisma.breakerProfile.findMany({
           where:   { productOpenings: { some: { setProduct: { cardSetId: setId } } } },
-          select:  { id: true, name: true },
+          select:  { id: true, name: true, country: true },
           orderBy: { name: "asc" },
         }),
       ]);

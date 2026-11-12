@@ -59,7 +59,7 @@ interface SetEditContext {
   category: string;
   year:     number;
   products: ProductOption[];
-  breakers: { id: string; name: string }[];
+  breakers: { id: string; name: string; country: string }[];
 }
 
 export default function AdminEditGelModal({

@@ -31,7 +31,7 @@ function cardsPerPackLabel(product: AdminProductRow): string {
 interface AdminProductsClientProps {
   setId:           string;
   initialProducts: AdminProductRow[];
-  initialBreakerProfiles: { id: string; name: string }[];
+  initialBreakerProfiles: { id: string; name: string; country: string }[];
 }
 
 export default function AdminProductsClient({ setId, initialProducts, initialBreakerProfiles }: AdminProductsClientProps) {

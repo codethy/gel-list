@@ -28,8 +28,9 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 export interface BreakerOption {
-  id:   string;
-  name: string;
+  id:      string;
+  name:    string;
+  country: string;
 }
 
 export default function BreakerSearch({

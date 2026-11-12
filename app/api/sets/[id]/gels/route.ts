@@ -135,6 +135,9 @@ export async function POST(
   // owned pull or a reported sighting) — re-derived server-side rather
   // than trusting the client honored the form's enabled/disabled state.
   const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — a breaker often can't say exactly which
+  // product a given card came from, so it stays optional for BREAKER.
+  const productRequired = acquisitionMethod === "PULLED";
 
   // ── 3. Validate required fields ──────────────────────────────────────────────
   if (!checklistCardId || typeof checklistCardId !== "string") {
@@ -179,7 +182,7 @@ export async function POST(
     );
   }
 
-  if (productApplies && (typeof productType !== "string" || !productType)) {
+  if (productRequired && (typeof productType !== "string" || !productType)) {
     return NextResponse.json(
       { error: "Please select which product this came from" },
       { status: 400 }

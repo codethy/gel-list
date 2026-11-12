@@ -70,6 +70,8 @@ export async function PATCH(
   // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
   // flow) — same derivation as the user-facing edit route.
   const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — optional whenever the source is a breaker.
+  const productRequired = acquisitionMethod === "PULLED";
 
   if (typeof cardFrontImageUrl !== "string" || !cardFrontImageUrl) {
     return NextResponse.json({ error: "A card front image is required" }, { status: 400 });
@@ -91,7 +93,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Please fill in the notes" }, { status: 400 });
   }
 
-  if (productApplies && (typeof productType !== "string" || !productType)) {
+  if (productRequired && (typeof productType !== "string" || !productType)) {
     return NextResponse.json({ error: "Please select which product this came from" }, { status: 400 });
   }
 

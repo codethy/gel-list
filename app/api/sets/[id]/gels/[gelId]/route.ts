@@ -83,6 +83,8 @@ export async function PATCH(
   // flow) — re-derived server-side rather than trusting the client honored
   // the form's enabled/disabled state.
   const productApplies = acquisitionMethod === "PULLED" || acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — optional whenever the source is a breaker.
+  const productRequired = acquisitionMethod === "PULLED";
 
   if (typeof cardFrontImageUrl !== "string" || !cardFrontImageUrl) {
     return NextResponse.json(
@@ -119,7 +121,7 @@ export async function PATCH(
     );
   }
 
-  if (productApplies && (typeof productType !== "string" || !productType)) {
+  if (productRequired && (typeof productType !== "string" || !productType)) {
     return NextResponse.json(
       { error: "Please select which product this came from" },
       { status: 400 }

@@ -65,7 +65,7 @@ interface SetDetailClientProps {
 
   // Breaker profiles with >=1 attributed opening in this set — powers the
   // searchable "Breaker's Name" dropdown in Log a Gel.
-  breakers: { id: string; name: string }[];
+  breakers: { id: string; name: string; country: string }[];
 
   // "X Packs/Boxes Opened" box + its two linked popups
   initialPacksOpened: SetPacksOpenedSummary;

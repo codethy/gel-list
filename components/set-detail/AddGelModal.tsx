@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { GelEntry } from "./YourGels";
 import { playerSubtitle } from "./ChecklistTable";
 import { useUploadThing } from "@/lib/uploadthing";
-import { COUNTRIES } from "@/lib/countries";
+import CountrySelect from "@/components/CountrySelect";
 import BreakerSearch from "@/components/BreakerSearch";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ interface AddGelModalProps {
   products: ProductOption[];
   // Breaker profiles with >=1 attributed opening in this set — the
   // searchable "Breaker's Name" dropdown options (see BreakerSearch).
-  breakers?: { id: string; name: string }[];
+  breakers?: { id: string; name: string; country: string }[];
   // The full option — not just an id — since the modal no longer holds
   // every checklist card in memory to look one up by id (see
   // ChecklistCardSearch). Set when opened from a specific checklist row's
@@ -601,94 +601,6 @@ function ChecklistCardSearch({
   );
 }
 
-// ─── COUNTRY SELECT ───────────────────────────────────────────────────────────
-// A searchable dropdown over the static COUNTRIES list (see lib/countries.ts)
-// — same search-then-pick interaction as ChecklistCardSearch above, but over
-// an in-memory list rather than a server fetch. Typing clears any previously
-// picked value (via onChange("")) until a list item is actually clicked, so
-// a submission can never carry a stale country the user typed over but never
-// re-selected.
-function CountrySelect({
-  value,
-  onChange,
-  placeholder = "Search for a country...",
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const [query, setQuery] = useState(value);
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Keeps the visible text in sync when `value` changes externally (e.g.
-  // the modal pre-filling a remembered default, or switching between
-  // editing/creating a gel).
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        // Revert any unselected typed text back to the real value.
-        setQuery(value);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [value]);
-
-  const trimmed = query.trim().toLowerCase();
-  const filtered = trimmed
-    ? COUNTRIES.filter((c) => c.toLowerCase().includes(trimmed))
-    : COUNTRIES;
-
-  return (
-    <div ref={containerRef} className="relative">
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          onChange("");
-          setIsOpen(true);
-        }}
-        onFocus={() => setIsOpen(true)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150"
-      />
-      <AnimatePresence>
-        {isOpen && filtered.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 right-0 mt-1 z-50 rounded-xl bg-slate-900 border border-slate-700/60 shadow-xl shadow-black/40 overflow-hidden max-h-52 overflow-y-auto"
-          >
-            {filtered.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => {
-                  onChange(c);
-                  setQuery(c);
-                  setIsOpen(false);
-                }}
-                className="w-full px-3 py-2.5 text-left text-sm text-slate-200 font-medium hover:bg-slate-800/80 transition-colors duration-100 border-b border-slate-800/60 last:border-0"
-              >
-                {c}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 // ─── MULTI-CARD BLOCK (Multiple Gels flow) ───────────────────────────────────
 // One repeatable Card/Serial/Images/Notes section. Mirrors the "X" remove
 // button (only shown when more than one block exists) + "+ Add another"
@@ -867,6 +779,10 @@ export default function AddGelModal({
   // a reported sighting) — shared by the single-flow fields, the
   // multi-flow shared fields, and buildBody/handleMultiSubmit below.
   const productApplies = form.acquisitionMethod === "PULLED" || form.acquisitionMethod === "BREAKER";
+  // Only required for "Pulled" — a breaker often can't say exactly which
+  // product a given card came from, so "Which Product" stays available but
+  // optional whenever the source is a breaker.
+  const productRequired = form.acquisitionMethod === "PULLED";
 
   // "Year Pulled" options — from the set's release year through the
   // current year, newest first (a card is almost always pulled the year
@@ -1087,7 +1003,7 @@ export default function AddGelModal({
       return;
     }
 
-    if (productApplies && !form.productOptionId) {
+    if (productRequired && !form.productOptionId) {
       setError("Please select which product this came from.");
       return;
     }
@@ -1226,7 +1142,7 @@ export default function AddGelModal({
       return;
     }
 
-    if (productApplies && !form.productOptionId) {
+    if (productRequired && !form.productOptionId) {
       setError("Please select which product this came from.");
       return;
     }
@@ -1275,7 +1191,7 @@ export default function AddGelModal({
       return;
     }
 
-    if (productApplies && !form.productOptionId) {
+    if (productRequired && !form.productOptionId) {
       setError("Please select which product these cards came from.");
       return;
     }
@@ -1358,7 +1274,7 @@ export default function AddGelModal({
     Boolean(form.acquisitionMethod) &&
     (form.acquisitionMethod !== "BREAKER" || form.breakerName.trim()) &&
     (form.acquisitionMethod !== "INFLUENCER" || form.influencerHandle.trim()) &&
-    (!productApplies || Boolean(form.productOptionId)) &&
+    (!productRequired || Boolean(form.productOptionId)) &&
     multiCards.length > 0 &&
     multiCards.every((c) =>
       c.checklistCardId &&
@@ -1703,9 +1619,19 @@ export default function AddGelModal({
                         <BreakerSearch
                           value={form.breakerName}
                           breakerProfileId={form.breakerProfileId}
-                          onChange={(name, id) =>
-                            setForm((prev) => ({ ...prev, breakerName: name, breakerProfileId: id }))
-                          }
+                          onChange={(name, id) => {
+                            // Picking a real profile also pre-fills its
+                            // country — never when just typing free text
+                            // (id === ""), so a manually-entered Country
+                            // is never silently overwritten.
+                            const selected = id ? breakers.find((b) => b.id === id) : undefined;
+                            setForm((prev) => ({
+                              ...prev,
+                              breakerName: name,
+                              breakerProfileId: id,
+                              ...(selected ? { hitCountry: selected.country } : {}),
+                            }));
+                          }}
                           options={breakers}
                         />
                       </motion.div>
@@ -1738,7 +1664,7 @@ export default function AddGelModal({
                       or "Breaker" is selected) ───────────────────────────── */}
                   {(!isOther || form.acquisitionMethod === "BREAKER") && (
                     <div>
-                      <Label>Which Product *</Label>
+                      <Label>Which Product{productRequired ? " *" : ""}</Label>
                       <Select
                         value={form.productOptionId}
                         onChange={setField("productOptionId")}
@@ -1902,9 +1828,19 @@ export default function AddGelModal({
                         <BreakerSearch
                           value={form.breakerName}
                           breakerProfileId={form.breakerProfileId}
-                          onChange={(name, id) =>
-                            setForm((prev) => ({ ...prev, breakerName: name, breakerProfileId: id }))
-                          }
+                          onChange={(name, id) => {
+                            // Picking a real profile also pre-fills its
+                            // country — never when just typing free text
+                            // (id === ""), so a manually-entered Country
+                            // is never silently overwritten.
+                            const selected = id ? breakers.find((b) => b.id === id) : undefined;
+                            setForm((prev) => ({
+                              ...prev,
+                              breakerName: name,
+                              breakerProfileId: id,
+                              ...(selected ? { hitCountry: selected.country } : {}),
+                            }));
+                          }}
                           options={breakers}
                         />
                       </motion.div>
@@ -1933,7 +1869,7 @@ export default function AddGelModal({
 
                   {(!isOther || form.acquisitionMethod === "BREAKER") && (
                     <div>
-                      <Label>Which Product *</Label>
+                      <Label>Which Product{productRequired ? " *" : ""}</Label>
                       <Select
                         value={form.productOptionId}
                         onChange={setField("productOptionId")}
@@ -2077,7 +2013,7 @@ export default function AddGelModal({
                         (form.acquisitionMethod === "BREAKER" && !form.breakerName.trim()) ||
                         (form.acquisitionMethod === "INFLUENCER" && !form.influencerHandle.trim()) ||
                         (isOther && form.acquisitionMethod !== "BREAKER" && form.acquisitionMethod !== "INFLUENCER" && !form.notes.trim()) ||
-                        (productApplies && !form.productOptionId) ||
+                        (productRequired && !form.productOptionId) ||
                         (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber))
                   }
                   className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"

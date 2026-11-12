@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { Label, Input } from "@/components/set-detail/AddGelModal";
+import CountrySelect from "@/components/CountrySelect";
 import type { BreakerProfileRow } from "@/lib/data/breakerProfiles";
 
 export interface BreakerProfileInput {
@@ -65,7 +66,7 @@ export default function AdminBreakerProfileModal({ isOpen, onClose, onSubmit, ed
 
           <div>
             <Label>Country *</Label>
-            <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. United States" />
+            <CountrySelect value={country} onChange={setCountry} />
           </div>
 
           <label className="flex items-center gap-2.5 text-sm text-slate-200 cursor-pointer">

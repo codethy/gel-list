@@ -117,10 +117,10 @@ export async function deleteBreakerProfile(id: string): Promise<boolean> {
 // can share that function's single Promise.all batch) — kept here as well
 // for the admin set-context route (app/api/admin/sets/[id]/route.ts), which
 // AdminEditGelModal reads from.
-export async function getBreakerOptionsForSet(setId: string): Promise<{ id: string; name: string }[]> {
+export async function getBreakerOptionsForSet(setId: string): Promise<{ id: string; name: string; country: string }[]> {
   return prisma.breakerProfile.findMany({
     where:   { productOpenings: { some: { setProduct: { cardSetId: setId } } } },
-    select:  { id: true, name: true },
+    select:  { id: true, name: true, country: true },
     orderBy: { name: "asc" },
   });
 }
