@@ -1592,7 +1592,7 @@ export default function AddGelModal({
                           <option value="" className="bg-slate-900">Select source...</option>
                           <option value="BREAKER" className="bg-slate-900">Breaker</option>
                           <option value="EBAY" className="bg-slate-900">eBay</option>
-                          <option value="FRIEND" className="bg-slate-900">Friend</option>
+                          <option value="MARKETING_PROMOTION" className="bg-slate-900">Marketing Promotion</option>
                           <option value="SOCIAL_MEDIA" className="bg-slate-900">Social Media</option>
                           <option value="INFLUENCER" className="bg-slate-900">Influencer</option>
                           <option value="OTHER" className="bg-slate-900">Others</option>
@@ -1801,7 +1801,7 @@ export default function AddGelModal({
                           <option value="" className="bg-slate-900">Select source...</option>
                           <option value="BREAKER" className="bg-slate-900">Breaker</option>
                           <option value="EBAY" className="bg-slate-900">eBay</option>
-                          <option value="FRIEND" className="bg-slate-900">Friend</option>
+                          <option value="MARKETING_PROMOTION" className="bg-slate-900">Marketing Promotion</option>
                           <option value="SOCIAL_MEDIA" className="bg-slate-900">Social Media</option>
                           <option value="INFLUENCER" className="bg-slate-900">Influencer</option>
                           <option value="OTHER" className="bg-slate-900">Others</option>

@@ -13,7 +13,7 @@ const ACQUISITION_LABELS: Record<string, string> = {
   BOUGHT:       "Bought",
   BREAKER:      "Breaker",
   EBAY:         "eBay",
-  FRIEND:       "Friend",
+  MARKETING_PROMOTION: "Marketing Promotion",
   SOCIAL_MEDIA: "Social Media",
   INFLUENCER:   "Influencer",
   OTHER:        "Others",

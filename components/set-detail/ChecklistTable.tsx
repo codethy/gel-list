@@ -15,7 +15,7 @@ import { getProductLabel } from "@/lib/productTypes";
 const ACQUISITION_LABELS: Record<string, string> = {
   BREAKER:      "Breaker",
   EBAY:         "eBay",
-  FRIEND:       "Friend",
+  MARKETING_PROMOTION: "Marketing Promotion",
   SOCIAL_MEDIA: "Social Media",
   INFLUENCER:   "Influencer",
   OTHER:        "Others",
@@ -36,7 +36,7 @@ export interface CardHistoryEvent {
     | "BREAKER_OWNED"
     | "BREAKER"
     | "EBAY"
-    | "FRIEND"
+    | "MARKETING_PROMOTION"
     | "SOCIAL_MEDIA"
     | "INFLUENCER"
     | "OTHER"
@@ -231,7 +231,7 @@ const EVENT_META: Record<
   // "Someone else's gel" sources — reported sightings, not owned copies.
   BREAKER:         { label: "Seen from a breaker",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
   EBAY:            { label: "Seen on eBay",            color: "text-orange-300",  dotColor: "bg-orange-500"  },
-  FRIEND:          { label: "Seen via a friend",       color: "text-orange-300",  dotColor: "bg-orange-500"  },
+  MARKETING_PROMOTION: { label: "Seen via a marketing promotion", color: "text-orange-300", dotColor: "bg-orange-500" },
   SOCIAL_MEDIA:    { label: "Seen on social media",    color: "text-orange-300",  dotColor: "bg-orange-500"  },
   INFLUENCER:      { label: "Seen from an influencer", color: "text-orange-300",  dotColor: "bg-orange-500"  },
   OTHER:           { label: "Seen elsewhere",          color: "text-orange-300",  dotColor: "bg-orange-500"  },
