@@ -201,6 +201,16 @@ interface MultiCardEntry {
   notes: string;
 }
 
+// Strips the fields that don't represent real user-entered data — `key` is
+// just a stable React list key, and `selectedCardOption` is display metadata
+// for the same card `checklistCardId` already identifies — before comparing
+// two MultiCardEntry[] snapshots for the unsaved-changes check below.
+function normalizeMultiCards(cards: MultiCardEntry[]) {
+  return cards.map(({ checklistCardId, serialNumber, cardFrontImageUrl, cardBackImageUrl, notes }) => ({
+    checklistCardId, serialNumber, cardFrontImageUrl, cardBackImageUrl, notes,
+  }));
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 // iPhones save photos as HEIC by default. It's a valid "image/*" file (so it
@@ -745,6 +755,16 @@ export default function AddGelModal({
   >(null);
   const [isResolvingDuplicate, setIsResolvingDuplicate] = useState(false);
 
+  // Snapshot of `form`/`multiCards` taken right when the modal last
+  // (re)opened — see the pre-fill effect below, which is the only place
+  // this gets written. Compared against the live state in
+  // hasUnsavedChanges() so attemptClose() can tell a pre-filled default
+  // apart from something the user actually typed/selected this session.
+  const baselineRef = useRef<{ form: FormState; multiCards: ReturnType<typeof normalizeMultiCards> } | null>(null);
+  // Shown instead of closing immediately when attemptClose() finds
+  // unsaved progress — "Discard & Close" confirms, "Keep Editing" dismisses.
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
   // "choice": the "are you logging your own gel or someone else's?" screen.
   // "mode": the "Single Gel" vs "Multiple Gels" screen shown next. "form":
   // the actual log form, in whichever of the four SELF/OTHER × Single/
@@ -798,6 +818,10 @@ export default function AddGelModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    let newForm: FormState;
+    let newSelectedCardOption: ChecklistCardOption | null;
+    let newMultiCards: MultiCardEntry[];
+
     if (editingGel) {
       // Editing always resumes directly into the form the gel was
       // originally logged under — there's no reassigning SELF ↔ OTHER,
@@ -814,7 +838,7 @@ export default function AddGelModal({
           p.productType === (editingGel.productType ?? null) &&
           p.productTypeOther === (editingGel.productTypeOther ?? null)
       );
-      setForm({
+      newForm = {
         checklistCardId:   editingGel.cardTemplateId,
         acquisitionMethod: editingGel.acquisitionMethod ?? "",
         productOptionId:   editingGel.productType ? (matchingProduct?.id ?? "") : "",
@@ -830,10 +854,10 @@ export default function AddGelModal({
         breakerProfileId:  editingGel.breakerProfileId    ?? "",
         influencerHandle:  editingGel.influencerHandle    ?? "",
         notes:             editingGel.notes               ?? "",
-      });
+      };
       // GelEntry.cardTemplate has no cardNumber (it's locked anyway, so the
       // search box just won't show the "208/204" prefix in this one case).
-      setSelectedCardOption({
+      newSelectedCardOption = {
         id:            editingGel.cardTemplateId,
         cardNumber:    "",
         playerName:    editingGel.cardTemplate.playerName,
@@ -843,7 +867,10 @@ export default function AddGelModal({
         printRun:      editingGel.cardTemplate.printRun      ?? null,
         variationName: editingGel.cardTemplate.variationName ?? null,
         team:          editingGel.cardTemplate.team          ?? null,
-      });
+      };
+      // Multi mode is unreachable while editing — this value is never
+      // rendered/compared, just kept non-null for type simplicity.
+      newMultiCards = [newMultiCardEntry(null)];
     } else if (claimPrefill) {
       // "Claim this card" — go straight to the SELF/Single form, locked
       // to this specific card+serial. The actual claim is only confirmed
@@ -852,15 +879,15 @@ export default function AddGelModal({
       setStep("form");
       setLogMode("single");
       setLoggedFor("SELF");
-      setForm({
+      newForm = {
         ...EMPTY_FORM,
         checklistCardId: claimPrefill.cardOption.id,
         serialNumber:    String(claimPrefill.serialNumber),
         hitCity:         defaultHitCity    ?? "",
         hitCountry:      defaultHitCountry ?? "",
-      });
-      setSelectedCardOption(claimPrefill.cardOption);
-      setMultiCards([newMultiCardEntry(claimPrefill.cardOption)]);
+      };
+      newSelectedCardOption = claimPrefill.cardOption;
+      newMultiCards = [newMultiCardEntry(claimPrefill.cardOption)];
     } else if (coOwnPrefill) {
       // "Did you buy/pull this?" — straight to the SELF/Single form,
       // locked to this card+serial AND this acquisition method (the
@@ -870,36 +897,78 @@ export default function AddGelModal({
       setStep("form");
       setLogMode("single");
       setLoggedFor("SELF");
-      setForm({
+      newForm = {
         ...EMPTY_FORM,
         checklistCardId:   coOwnPrefill.cardOption.id,
         acquisitionMethod: coOwnPrefill.acquisitionMethod,
         serialNumber:       coOwnPrefill.serialNumber != null ? String(coOwnPrefill.serialNumber) : "",
         hitCity:            defaultHitCity    ?? "",
         hitCountry:         defaultHitCountry ?? "",
-      });
-      setSelectedCardOption(coOwnPrefill.cardOption);
-      setMultiCards([newMultiCardEntry(coOwnPrefill.cardOption)]);
+      };
+      newSelectedCardOption = coOwnPrefill.cardOption;
+      newMultiCards = [newMultiCardEntry(coOwnPrefill.cardOption)];
     } else {
       setStep("choice");
       setLoggedFor("SELF");
       setLogMode("single");
-      setForm({ ...EMPTY_FORM, checklistCardId: preselectedCardOption?.id ?? "" });
-      setSelectedCardOption(preselectedCardOption ?? null);
-      setMultiCards([newMultiCardEntry(preselectedCardOption)]);
+      newForm = { ...EMPTY_FORM, checklistCardId: preselectedCardOption?.id ?? "" };
+      newSelectedCardOption = preselectedCardOption ?? null;
+      newMultiCards = [newMultiCardEntry(preselectedCardOption)];
     }
+
+    setForm(newForm);
+    setSelectedCardOption(newSelectedCardOption);
+    setMultiCards(newMultiCards);
     setError(null);
     setDuplicatePrompt(null);
+    setShowDiscardConfirm(false);
+
+    // Snapshot of "nothing entered yet this session" — compared against
+    // the live form/multiCards whenever the user tries to close, so a
+    // pre-filled value (a remembered default, an editingGel's own values,
+    // a claim/co-own lock) never itself counts as unsaved progress, only
+    // something the user changes on top of it does.
+    baselineRef.current = {
+      form: newForm,
+      multiCards: normalizeMultiCards(newMultiCards),
+    };
   }, [isOpen, editingGel, claimPrefill, coOwnPrefill, preselectedCardOption, products, defaultHitCity, defaultHitCountry]);
+
+  // True once the user has changed anything from what the modal opened
+  // with — a remembered/prefilled default doesn't count on its own, only
+  // something actually typed/selected on top of it. Multi mode compares
+  // `multiCards` (never reflected in `form`); every other mode compares
+  // `form` (which already covers `checklistCardId`, so single-mode card
+  // selection is included).
+  const hasUnsavedChanges = useCallback((): boolean => {
+    const baseline = baselineRef.current;
+    if (!baseline) return false;
+    if (logMode === "multiple") {
+      return JSON.stringify(normalizeMultiCards(multiCards)) !== JSON.stringify(baseline.multiCards);
+    }
+    return JSON.stringify(form) !== JSON.stringify(baseline.form);
+  }, [form, multiCards, logMode]);
+
+  // Routes every "close the modal" trigger (backdrop click, the X button
+  // on any step, Escape, the form's own Cancel button) through one place —
+  // asks for confirmation first when there's unsaved progress, so an
+  // accidental outside click can't silently wipe out a half-filled form.
+  const attemptClose = useCallback(() => {
+    if (hasUnsavedChanges()) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  }, [hasUnsavedChanges, onClose]);
 
   // ── Escape key close ──────────────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") attemptClose();
     }
     if (isOpen) document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, attemptClose]);
 
   // ── Generic field updater for text/select inputs ──────────────────────────
   const setField = useCallback(
@@ -1296,7 +1365,7 @@ export default function AddGelModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onClick={onClose}
+            onClick={attemptClose}
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
             aria-hidden="true"
           />
@@ -1328,7 +1397,7 @@ export default function AddGelModal({
                   </div>
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={attemptClose}
                     className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
                     aria-label="Close modal"
                   >
@@ -1349,15 +1418,24 @@ export default function AddGelModal({
                       // hitYear are explicitly cleared too, in case
                       // "Someone Else's Gel" was clicked first (prefilling
                       // them from its own separate memory) before Back.
-                      setForm((prev) => ({
-                        ...prev,
+                      const resetFields = {
                         acquisitionMethod: "",
                         seller: "",
                         hitCity:    defaultHitCity    ?? "",
                         hitCountry: defaultHitCountry ?? "",
                         hitMonth:   "",
                         hitYear:    "",
-                      }));
+                      };
+                      setForm((prev) => ({ ...prev, ...resetFields }));
+                      // Fold the same reset into the baseline — a remembered
+                      // default applied here isn't "unsaved progress" on its
+                      // own, only something the user changes on top of it is
+                      // (every other field in the baseline, e.g. a card/
+                      // image/notes already entered before bouncing back to
+                      // this screen, is left untouched).
+                      if (baselineRef.current) {
+                        baselineRef.current = { ...baselineRef.current, form: { ...baselineRef.current.form, ...resetFields } };
+                      }
                       setStep("mode");
                     }}
                     className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-blue-500/60 hover:bg-slate-800 text-left transition-all duration-150"
@@ -1382,15 +1460,19 @@ export default function AddGelModal({
                       // default (hitCity stays blank even here) — but DOES
                       // get its own separate remembered source/month/year/
                       // country from this user's own most recent sighting.
-                      setForm((prev) => ({
-                        ...prev,
+                      const resetFields = {
                         acquisitionMethod: defaultSightingMethod  ?? "",
                         seller:            "",
                         hitCity:           "",
                         hitMonth:          defaultSightingMonth   != null ? String(defaultSightingMonth) : "",
                         hitYear:           defaultSightingYear    != null ? String(defaultSightingYear)  : "",
                         hitCountry:        defaultSightingCountry ?? "",
-                      }));
+                      };
+                      setForm((prev) => ({ ...prev, ...resetFields }));
+                      // Same baseline fold as "My Own Gel" above.
+                      if (baselineRef.current) {
+                        baselineRef.current = { ...baselineRef.current, form: { ...baselineRef.current.form, ...resetFields } };
+                      }
                       setStep("mode");
                     }}
                     className="w-full flex items-start gap-3 p-4 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-orange-500/60 hover:bg-slate-800 text-left transition-all duration-150"
@@ -1430,7 +1512,7 @@ export default function AddGelModal({
                   </div>
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={attemptClose}
                     className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
                     aria-label="Close modal"
                   >
@@ -1519,7 +1601,7 @@ export default function AddGelModal({
                 </div>
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={attemptClose}
                   className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150"
                   aria-label="Close modal"
                 >
@@ -1998,7 +2080,7 @@ export default function AddGelModal({
               <div className="flex items-center gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={attemptClose}
                   className="flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 transition-colors duration-150"
                 >
                   Cancel
@@ -2128,6 +2210,61 @@ export default function AddGelModal({
                     : duplicatePrompt.kind === "CLAIM"
                     ? "Claim this Card"
                     : "File a Duplicate"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+
+    {/* ── "Discard unsaved changes?" confirm — shown by attemptClose()
+        whenever the backdrop, an X button, Cancel, or Escape is used while
+        hasUnsavedChanges() is true, so an accidental outside click can't
+        silently wipe out a half-filled form ──────────────────────────── */}
+    <AnimatePresence>
+      {showDiscardConfirm && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm"
+            aria-hidden="true"
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.97 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-[70] w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Discard unsaved changes?"
+          >
+            <div className="p-6 space-y-4">
+              <h2 className="text-base font-bold text-white">Discard this gel?</h2>
+              <p className="text-sm text-slate-400">
+                You have unsaved changes — closing now will lose them. Are you sure you want to close without saving?
+              </p>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowDiscardConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 transition-colors duration-150"
+                >
+                  Keep Editing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDiscardConfirm(false);
+                    onClose();
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-red-900/30"
+                >
+                  Discard &amp; Close
                 </button>
               </div>
             </div>
