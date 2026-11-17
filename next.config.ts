@@ -39,6 +39,13 @@ const nextConfig: NextConfig = {
         hostname: "*.ufs.sh", // UploadThing CDN — card photos, set banners
       },
     ],
+    // UploadThing URLs are content-addressed: editing a gel's photo or a
+    // set's banner uploads a brand-new URL rather than mutating an existing
+    // one, so an already-optimized variant of a given URL is valid forever.
+    // Next's 60s default forces the optimizer to needlessly re-check/re-
+    // transform on every cache miss — a full year avoids that for images
+    // that provably never change.
+    minimumCacheTTL: 31536000,
   },
 
   async headers() {

@@ -9,6 +9,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { ChecklistCardOption, ClaimPrefill, CoOwnPrefill } from "./AddGelModal";
 import { getProductLabel } from "@/lib/productTypes";
 
+// Shared intrinsic size requested from the image optimizer for every
+// checklist-row thumbnail (VariantSubRow's desktop/mobile rows,
+// ChecklistRowItem's desktop grid row and mobile card). The actual displayed
+// box size still differs per row (w-6/h-8, w-7/h-9, w-10/h-[52px] via
+// object-cover) — only the width/height fed to next/image is unified, so
+// the same row.imageUrl viewed across these different layouts collapses
+// onto one cached transformation instead of three.
+const CHECKLIST_THUMB_WIDTH = 40;
+const CHECKLIST_THUMB_HEIGHT = 52;
+
 // Display labels for a "Someone Else's Gel"'s acquisitionMethod — same
 // mapping as YourGels.tsx's ACQUISITION_LABELS, kept in sync by hand since
 // the two components don't share a module.
@@ -1231,7 +1241,7 @@ function VariantSubRow({
             title="View image"
             className="cursor-zoom-in shrink-0"
           >
-            <Image src={row.imageUrl} alt={row.playerName} width={24} height={32} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
+            <Image src={row.imageUrl} alt={row.playerName} width={CHECKLIST_THUMB_WIDTH} height={CHECKLIST_THUMB_HEIGHT} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
           </button>
         ) : (
           <div className="w-6 h-8 shrink-0" />
@@ -1289,7 +1299,7 @@ function VariantSubRow({
             title="View image"
             className="cursor-zoom-in shrink-0"
           >
-            <Image src={row.imageUrl} alt={row.playerName} width={24} height={32} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
+            <Image src={row.imageUrl} alt={row.playerName} width={CHECKLIST_THUMB_WIDTH} height={CHECKLIST_THUMB_HEIGHT} className="w-6 h-8 object-cover rounded-sm border border-slate-700/50" />
           </button>
         ) : (
           <div className="w-6 h-8 shrink-0" />
@@ -1522,8 +1532,8 @@ function ChecklistRowItem({
               <Image
                 src={row.imageUrl}
                 alt={row.playerName}
-                width={28}
-                height={36}
+                width={CHECKLIST_THUMB_WIDTH}
+                height={CHECKLIST_THUMB_HEIGHT}
                 className="w-7 h-9 object-cover rounded-sm border border-slate-700/50 shadow-sm hover:opacity-80 hover:border-slate-500 transition-all duration-150"
               />
             </button>
@@ -1654,7 +1664,7 @@ function ChecklistRowItem({
               title="View image"
               className="cursor-zoom-in shrink-0"
             >
-              <Image src={row.imageUrl} alt={row.playerName} width={40} height={52} className="w-10 h-[52px] object-cover rounded-sm border border-slate-700/50 shadow-sm" />
+              <Image src={row.imageUrl} alt={row.playerName} width={CHECKLIST_THUMB_WIDTH} height={CHECKLIST_THUMB_HEIGHT} className="w-10 h-[52px] object-cover rounded-sm border border-slate-700/50 shadow-sm" />
             </button>
           ) : (
             <div className="w-10 h-[52px] shrink-0 rounded-sm border border-slate-700/40 bg-slate-800/60 flex items-center justify-center">
