@@ -16,11 +16,17 @@ import { rememberGelLocationDefaults, rememberSightingDefaults } from "@/lib/dat
 import { revalidateSetDetailCache } from "@/lib/data/sets";
 import { prepareGelDeletionCleanup } from "@/lib/data/gels";
 import { maybeSendPendingCoOwnershipNotifications } from "@/lib/data/notifications";
+import { cleanupSupersededFile } from "@/lib/uploadthingCleanup";
 
 async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
   return prisma.portfolioCard.findFirst({
     where:  { id: gelId, cardSetId: setId, userId },
-    select: { id: true, checklistCard: { select: { cardTier: true } } },
+    select: {
+      id: true,
+      cardFrontImageUrl: true,
+      cardBackImageUrl: true,
+      checklistCard: { select: { cardTier: true } },
+    },
   });
 }
 
@@ -246,6 +252,15 @@ export async function PATCH(
   if (isVerified) {
     await maybeSendPendingCoOwnershipNotifications(gelId);
   }
+
+  // Whatever image(s) this edit just replaced have nothing left
+  // referencing them — otherwise they'd sit in UploadThing storage
+  // forever (URLs are content-addressed, so a new upload never reuses
+  // the old key).
+  await Promise.all([
+    cleanupSupersededFile(owned.cardFrontImageUrl, portfolioCard.cardFrontImageUrl),
+    cleanupSupersededFile(owned.cardBackImageUrl, portfolioCard.cardBackImageUrl),
+  ]);
 
   revalidateSetDetailCache(setId);
 

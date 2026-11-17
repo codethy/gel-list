@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { createCoOwnershipRequestNotification } from "@/lib/data/notifications";
+import { deleteUploadThingFiles } from "@/lib/uploadthingCleanup";
 
 // ─── DUPLICATE MATCH ────────────────────────────────────────────────────────
 // Two PortfolioCards sharing a checklistCardId + serialNumber means either
@@ -355,19 +356,30 @@ export async function openCoOwnershipFile(
 // (onDelete: SetNull has already nulled the FK by then, so the lookup
 // has to happen first).
 export async function prepareGelDeletionCleanup(gelId: string): Promise<() => Promise<void>> {
-  const file = await prisma.duplicateGelFile.findFirst({
-    where:  { OR: [{ filedGelId: gelId }, { existingGelId: gelId }] },
-    select: { filedGelId: true, existingGelId: true },
-  });
-  if (!file) return async () => {};
+  const [file, gel] = await Promise.all([
+    prisma.duplicateGelFile.findFirst({
+      where:  { OR: [{ filedGelId: gelId }, { existingGelId: gelId }] },
+      select: { filedGelId: true, existingGelId: true },
+    }),
+    prisma.portfolioCard.findUnique({
+      where:  { id: gelId },
+      select: { cardFrontImageUrl: true, cardBackImageUrl: true },
+    }),
+  ]);
 
-  const survivorId = file.filedGelId === gelId ? file.existingGelId : file.filedGelId;
-  if (!survivorId) return async () => {};
+  const survivorId = file && (file.filedGelId === gelId ? file.existingGelId : file.filedGelId);
 
   return async () => {
-    await prisma.portfolioCard.update({
-      where: { id: survivorId },
-      data:  { duplicateFlag: "NONE" },
-    });
+    if (survivorId) {
+      await prisma.portfolioCard.update({
+        where: { id: survivorId },
+        data:  { duplicateFlag: "NONE" },
+      });
+    }
+    // A deleted gel's own photos have nothing left referencing them —
+    // otherwise they'd sit in UploadThing storage forever.
+    if (gel) {
+      await deleteUploadThingFiles([gel.cardFrontImageUrl, gel.cardBackImageUrl]);
+    }
   };
 }

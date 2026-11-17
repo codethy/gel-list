@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
+import { cleanupSupersededFile } from "@/lib/uploadthingCleanup";
 
 export async function PATCH(
   req: NextRequest,
@@ -21,7 +22,7 @@ export async function PATCH(
 
   const existing = await prisma.checklistCard.findUnique({
     where:  { id: cardId },
-    select: { cardSetId: true },
+    select: { cardSetId: true, imageUrl: true },
   });
   if (!existing || existing.cardSetId !== setId) {
     return NextResponse.json({ error: "Card not found in this set" }, { status: 404 });
@@ -38,6 +39,10 @@ export async function PATCH(
     data:  { imageUrl: imageUrl || null },
     select: { id: true, imageUrl: true },
   });
+
+  // Whichever image this just replaced or cleared has nothing left
+  // referencing it — see lib/uploadthingCleanup.ts.
+  await cleanupSupersededFile(existing.imageUrl, card.imageUrl);
 
   return NextResponse.json({ card });
 }

@@ -20,6 +20,7 @@ import { getAdminUserId } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { prepareGelDeletionCleanup } from "@/lib/data/gels";
+import { cleanupSupersededFile } from "@/lib/uploadthingCleanup";
 
 export async function PATCH(
   req: NextRequest,
@@ -34,7 +35,12 @@ export async function PATCH(
 
   const existing = await prisma.portfolioCard.findUnique({
     where:  { id: gelId },
-    select: { id: true, checklistCard: { select: { cardTier: true } } },
+    select: {
+      id: true,
+      cardFrontImageUrl: true,
+      cardBackImageUrl: true,
+      checklistCard: { select: { cardTier: true } },
+    },
   });
   if (!existing) {
     return NextResponse.json({ error: "Gel not found" }, { status: 404 });
@@ -163,6 +169,13 @@ export async function PATCH(
       },
     },
   });
+
+  // Whatever image(s) this edit just replaced have nothing left
+  // referencing them — see lib/uploadthingCleanup.ts.
+  await Promise.all([
+    cleanupSupersededFile(existing.cardFrontImageUrl, portfolioCard.cardFrontImageUrl),
+    cleanupSupersededFile(existing.cardBackImageUrl, portfolioCard.cardBackImageUrl),
+  ]);
 
   // Same field-name compatibility shape as the user-facing edit route
   // (app/api/sets/[id]/gels/[gelId]/route.ts) — AddGelModal's onSuccess

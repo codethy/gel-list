@@ -263,6 +263,19 @@ export async function convertHeicToJpeg(file: File): Promise<Blob> {
   return Array.isArray(result) ? result[0] : result;
 }
 
+// Tells the server to delete an UploadThing file this browser uploaded
+// moments ago but is now replacing, removing, or discarding before it
+// was ever saved anywhere — otherwise it sits in storage forever (see
+// lib/uploadthingCleanup.ts). Fire-and-forget: a failed cleanup call
+// should never block or error out the user's actual action.
+function requestDeleteUpload(url: string): void {
+  fetch("/api/uploadthing/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  }).catch(() => {});
+}
+
 // ─── FORM FIELD COMPONENTS ────────────────────────────────────────────────────
 
 export function Label({ children }: { children: React.ReactNode }) {
@@ -338,10 +351,19 @@ export function ImageUploadField({
   label,
   value,
   onChange,
+  protectedUrl,
 }: {
   label: string;
   value: string;         // the uploaded image's URL, or "" if nothing selected
   onChange: (url: string) => void;
+  // The gel's own already-saved URL for this field, when editing an
+  // existing gel — never deleted by this component, since it's only
+  // superseded once the edit is actually saved (the server-side edit
+  // route cleans it up then, after the update truly commits). Omitted
+  // (or any value that will never equal a real url) for every "create a
+  // new gel" surface, where nothing uploaded here was ever saved before,
+  // so replacing/removing it is always safe to clean up immediately.
+  protectedUrl?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isConverting, setIsConverting] = useState(false);
@@ -400,6 +422,11 @@ export function ImageUploadField({
         alert("Could not upload this image. Please try again.");
         return;
       }
+      // The field's previous value is about to be replaced — clean it up
+      // unless it's the gel's own already-saved image (see protectedUrl).
+      if (value && value !== protectedUrl) {
+        requestDeleteUpload(value);
+      }
       onChange(result[0].ufsUrl);
     } catch {
       alert("Could not upload this image. Please try again.");
@@ -446,7 +473,12 @@ export function ImageUploadField({
               </button>
               <button
                 type="button"
-                onClick={() => onChange("")}
+                onClick={() => {
+                  if (value && value !== protectedUrl) {
+                    requestDeleteUpload(value);
+                  }
+                  onChange("");
+                }}
                 className="text-[11px] text-red-400 hover:text-red-300 font-semibold transition-colors"
               >
                 Remove
@@ -948,6 +980,28 @@ export default function AddGelModal({
     }
     return JSON.stringify(form) !== JSON.stringify(baseline.form);
   }, [form, multiCards, logMode]);
+
+  // Called right before discarding the whole form (the "Discard & Close"
+  // confirm button) — any image already uploaded to UploadThing this
+  // session but never actually saved anywhere is about to become
+  // unreachable, so clean it up now rather than leaving it orphaned.
+  // `form`'s two fields are only deleted when they differ from the
+  // baseline (an editingGel's own already-saved photo must survive a
+  // discarded edit); every multiCards entry is always fresh-this-session
+  // (there's no "edit multiple gels" flow), so no baseline check needed.
+  const discardUploadedImages = useCallback(() => {
+    const baseline = baselineRef.current;
+    if (form.cardFrontImageUrl && form.cardFrontImageUrl !== baseline?.form.cardFrontImageUrl) {
+      requestDeleteUpload(form.cardFrontImageUrl);
+    }
+    if (form.cardBackImageUrl && form.cardBackImageUrl !== baseline?.form.cardBackImageUrl) {
+      requestDeleteUpload(form.cardBackImageUrl);
+    }
+    for (const entry of multiCards) {
+      if (entry.cardFrontImageUrl) requestDeleteUpload(entry.cardFrontImageUrl);
+      if (entry.cardBackImageUrl) requestDeleteUpload(entry.cardBackImageUrl);
+    }
+  }, [form, multiCards]);
 
   // Routes every "close the modal" trigger (backdrop click, the X button
   // on any step, Escape, the form's own Cancel button) through one place —
@@ -1839,11 +1893,13 @@ export default function AddGelModal({
                     label="Card Front Image *"
                     value={form.cardFrontImageUrl}
                     onChange={setImageField("cardFrontImageUrl")}
+                    protectedUrl={editingGel?.cardFrontImageUrl ?? undefined}
                   />
                   <ImageUploadField
                     label="Card Back Image"
                     value={form.cardBackImageUrl}
                     onChange={setImageField("cardBackImageUrl")}
+                    protectedUrl={editingGel?.cardBackImageUrl ?? undefined}
                   />
 
                   {/* ── Notes ────────────────────────────────────────────── */}
@@ -2259,6 +2315,7 @@ export default function AddGelModal({
                 <button
                   type="button"
                   onClick={() => {
+                    discardUploadedImages();
                     setShowDiscardConfirm(false);
                     onClose();
                   }}

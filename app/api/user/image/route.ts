@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { cleanupSupersededFile } from "@/lib/uploadthingCleanup";
 
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -28,11 +29,20 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
   }
 
+  const previous = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { profileImage: true },
+  });
+
   const user = await prisma.user.update({
     where: { id: session.user.id },
     data: { profileImage },
     select: { profileImage: true },
   });
+
+  // Whichever photo this just replaced or cleared has nothing left
+  // referencing it — see lib/uploadthingCleanup.ts.
+  await cleanupSupersededFile(previous?.profileImage, user.profileImage);
 
   return NextResponse.json({ profileImage: user.profileImage });
 }

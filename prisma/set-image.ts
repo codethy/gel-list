@@ -33,6 +33,7 @@ import { Pool }          from "pg";
 import { PrismaPg }      from "@prisma/adapter-pg";
 import { PrismaClient }  from "@prisma/client";
 import { UTApi }         from "uploadthing/server";
+import { deleteUploadThingFile } from "../lib/uploadthingCleanup";
 
 if (!process.env.DATABASE_URL) {
   console.error("\n❌ ERROR: DATABASE_URL was not found.");
@@ -76,7 +77,7 @@ async function main() {
 
   const set = await prisma.cardSet.findUnique({
     where:  { id: setId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, imageUrl: true },
   });
 
   if (!set) {
@@ -102,6 +103,11 @@ async function main() {
     where: { id: setId },
     data:  { imageUrl: result.data.ufsUrl },
   });
+
+  // The old banner (if any) has nothing left referencing it now.
+  if (set.imageUrl) {
+    await deleteUploadThingFile(set.imageUrl);
+  }
 
   console.log(`✅ Set image updated for "${set.name}": ${result.data.ufsUrl}\n`);
 }
