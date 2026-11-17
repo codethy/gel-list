@@ -42,7 +42,7 @@ function CategorySection({
         </h2>
         {seeAllHref && <SeeAllLink href={seeAllHref} />}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
         {sets.map((set, i) => (
           // 5 matches this grid's widest breakpoint (xl:grid-cols-5) — the
           // most cards that could ever be in the first visible row.
@@ -60,7 +60,7 @@ function SkeletonLayout() {
       {["Sports", "Entertainment", "Trading Card Games"].map((label) => (
         <section key={label}>
           <div className="h-5 w-40 bg-[#1e1e1e] rounded animate-pulse mb-4" />
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
@@ -117,6 +117,7 @@ function HomeContent() {
     subcategories: new Set<string>(),
     years:         new Set<number>(),
   });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // No filter/search active — the default landing view, showing each
   // category's admin-curated "featured" sets (see /admin/homepage) instead
@@ -225,36 +226,58 @@ function HomeContent() {
   const grouped = groupByCategory(sets);
   const isEmpty = !loading && sets.length === 0;
 
+  const hasActiveFilters = filters.subcategories.size > 0 || filters.years.size > 0;
+
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">
 
       {/* ── Sidebar ── */}
-      <Sidebar filters={filters} onChange={setFilters} />
+      <Sidebar
+        filters={filters}
+        onChange={setFilters}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       {/* ── Main Content ── */}
-      <main className="flex-1 px-8 py-8 overflow-y-auto">
+      <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8 overflow-y-auto">
 
-        <div className="mb-8">
-          <h1 className="text-3xl font-black text-white tracking-tight">
-            Browse Sets
-          </h1>
-          {searchQuery ? (
-            <p className="text-zinc-500 text-sm mt-1">
-              Results for &quot;{searchQuery}&quot;
-              {!loading && ` — ${sets.length}${hasMore ? "+" : ""} found`}
-              {" · "}
-              <Link href="/" className="text-zinc-400 hover:text-white underline underline-offset-2">
-                Clear
-              </Link>
-            </p>
-          ) : (
-            !loading && !isEmpty && !isCurated && (
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-white tracking-tight">
+              Browse Sets
+            </h1>
+            {searchQuery ? (
               <p className="text-zinc-500 text-sm mt-1">
-                {sets.length} set{sets.length !== 1 ? "s" : ""}
-                {hasMore ? "+" : ""} loaded
+                Results for &quot;{searchQuery}&quot;
+                {!loading && ` — ${sets.length}${hasMore ? "+" : ""} found`}
+                {" · "}
+                <Link href="/" className="text-zinc-400 hover:text-white underline underline-offset-2">
+                  Clear
+                </Link>
               </p>
-            )
-          )}
+            ) : (
+              !loading && !isEmpty && !isCurated && (
+                <p className="text-zinc-500 text-sm mt-1">
+                  {sets.length} set{sets.length !== 1 ? "s" : ""}
+                  {hasMore ? "+" : ""} loaded
+                </p>
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open filters"
+            className="lg:hidden relative flex items-center gap-2 px-3 py-2 rounded-lg border border-[#1e1e1e] bg-[#161616] text-sm font-semibold text-white hover:border-zinc-600 transition-colors shrink-0"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            Filters
+            {hasActiveFilters && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-500" />}
+          </button>
         </div>
 
         {loading && sets.length === 0 && <SkeletonLayout />}
@@ -314,7 +337,7 @@ function HomeContent() {
         )}
 
         {loadingMore && (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 mt-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonCard key={`more-skel-${i}`} />
             ))}

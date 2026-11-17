@@ -19,6 +19,8 @@ export interface SidebarFilters {
 interface SidebarProps {
   filters:  SidebarFilters;
   onChange: (filters: SidebarFilters) => void;
+  isOpen:   boolean;
+  onClose:  () => void;
 }
 
 // ─── Checkbox Component ─────────────────────────────────────────────────────
@@ -85,7 +87,7 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 // ─── Main Sidebar ───────────────────────────────────────────────────────────
-export default function Sidebar({ filters, onChange }: SidebarProps) {
+export default function Sidebar({ filters, onChange, isOpen, onClose }: SidebarProps) {
   // All taxonomy sections start expanded
   const [expanded, setExpanded] = useState<Set<string>>(
     new Set(TAXONOMY.map((t) => t.id))
@@ -157,22 +159,47 @@ export default function Sidebar({ filters, onChange }: SidebarProps) {
     filters.subcategories.size > 0 || filters.years.size > 0;
 
   return (
-    <aside className="w-60 shrink-0 bg-[#0f0f0f] border-r border-[#1e1e1e] min-h-[calc(100vh-4rem)] flex flex-col overflow-y-auto">
+    <>
+      {/* ── Mobile backdrop ── */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-[100] w-72 max-w-[85vw] shrink-0 bg-[#0f0f0f] border-r border-[#1e1e1e] flex flex-col overflow-y-auto transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:static lg:z-auto lg:translate-x-0 lg:w-60 lg:min-h-[calc(100vh-4rem)]`}
+      >
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-[#1e1e1e]">
         <span className="text-xs font-bold tracking-widest text-zinc-400 uppercase">
           Filter
         </span>
-        {hasActiveFilters && (
+        <div className="flex items-center gap-3">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => onChange({ subcategories: new Set(), years: new Set() })}
+              className="text-[11px] text-zinc-500 hover:text-white transition-colors"
+            >
+              Clear all
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => onChange({ subcategories: new Set(), years: new Set() })}
-            className="text-[11px] text-zinc-500 hover:text-white transition-colors"
+            onClick={onClose}
+            aria-label="Close filters"
+            className="lg:hidden text-zinc-400 hover:text-white transition-colors p-1"
           >
-            Clear all
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
-        )}
+        </div>
       </div>
 
       <div className="flex flex-col flex-1 pb-8">
@@ -333,6 +360,7 @@ export default function Sidebar({ filters, onChange }: SidebarProps) {
         </div>
 
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
