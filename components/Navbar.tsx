@@ -21,9 +21,17 @@ export default function Navbar() {
         </span>
       </Link>
 
-      {/* Search Bar */}
-      <div className="flex-1 max-w-xl mx-auto">
-        <SetSearchBar />
+      {/* Search Bar + EQL Tracker */}
+      <div className="flex-1 flex items-center gap-4 max-w-2xl mx-auto">
+        <div className="flex-1">
+          <SetSearchBar />
+        </div>
+        <Link
+          href="/eql-tracker"
+          className="text-sm font-bold text-white hover:text-blue-400 transition-colors shrink-0 whitespace-nowrap"
+        >
+          EQL Tracker
+        </Link>
       </div>
 
       {/* Right side */}

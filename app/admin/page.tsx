@@ -90,10 +90,18 @@ export default async function AdminHomePage() {
 
         <Link
           href="/admin/breaker-profiles"
-          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-4 hover:border-slate-500 transition-colors"
         >
           <p className="font-semibold text-white">Breaker Profiles</p>
           <p className="text-sm text-slate-400">Manage breaker profiles and see how many boxes/gels each has attributed.</p>
+        </Link>
+
+        <Link
+          href="/admin/eql-tracker"
+          className="block rounded-xl bg-slate-800/60 border border-slate-700/50 px-5 py-4 mb-8 hover:border-slate-500 transition-colors"
+        >
+          <p className="font-semibold text-white">EQL Tracker</p>
+          <p className="text-sm text-slate-400">Enroll sets with an EQL drop and configure their options, limits, and print runs.</p>
         </Link>
 
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">

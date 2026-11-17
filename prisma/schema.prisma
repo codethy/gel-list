@@ -122,6 +122,7 @@ model User {
   productOpenings     ProductOpening[]
   filedDuplicateFiles DuplicateGelFile[] @relation("DuplicateFiledBy")
   notifications       Notification[]
+  eqlResults          EqlResult[]
 }
 
 // ─── TAXONOMY ───────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ model CardSet {
   featuredOn      HomepageFeaturedSet[]
   productOpenings ProductOpening[]
   yourGelsPins    YourGelsPin[]
+  eqlSet          EqlSet?
 }
 
 // Admin-curated selection of sets shown on the home page for each category
@@ -442,6 +444,80 @@ model BreakerProductOpening {
 
   @@index([breakerProfileId])
   @@index([setProductId])
+}
+
+// ─── EQL TRACKER ──────────────────────────────────────────────────────────
+// Crowd-sourced tracking of "EQL" (early-qualification-list / raffle-style)
+// product drops — admin enrolls a set and defines its options (e.g. Hobby
+// Box, Hobby Case) via EqlProduct; any visitor (signed in or not) can then
+// self-report whether their entry for one of those options succeeded or
+// failed via EqlResult. See app/eql-tracker/page.tsx and
+// app/admin/eql-tracker/page.tsx.
+
+enum EqlResultStatus {
+  SUCCESS
+  FAILED
+}
+
+model EqlSet {
+  id        String   @id @default(cuid())
+  cardSetId String   @unique
+  createdAt DateTime @default(now())
+
+  cardSet  CardSet      @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+  products EqlProduct[]
+  results  EqlResult[]
+}
+
+// One EQL "option" within a drop (e.g. Hobby Box, Hobby Case). maxQuantity
+// caps how many units a single EqlResult submission for this option may
+// claim. estimatedPrintRun is optional — a product that's really just a
+// repackaging of the same pool as another option in the same drop (e.g.
+// Hobby Case alongside Hobby Box) is added with no print run of its own.
+model EqlProduct {
+  id                String      @id @default(cuid())
+  eqlSetId          String
+  productType       ProductType
+  productTypeOther  String?
+  maxQuantity       Int
+  estimatedPrintRun Int?
+  // How many boxes one unit of this option is worth — only meaningful
+  // when productType is CASE ("Hobby Case"); required for CASE options,
+  // null for everything else (which is already box-denominated, so each
+  // unit is worth exactly 1 box). Powers EqlSetDetail.boxesWon, which
+  // sums every SUCCESS result's quantity * (boxesPerCase ?? 1).
+  boxesPerCase      Int?
+  sortOrder         Int         @default(0)
+  createdAt         DateTime    @default(now())
+
+  eqlSet  EqlSet      @relation(fields: [eqlSetId], references: [id], onDelete: Cascade)
+  results EqlResult[]
+
+  @@index([eqlSetId])
+}
+
+// One user-submitted EQL result — one "Track" click, one row. Always
+// counts as 1 toward its set's success/fail total regardless of quantity
+// — a user who entered two different options in the same drop submits
+// twice, producing two rows. userId is nullable (tracking doesn't require
+// signing in) but populated from the session when signed in, so "my EQL
+// history" can be queried directly.
+model EqlResult {
+  id           String          @id @default(cuid())
+  eqlSetId     String
+  eqlProductId String
+  quantity     Int
+  status       EqlResultStatus
+  name         String          @db.VarChar(100)
+  userId       String?
+  createdAt    DateTime        @default(now())
+
+  eqlSet     EqlSet     @relation(fields: [eqlSetId], references: [id], onDelete: Cascade)
+  eqlProduct EqlProduct @relation(fields: [eqlProductId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eqlSetId, status])
+  @@index([userId])
 }
 
 // One "kind" of pack bundled inside a unit of a SetProduct — most products

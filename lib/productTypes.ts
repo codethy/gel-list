@@ -6,6 +6,7 @@
 export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "HOBBY_BOX", label: "Hobby Box" },
   { value: "HOBBY_PACK", label: "Hobby Pack" },
+  { value: "CASE", label: "Hobby Case" },
   { value: "BLASTER_BOX", label: "Blaster Box" },
   { value: "BLASTER_PACK", label: "Blaster Pack" },
   { value: "JUMBO_BOX", label: "Jumbo Box" },
