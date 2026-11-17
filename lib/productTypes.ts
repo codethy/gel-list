@@ -29,6 +29,8 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "VAULT", label: "Vault" },
   { value: "SHOWDOWN_DECK", label: "Showdown Deck" },
   { value: "SLEEVED_PACK", label: "Sleeved Booster Pack" },
+  { value: "COLLECTORS_BOX", label: "Collector's Box" },
+  { value: "HAPPY_LITTLE_BOX", label: "Happy Little Box" },
   { value: "OTHER", label: "Other" },
 ];
 
