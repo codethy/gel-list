@@ -514,7 +514,7 @@ function LoggedGelsModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.97 }}
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 w-full sm:max-w-lg max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
+            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 sm:w-full sm:max-w-lg max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
             role="dialog"
             aria-modal="true"
             aria-label={`Logged gels for ${row.playerName}`}
@@ -866,7 +866,7 @@ export function CardImageModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.97 }}
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-[60] w-full sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
+            className="fixed inset-x-4 bottom-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-[60] sm:w-full sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/60"
             role="dialog"
             aria-modal="true"
             aria-label={`Card image for ${target.title}`}
@@ -1120,7 +1120,7 @@ function FilterSelect({ value, onChange, options, placeholder }: {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150 cursor-pointer"
+      className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150 cursor-pointer"
       aria-label={placeholder}
     >
       {options.map((o) => (
@@ -1855,7 +1855,7 @@ export default function ChecklistTable({
       {/* Filters */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
         <SearchBar value={search} onChange={handleSearchChange} />
-        <div className="flex gap-2">
+        <div className="flex gap-2 min-w-0">
           <FilterSelect value={filterType} onChange={handleTypeChange} options={typeOptions} placeholder={category === "TCG" ? "Filter by rarity" : "Filter by type"} />
           {availableTeams.length > 0 && (
             <FilterSelect value={filterTeam} onChange={handleTeamChange} options={teamOptions} placeholder="Filter by team" />
