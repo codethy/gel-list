@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { Category } from "@prisma/client";
 import { resolveSubCategory, SUBCATEGORY_TO_CATEGORY } from "@/lib/taxonomy";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
+import { revalidateCategoryCaches } from "@/lib/data/homepage";
 import { getProductLabel } from "@/lib/productTypes";
 import { getBreakerOptionsForSet } from "@/lib/data/breakerProfiles";
 
@@ -111,6 +112,10 @@ export async function PATCH(
   });
 
   revalidateSetDetailCache(setId);
+  // Category/subCategory may have just changed, which changes which
+  // /categories/[category] section (and possibly the home page's featured
+  // rail) this set shows up in.
+  revalidateCategoryCaches();
 
   return NextResponse.json({
     set: { ...set, category: String(set.category) },

@@ -30,6 +30,11 @@ export default function EqlTrackerClient({
 }) {
   const [query, setQuery] = useState("");
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
+  // Seeded from the server-rendered initial stats, then kept in sync
+  // locally whenever the signed-in visitor logs a new result (see
+  // onResultLogged below) — so "Your EQL History" updates immediately
+  // without needing a page refresh.
+  const [liveUserStats, setLiveUserStats] = useState(userStats);
 
   const trimmed = query.trim().toLowerCase();
   const filtered = trimmed ? sets.filter((s) => s.setName.toLowerCase().includes(trimmed)) : sets;
@@ -66,12 +71,12 @@ export default function EqlTrackerClient({
 
         <div className="shrink-0 w-56 self-start">
           {isSignedIn ? (
-            userStats && (
+            liveUserStats && (
               <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 px-4 py-3">
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Your EQL History</p>
-                <p className="text-sm text-slate-300">{userStats.attempts} Attempt{userStats.attempts === 1 ? "" : "s"}</p>
-                <p className="text-sm text-emerald-400">{userStats.successCount} Selected</p>
-                <p className="text-sm text-red-400">{userStats.failCount} Not Selected</p>
+                <p className="text-sm text-slate-300">{liveUserStats.attempts} Attempt{liveUserStats.attempts === 1 ? "" : "s"}</p>
+                <p className="text-sm text-emerald-400">{liveUserStats.successCount} Selected</p>
+                <p className="text-sm text-red-400">{liveUserStats.failCount} Not Selected</p>
               </div>
             )
           ) : (
@@ -86,7 +91,11 @@ export default function EqlTrackerClient({
         </div>
       </div>
 
-      <EqlSetModal eqlSetId={activeSetId} onClose={() => setActiveSetId(null)} />
+      <EqlSetModal
+        eqlSetId={activeSetId}
+        onClose={() => setActiveSetId(null)}
+        onResultLogged={setLiveUserStats}
+      />
     </div>
   );
 }

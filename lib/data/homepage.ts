@@ -161,3 +161,18 @@ export async function reorderFeaturedSets(category: Category, orderedCardSetIds:
   );
   revalidateTag(HOMEPAGE_FEATURED_TAG, { expire: 0 });
 }
+
+// Instant invalidation for both caches above, called whenever a CardSet is
+// created or has its category/subCategory changed — both change which
+// /categories/[category] section (and potentially the home page's featured
+// rail) it shows up in. Called directly from in-app mutations (the PATCH
+// route below is within request context, so it can call revalidateTag
+// itself); for prisma/import-checklist.ts and prisma/create-set.ts, which
+// create CardSets as plain CLI scripts outside any Next.js request, see
+// app/api/admin/revalidate-sets/route.ts instead — revalidateTag only works
+// inside a Server Action or Route Handler, so an external script has to hit
+// that endpoint over HTTP to reach this same function.
+export function revalidateCategoryCaches(): void {
+  revalidateTag(CATEGORY_OVERVIEW_TAG, { expire: 0 });
+  revalidateTag(HOMEPAGE_FEATURED_TAG, { expire: 0 });
+}

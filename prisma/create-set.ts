@@ -35,6 +35,26 @@ const pool    = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma  = new PrismaClient({ adapter } as any);
 
+// Running as a plain CLI script outside any Next.js request means this
+// can't call revalidateTag() directly — see app/api/admin/revalidate-sets/
+// route.ts. Best-effort: if the app isn't reachable, just warn and move on.
+async function triggerCategoryCacheRevalidation(): Promise<void> {
+  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  try {
+    const res = await fetch(`${baseUrl}/api/admin/revalidate-sets`, {
+      method:  "POST",
+      headers: { Authorization: `Bearer ${process.env.NEXTAUTH_SECRET}` },
+    });
+    if (res.ok) {
+      console.log("   ✅ Category/home page caches invalidated — the new set will show up without a manual wait.");
+    } else {
+      console.log(`   ⚠️  Could not invalidate caches (HTTP ${res.status}) — it'll still appear within a few minutes.`);
+    }
+  } catch {
+    console.log("   ⚠️  Could not reach the app to invalidate caches (is it running?) — it'll still appear within a few minutes.");
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -79,6 +99,8 @@ async function main() {
       // imageUrl and description are optional (String?) — omitted intentionally
     },
   });
+
+  await triggerCategoryCacheRevalidation();
 
   // ── Success — print everything clearly ────────────────────────────────────
   console.log("✅ CardSet created successfully!\n");

@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import {
   createEqlResults,
+  getUserEqlStats,
   EqlProductNotFoundError,
   EqlQuantityOutOfRangeError,
 } from "@/lib/data/eqlTracker";
@@ -52,7 +53,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const detail = await createEqlResults(eqlSetId, { entries, name, userId });
-    return NextResponse.json({ detail }, { status: 201 });
+    // Also return the submitter's own updated aggregate stats, if signed
+    // in, so the "Your EQL History" panel can update immediately without
+    // a page refresh (see EqlTrackerClient.tsx's onResultLogged).
+    const userStats = userId ? await getUserEqlStats(userId) : null;
+    return NextResponse.json({ detail, userStats }, { status: 201 });
   } catch (error) {
     if (error instanceof EqlProductNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });

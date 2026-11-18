@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { Label, Input } from "@/components/set-detail/AddGelModal";
+import type { UserEqlStats } from "@/lib/data/eqlTracker";
 
 interface EqlProductRow {
   id: string;
@@ -61,9 +62,14 @@ function blankRows(products: EqlProductRow[]): Record<string, RowState> {
 export default function EqlSetModal({
   eqlSetId,
   onClose,
+  onResultLogged,
 }: {
   eqlSetId: string | null;
   onClose: () => void;
+  // Called with the submitter's freshly-updated aggregate stats right
+  // after a successful Track submission — lets EqlTrackerClient update
+  // "Your EQL History" live, without the visitor needing to refresh.
+  onResultLogged?: (stats: UserEqlStats) => void;
 }) {
   const { data: session } = useSession();
 
@@ -161,6 +167,7 @@ export default function EqlSetModal({
       setDetail(data.detail);
       setRows(blankRows(data.detail.products));
       setLogTab("SUCCESS");
+      if (data.userStats) onResultLogged?.(data.userStats);
     } finally {
       setSubmitting(false);
     }

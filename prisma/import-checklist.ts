@@ -245,6 +245,31 @@ const pool    = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma  = new PrismaClient({ adapter } as any);
 
+// Running as a plain CLI script outside any Next.js request means this
+// can't call revalidateTag() directly (see app/api/admin/revalidate-sets/
+// route.ts) — without this, a newly-created or newly-imported set wouldn't
+// show up on /categories/[category] or the home page until that cache's own
+// time-based safety net expires, up to a few minutes later. Best-effort:
+// if the dev server isn't running (or this runs against a deployed DB from
+// somewhere other than that deployment), just warn and move on — the
+// import itself already succeeded.
+async function triggerCategoryCacheRevalidation(): Promise<void> {
+  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  try {
+    const res = await fetch(`${baseUrl}/api/admin/revalidate-sets`, {
+      method:  "POST",
+      headers: { Authorization: `Bearer ${process.env.NEXTAUTH_SECRET}` },
+    });
+    if (res.ok) {
+      console.log("   ✅ Category/home page caches invalidated — the new set will show up without a manual wait.");
+    } else {
+      console.log(`   ⚠️  Could not invalidate caches (HTTP ${res.status}) — it'll still appear within a few minutes.`);
+    }
+  } catch {
+    console.log("   ⚠️  Could not reach the app to invalidate caches (is it running?) — it'll still appear within a few minutes.");
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Valid enum values — derived directly from the Prisma-generated enums.
 // This means if you ever add a new value to the schema, it automatically
@@ -717,6 +742,10 @@ async function main() {
     where: { id: cardSet!.id },
     data:  { totalCardsInSet: totalInserted },
   });
+
+  if (!isDryRun) {
+    await triggerCategoryCacheRevalidation();
+  }
 
   // ── Final summary ──────────────────────────────────────────────────────────
   console.log("═".repeat(60));
