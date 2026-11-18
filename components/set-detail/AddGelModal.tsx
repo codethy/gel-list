@@ -1439,6 +1439,11 @@ export default function AddGelModal({
             {/* Top accent bar */}
             <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-violet-500 to-purple-600 rounded-t-2xl" />
 
+            {/* Drag-handle affordance — mobile bottom sheet only */}
+            <div className="sm:hidden flex justify-center pt-2">
+              <div className="w-10 h-1 rounded-full bg-slate-600/60" />
+            </div>
+
             {step === "choice" ? (
               <div className="p-6 space-y-5">
                 {/* ── Header ─────────────────────────────────────────────── */}
@@ -2133,11 +2138,11 @@ export default function AddGelModal({
               </AnimatePresence>
 
               {/* ── Submit buttons ───────────────────────────────────────── */}
-              <div className="flex items-center gap-3 pt-1">
+              <div className="flex flex-col-reverse sm:flex-row items-center gap-3 pt-1">
                 <button
                   type="button"
                   onClick={attemptClose}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 transition-colors duration-150"
+                  className="w-full sm:w-auto sm:flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 transition-colors duration-150"
                 >
                   Cancel
                 </button>
@@ -2156,7 +2161,7 @@ export default function AddGelModal({
                         (productRequired && !form.productOptionId) ||
                         (category !== "TCG" && selectedCardOption?.cardTier === "NUMBERED" && !form.serialNumber))
                   }
-                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"
+                  className="w-full sm:w-auto sm:flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"
                 >
                   {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Log Gel"}
                 </button>

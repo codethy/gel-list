@@ -1092,7 +1092,7 @@ export function CardImageModal({
 
 function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div className="relative flex-1 min-w-[180px]">
+    <div className="relative w-full sm:flex-1 sm:min-w-[180px]">
       <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8" />
         <path d="M21 21l-4.35-4.35" />
@@ -1853,12 +1853,14 @@ export default function ChecklistTable({
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
         <SearchBar value={search} onChange={handleSearchChange} />
-        <FilterSelect value={filterType} onChange={handleTypeChange} options={typeOptions} placeholder={category === "TCG" ? "Filter by rarity" : "Filter by type"} />
-        {availableTeams.length > 0 && (
-          <FilterSelect value={filterTeam} onChange={handleTeamChange} options={teamOptions} placeholder="Filter by team" />
-        )}
+        <div className="flex gap-2">
+          <FilterSelect value={filterType} onChange={handleTypeChange} options={typeOptions} placeholder={category === "TCG" ? "Filter by rarity" : "Filter by type"} />
+          {availableTeams.length > 0 && (
+            <FilterSelect value={filterTeam} onChange={handleTeamChange} options={teamOptions} placeholder="Filter by team" />
+          )}
+        </div>
       </div>
 
       {/* Table — overflow-x-auto allows horizontal scroll on narrow screens

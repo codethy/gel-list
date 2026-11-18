@@ -313,7 +313,7 @@ export function GelCard({
         {(onEdit || onDelete) && (
         <div
           className={`absolute top-2 left-2 flex items-center gap-1 transition-opacity duration-150 ${
-            confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            confirmingDelete ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
           }`}
         >
           {confirmingDelete ? (
@@ -325,7 +325,7 @@ export function GelCard({
                 disabled={isDeleting}
                 aria-label="Confirm delete"
                 title="Confirm delete"
-                className="w-5 h-5 flex items-center justify-center rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50 transition-colors duration-150"
+                className="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50 transition-colors duration-150"
               >
                 {isDeleting ? (
                   <div className="w-2.5 h-2.5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
@@ -341,7 +341,7 @@ export function GelCard({
                 disabled={isDeleting}
                 aria-label="Cancel delete"
                 title="Cancel"
-                className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-600/40 text-slate-300 hover:bg-slate-600/60 disabled:opacity-50 transition-colors duration-150"
+                className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-600/40 text-slate-300 hover:bg-slate-600/60 disabled:opacity-50 transition-colors duration-150"
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -355,7 +355,7 @@ export function GelCard({
                 onClick={handleEditClick}
                 aria-label="Edit this gel"
                 title="Edit"
-                className="w-6 h-6 flex items-center justify-center rounded-md bg-black/70 backdrop-blur-sm border border-white/10 text-slate-300 hover:text-white hover:bg-black/85 transition-colors duration-150"
+                className="w-8 h-8 flex items-center justify-center rounded-md bg-black/70 backdrop-blur-sm border border-white/10 text-slate-300 hover:text-white hover:bg-black/85 transition-colors duration-150"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 20h9" />
@@ -367,7 +367,7 @@ export function GelCard({
                 onClick={handleDeleteIconClick}
                 aria-label="Delete this gel"
                 title="Delete"
-                className="w-6 h-6 flex items-center justify-center rounded-md bg-black/70 backdrop-blur-sm border border-white/10 text-slate-300 hover:text-red-400 hover:bg-black/85 transition-colors duration-150"
+                className="w-8 h-8 flex items-center justify-center rounded-md bg-black/70 backdrop-blur-sm border border-white/10 text-slate-300 hover:text-red-400 hover:bg-black/85 transition-colors duration-150"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="3 6 5 6 21 6" />
@@ -535,7 +535,7 @@ export default function YourGels({ gels, allGels, pinnedIds, maxDisplay, setId, 
   return (
     <section className="space-y-4">
       {/* ── Section Header ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-white">Your Gels</h2>
           {allGels.length > 0 && (
@@ -546,7 +546,7 @@ export default function YourGels({ gels, allGels, pinnedIds, maxDisplay, setId, 
         </div>
 
         {allGels.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onAddGelClick}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-600/50 hover:border-slate-500/60 transition-all duration-150"

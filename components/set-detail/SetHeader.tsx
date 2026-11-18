@@ -125,7 +125,7 @@ export default function SetHeader({
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
 
           {/* ── Set Info ─────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0">
+          <div className="order-2 md:order-1 flex-1 min-w-0">
             {/* Breadcrumb-style meta */}
             <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1.5">
               {year} &bull; {subCategoryLabel(category, sport).toUpperCase()} &bull; {manufacturer}
@@ -137,7 +137,7 @@ export default function SetHeader({
             </h1>
 
             {/* Stat pills row */}
-            <div className="flex flex-wrap gap-2 mb-6">
+            <div className="flex gap-2 mb-6 overflow-x-auto sm:flex-wrap sm:overflow-visible">
               <StatPill label={chasesInSetLabel} value={chasesInSetValue} />
               <StatPill label="Chases Pulled" value={chasesPulled} />
               <StatPill label="Your Gels" value={userGelCount} />
@@ -165,7 +165,7 @@ export default function SetHeader({
           </div>
 
           {/* ── Set Image + Packs Opened ───────────────────────────────── */}
-          <div className="shrink-0 flex flex-col sm:flex-row items-center sm:items-start gap-3 self-center md:self-start">
+          <div className="order-1 md:order-2 shrink-0 flex flex-col sm:flex-row items-center sm:items-start gap-3 self-center md:self-start">
             {/* Always rendered so every set's banner has the same shape.
                 Curated only by the developer, directly in the database —
                 see prisma/set-image.ts — there is no in-app upload control. */}

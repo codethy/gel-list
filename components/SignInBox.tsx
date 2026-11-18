@@ -11,10 +11,10 @@ import { signIn } from "next-auth/react";
 
 export default function SignInBox({ callbackUrl = "/" }: { callbackUrl?: string }) {
   return (
-    <div className="w-full max-w-md px-8 py-12 flex flex-col items-center gap-8 rounded-2xl border border-white bg-black text-white">
+    <div className="w-full max-w-md px-6 py-8 sm:px-8 sm:py-12 flex flex-col items-center gap-6 sm:gap-8 rounded-2xl border border-white bg-black text-white">
       {/* Logo / App Name */}
       <div className="flex flex-col items-center gap-2">
-        <h1 className="text-5xl font-black tracking-tight text-white">
+        <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
           Gel Cards
         </h1>
         <p className="text-zinc-400 text-sm tracking-widest uppercase">
