@@ -14,6 +14,7 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "BREAKERS_DELIGHT_BOX", label: "Breakers Delight Box" },
   { value: "HANGER_BOX", label: "Hanger Box" },
   { value: "HANGER_PACK", label: "Hanger Pack" },
+  { value: "FAT_PACK", label: "Fat Pack" },
   { value: "BOOSTER_PACK", label: "Booster Pack" },
   { value: "ETB", label: "ETB" },
   { value: "BOOSTER_BUNDLE", label: "Booster Bundle" },

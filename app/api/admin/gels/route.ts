@@ -2,15 +2,21 @@
 //
 // GET — one page of the Gel Review Queue (see components/admin/
 // AdminGelsClient.tsx) — a flat, oldest-first list split by verification
-// status, searchable by card name/number or set name. Admin-only (see
-// lib/admin.ts).
+// status, filterable by set, player/character name, variation name,
+// parallel, print run, username, who pulled it, location, and product.
+// Admin-only (see lib/admin.ts).
 //
 // Query params: status ("UNVERIFIED" | "VERIFIED", default "UNVERIFIED"),
-// search (optional), page (default 1).
+// page (default 1), and one per AdminGelFilters key below (all optional).
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminUserId } from "@/lib/admin";
-import { getReviewQueueGels } from "@/lib/data/adminGels";
+import { getReviewQueueGels, type AdminGelFilters } from "@/lib/data/adminGels";
+
+const FILTER_PARAMS: (keyof AdminGelFilters)[] = [
+  "setName", "playerName", "variationName", "parallel", "printRun",
+  "username", "pulledBy", "location", "product",
+];
 
 export async function GET(req: NextRequest) {
   const adminUserId = await getAdminUserId();
@@ -20,9 +26,14 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") === "VERIFIED" ? "VERIFIED" : "UNVERIFIED";
-  const search = searchParams.get("search")?.trim() || undefined;
   const page   = Number(searchParams.get("page")) || 1;
 
-  const result = await getReviewQueueGels({ status, search, page });
+  const filters: AdminGelFilters = {};
+  for (const key of FILTER_PARAMS) {
+    const value = searchParams.get(key)?.trim();
+    if (value) filters[key] = value;
+  }
+
+  const result = await getReviewQueueGels({ status, filters, page });
   return NextResponse.json(result);
 }

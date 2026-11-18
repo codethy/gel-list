@@ -4,8 +4,28 @@
 import { useState, useCallback } from "react";
 import Image from "next/image";
 import { playerSubtitle } from "@/components/set-detail/ChecklistTable";
-import type { AdminGelEntry, ReviewQueuePage } from "@/lib/data/adminGels";
+import type { AdminGelEntry, AdminGelFilters, ReviewQueuePage } from "@/lib/data/adminGels";
 import AdminEditGelModal from "./AdminEditGelModal";
+
+// One text filter per thing an admin might search by — see AdminGelFilters
+// in lib/data/adminGels.ts for what each maps to. Order mirrors how an
+// admin would narrow a search: which set, which card, then who/where/how
+// it was obtained.
+const FILTER_FIELDS: { key: keyof AdminGelFilters; label: string; placeholder: string }[] = [
+  { key: "setName",       label: "Set",                 placeholder: "e.g. 2026 Topps Royalty Tennis" },
+  { key: "playerName",    label: "Player / Character",  placeholder: "e.g. Lionel Messi" },
+  { key: "variationName", label: "Variation Name",      placeholder: "e.g. Warp Speed" },
+  { key: "parallel",      label: "Parallel",            placeholder: "e.g. Gold" },
+  { key: "printRun",      label: "Print Run",           placeholder: "e.g. 99" },
+  { key: "username",      label: "Username",            placeholder: "Logged by..." },
+  { key: "pulledBy",      label: "Who Pulled It",       placeholder: "Breaker or influencer" },
+  { key: "location",      label: "Location",            placeholder: "City or country" },
+  { key: "product",       label: "Which Product",       placeholder: "e.g. Blaster Box" },
+];
+
+function hasAnyFilter(filters: AdminGelFilters): boolean {
+  return Object.values(filters).some((v) => v && v.trim());
+}
 
 const ACQUISITION_LABELS: Record<string, string> = {
   PULLED:       "Pulled",
@@ -195,19 +215,22 @@ function Pagination({
 }
 
 export default function AdminGelsClient({ initialPage }: { initialPage: ReviewQueuePage }) {
-  const [tab, setTab]                 = useState<Tab>("UNVERIFIED");
-  const [data, setData]               = useState<ReviewQueuePage>(initialPage);
-  const [searchInput, setSearchInput] = useState("");
-  const [activeSearch, setActiveSearch] = useState("");
-  const [loading, setLoading]         = useState(false);
-  const [busyId, setBusyId]           = useState<string | null>(null);
-  const [editingGel, setEditingGel]   = useState<AdminGelEntry | null>(null);
+  const [tab, setTab]                   = useState<Tab>("UNVERIFIED");
+  const [data, setData]                 = useState<ReviewQueuePage>(initialPage);
+  const [filterInputs, setFilterInputs] = useState<AdminGelFilters>({});
+  const [activeFilters, setActiveFilters] = useState<AdminGelFilters>({});
+  const [loading, setLoading]           = useState(false);
+  const [busyId, setBusyId]             = useState<string | null>(null);
+  const [editingGel, setEditingGel]     = useState<AdminGelEntry | null>(null);
 
-  const fetchPage = useCallback(async (nextTab: Tab, nextSearch: string, nextPage: number) => {
+  const fetchPage = useCallback(async (nextTab: Tab, nextFilters: AdminGelFilters, nextPage: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ status: nextTab, page: String(nextPage) });
-      if (nextSearch) params.set("search", nextSearch);
+      for (const field of FILTER_FIELDS) {
+        const value = nextFilters[field.key]?.trim();
+        if (value) params.set(field.key, value);
+      }
       const res = await fetch(`/api/admin/gels?${params.toString()}`);
       if (res.ok) {
         setData(await res.json());
@@ -220,20 +243,33 @@ export default function AdminGelsClient({ initialPage }: { initialPage: ReviewQu
   const handleTabChange = useCallback((nextTab: Tab) => {
     if (nextTab === tab) return;
     setTab(nextTab);
-    void fetchPage(nextTab, activeSearch, 1);
-  }, [tab, activeSearch, fetchPage]);
+    void fetchPage(nextTab, activeFilters, 1);
+  }, [tab, activeFilters, fetchPage]);
 
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleFilterFieldChange = useCallback((key: keyof AdminGelFilters, value: string) => {
+    setFilterInputs((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const applyFilters = useCallback(() => {
+    setActiveFilters(filterInputs);
+    void fetchPage(tab, filterInputs, 1);
+  }, [tab, filterInputs, fetchPage]);
+
+  const handleFilterKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    const trimmed = searchInput.trim();
-    setActiveSearch(trimmed);
-    void fetchPage(tab, trimmed, 1);
-  }, [tab, searchInput, fetchPage]);
+    applyFilters();
+  }, [applyFilters]);
+
+  const clearFilters = useCallback(() => {
+    setFilterInputs({});
+    setActiveFilters({});
+    void fetchPage(tab, {}, 1);
+  }, [tab, fetchPage]);
 
   const handlePageChange = useCallback((nextPage: number) => {
-    void fetchPage(tab, activeSearch, nextPage);
-  }, [tab, activeSearch, fetchPage]);
+    void fetchPage(tab, activeFilters, nextPage);
+  }, [tab, activeFilters, fetchPage]);
 
   const removeGelLocally = useCallback((id: string) => {
     setData((prev) => ({
@@ -295,8 +331,8 @@ export default function AdminGelsClient({ initialPage }: { initialPage: ReviewQu
     // Edits never touch isVerified (see app/api/admin/gels/[gelId]/route.ts),
     // so the gel always stays on the current tab/page — just refresh it to
     // reflect whatever fields changed, simplest-correct over hand-patching.
-    void fetchPage(tab, activeSearch, data.page);
-  }, [tab, activeSearch, data.page, fetchPage]);
+    void fetchPage(tab, activeFilters, data.page);
+  }, [tab, activeFilters, data.page, fetchPage]);
 
   const rowProps = {
     onVerify: handleVerify,
@@ -329,26 +365,50 @@ export default function AdminGelsClient({ initialPage }: { initialPage: ReviewQu
         ))}
       </div>
 
-      {/* ── Search ───────────────────────────────────────────────────── */}
-      <div className="relative max-w-sm">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.35-4.35" />
-        </svg>
-        <input
-          type="text"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          placeholder="Search by card name, number, or set — press Enter"
-          className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150"
-        />
+      {/* ── Filters ──────────────────────────────────────────────────── */}
+      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {FILTER_FIELDS.map((field) => (
+            <div key={field.key}>
+              <label htmlFor={`gel-filter-${field.key}`} className="block text-[11px] font-medium text-slate-500 mb-1">
+                {field.label}
+              </label>
+              <input
+                id={`gel-filter-${field.key}`}
+                type="text"
+                value={filterInputs[field.key] ?? ""}
+                onChange={(e) => handleFilterFieldChange(field.key, e.target.value)}
+                onKeyDown={handleFilterKeyDown}
+                placeholder={field.placeholder}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all duration-150"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={applyFilters}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition-colors"
+          >
+            Apply Filters
+          </button>
+          {hasAnyFilter(filterInputs) && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-colors"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── List ─────────────────────────────────────────────────────── */}
       {data.gels.length === 0 ? (
         <p className="text-sm text-slate-500 italic">
-          {loading ? "Loading…" : activeSearch ? "No gels match that search." : "Nothing here."}
+          {loading ? "Loading…" : hasAnyFilter(activeFilters) ? "No gels match these filters." : "Nothing here."}
         </p>
       ) : (
         <div className={`space-y-2 transition-opacity ${loading ? "opacity-50" : ""}`}>

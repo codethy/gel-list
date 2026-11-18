@@ -8,7 +8,8 @@
 // visible without paging back) — see getReviewQueueGels below.
 
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, ProductType } from "@prisma/client";
+import { PRODUCT_TYPE_OPTIONS } from "@/lib/productTypes";
 
 export interface AdminGelEntry {
   id:                  string;
@@ -149,28 +150,81 @@ export interface ReviewQueuePage {
   totalPages: number;
 }
 
+// One text box per thing an admin might know about a gel, rather than one
+// catch-all search bar — each is matched independently (case-insensitive
+// substring, AND'd together) so e.g. setName: "2026 topps royalty tennis"
+// + pulledBy: "backyard breaks" narrows to exactly that combination. All
+// optional; an empty/omitted field places no constraint.
+export interface AdminGelFilters {
+  setName?:       string; // cardSet.name
+  playerName?:    string; // checklistCard.playerName
+  variationName?: string; // checklistCard.variationName
+  parallel?:      string; // checklistCard.parallel
+  printRun?:      string; // checklistCard.printRun — exact numeric match
+  username?:      string; // the logging user's username or display name
+  pulledBy?:      string; // breakerName or influencerHandle — whoever physically pulled it
+  location?:      string; // hitCity or hitCountry
+  product?:       string; // matched against PRODUCT_TYPE_OPTIONS labels, or productTypeOther
+}
+
+function stringFilter(value: string | undefined): Prisma.StringFilter | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return { contains: trimmed, mode: Prisma.QueryMode.insensitive };
+}
+
 // The Gel Review Queue's single data source — one flat, paginated
 // (REVIEW_QUEUE_PAGE_SIZE per page) list, split by `status` rather than
 // grouped by set (oldest-first for UNVERIFIED, newest-first for
-// VERIFIED — see the orderBy below). `search` matches the card's player
-// name, its card number, or the set's name (any one, case-insensitive).
+// VERIFIED — see the orderBy below).
 export async function getReviewQueueGels(params: {
-  status: "UNVERIFIED" | "VERIFIED";
-  search?: string;
-  page?:   number;
+  status:  "UNVERIFIED" | "VERIFIED";
+  filters?: AdminGelFilters;
+  page?:    number;
 }): Promise<ReviewQueuePage> {
-  const page   = Math.max(1, Math.floor(params.page ?? 1));
-  const search = params.search?.trim();
+  const page    = Math.max(1, Math.floor(params.page ?? 1));
+  const filters = params.filters ?? {};
+
+  const printRunFilter = filters.printRun?.trim();
+  const printRun = printRunFilter && /^\d+$/.test(printRunFilter) ? Number(printRunFilter) : undefined;
+
+  const productSearch = filters.product?.trim();
+  const matchedProductTypes = productSearch
+    ? PRODUCT_TYPE_OPTIONS
+        .filter((o) => o.label.toLowerCase().includes(productSearch.toLowerCase()))
+        .map((o) => o.value as ProductType)
+    : [];
+
+  const and: Prisma.PortfolioCardWhereInput[] = [];
+
+  const setNameFilter    = stringFilter(filters.setName);
+  const playerNameFilter = stringFilter(filters.playerName);
+  const variationFilter  = stringFilter(filters.variationName);
+  const parallelFilter   = stringFilter(filters.parallel);
+  const usernameFilter   = stringFilter(filters.username);
+  const pulledByFilter   = stringFilter(filters.pulledBy);
+  const locationFilter   = stringFilter(filters.location);
+
+  if (setNameFilter)    and.push({ cardSet: { name: setNameFilter } });
+  if (playerNameFilter) and.push({ checklistCard: { playerName: playerNameFilter } });
+  if (variationFilter)  and.push({ checklistCard: { variationName: variationFilter } });
+  if (parallelFilter)   and.push({ checklistCard: { parallel: parallelFilter } });
+  if (printRun !== undefined) and.push({ checklistCard: { printRun } });
+  if (usernameFilter)   and.push({ user: { OR: [{ username: usernameFilter }, { name: usernameFilter }] } });
+  if (pulledByFilter)   and.push({ OR: [{ breakerName: pulledByFilter }, { influencerHandle: pulledByFilter }] });
+  if (locationFilter)   and.push({ OR: [{ hitCity: locationFilter }, { hitCountry: locationFilter }] });
+  if (productSearch) {
+    and.push({
+      OR: [
+        ...(matchedProductTypes.length ? [{ productType: { in: matchedProductTypes } }] : []),
+        { productTypeOther: stringFilter(productSearch) },
+      ],
+    });
+  }
 
   const where: Prisma.PortfolioCardWhereInput = {
     isVerified: params.status === "VERIFIED",
-    ...(search ? {
-      OR: [
-        { checklistCard: { playerName: { contains: search, mode: Prisma.QueryMode.insensitive } } },
-        { checklistCard: { cardNumber: { contains: search, mode: Prisma.QueryMode.insensitive } } },
-        { cardSet:        { name:       { contains: search, mode: Prisma.QueryMode.insensitive } } },
-      ],
-    } : {}),
+    ...(and.length ? { AND: and } : {}),
   };
 
   const [total, rawGels] = await Promise.all([
