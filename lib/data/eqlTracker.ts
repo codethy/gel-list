@@ -8,7 +8,7 @@
 // success/fail total, regardless of the quantity it recorded.
 
 import { prisma } from "@/lib/prisma";
-import { getProductLabel } from "@/lib/productTypes";
+import { getProductLabel, CASE_PRODUCT_TYPES } from "@/lib/productTypes";
 import { Prisma, ProductType } from "@prisma/client";
 
 export interface EqlProductInput {
@@ -18,8 +18,9 @@ export interface EqlProductInput {
   maxQuantity: number;
   estimatedPrintRun: number | null;
   // How many boxes one unit of this option is worth — only meaningful
-  // (and required, validated at the API layer) when productType is
-  // "CASE"; always stored as null for every other product type.
+  // (and required, validated at the API layer) when productType is one
+  // of CASE_PRODUCT_TYPES; always stored as null for every other product
+  // type.
   boxesPerCase: number | null;
 }
 
@@ -56,10 +57,10 @@ function shapeProduct(p: {
   };
 }
 
-// Server-authoritative: boxesPerCase only ever applies to CASE options —
+// Server-authoritative: boxesPerCase only ever applies to case options —
 // any value sent for a different product type is discarded.
 function normalizeBoxesPerCase(productType: string, boxesPerCase: number | null): number | null {
-  return productType === "CASE" ? boxesPerCase : null;
+  return CASE_PRODUCT_TYPES.includes(productType) ? boxesPerCase : null;
 }
 
 // Every enrolled set — powers both the admin list (name + option count)
@@ -274,8 +275,8 @@ export interface EqlSetDetail {
   successCount: number;
   failCount: number;
   // Total boxes represented by every SUCCESS result: a plain box-type
-  // option's quantity counts directly, a CASE option's quantity is
-  // multiplied by its own boxesPerCase.
+  // option's quantity counts directly, a case option's (CASE, JUMBO_CASE)
+  // quantity is multiplied by its own boxesPerCase.
   boxesWon: number;
   successLog: EqlLogEntry[];
   failedLog: EqlLogEntry[];

@@ -15,6 +15,7 @@ import {
   EqlSetAlreadyExistsError,
   type EqlProductInput,
 } from "@/lib/data/eqlTracker";
+import { CASE_PRODUCT_TYPES } from "@/lib/productTypes";
 
 // Shared shape/validation for the `products` array sent by both POST here
 // and PATCH at app/api/admin/eql-sets/[id]/route.ts.
@@ -47,8 +48,8 @@ export function parseProducts(body: unknown): EqlProductInput[] | string {
     if (estimatedPrintRun !== null && (!Number.isInteger(estimatedPrintRun) || estimatedPrintRun < 1)) {
       return "Estimated print run must be a positive whole number";
     }
-    if (productType === "CASE" && (boxesPerCase === null || !Number.isInteger(boxesPerCase) || boxesPerCase < 1)) {
-      return "Boxes per Hobby Case must be a positive whole number";
+    if (CASE_PRODUCT_TYPES.includes(productType) && (boxesPerCase === null || !Number.isInteger(boxesPerCase) || boxesPerCase < 1)) {
+      return "Boxes per case must be a positive whole number";
     }
 
     products.push({

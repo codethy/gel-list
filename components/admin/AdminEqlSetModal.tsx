@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { Label, Input } from "@/components/set-detail/AddGelModal";
-import { PRODUCT_TYPE_OPTIONS } from "@/lib/productTypes";
+import { PRODUCT_TYPE_OPTIONS, CASE_PRODUCT_TYPES, getProductLabel } from "@/lib/productTypes";
 import type { EqlProductInput, EqlAdminProductRow } from "@/lib/data/eqlTracker";
 
 interface ProductRowForm {
@@ -117,7 +117,7 @@ export default function AdminEqlSetModal({ target, onClose, onSubmit }: AdminEql
         r.maxQuantity.trim() !== "" &&
         Number.isInteger(Number(r.maxQuantity)) &&
         Number(r.maxQuantity) >= 1 &&
-        (r.productType !== "CASE" ||
+        (!CASE_PRODUCT_TYPES.includes(r.productType) ||
           (r.boxesPerCase.trim() !== "" && Number.isInteger(Number(r.boxesPerCase)) && Number(r.boxesPerCase) >= 1))
     ) && !submitting && !loading;
 
@@ -132,7 +132,7 @@ export default function AdminEqlSetModal({ target, onClose, onSubmit }: AdminEql
       productTypeOther: r.productType === "OTHER" ? r.productTypeOther.trim() : null,
       maxQuantity: Number(r.maxQuantity),
       estimatedPrintRun: r.estimatedPrintRun.trim() === "" ? null : Number(r.estimatedPrintRun),
-      boxesPerCase: r.productType === "CASE" && r.boxesPerCase.trim() !== "" ? Number(r.boxesPerCase) : null,
+      boxesPerCase: CASE_PRODUCT_TYPES.includes(r.productType) && r.boxesPerCase.trim() !== "" ? Number(r.boxesPerCase) : null,
     }));
     const result = await onSubmit(products);
     setSubmitting(false);
@@ -146,7 +146,7 @@ export default function AdminEqlSetModal({ target, onClose, onSubmit }: AdminEql
           {target.mode === "create" ? "Add EQL Drop" : "Edit EQL Drop"} — {target.setName}
         </h2>
         <p className="text-xs text-slate-400 mb-5">
-          Add every option this drop offers (e.g. Hobby Box, Hobby Case), each option&apos;s own max quantity per entry, and an optional estimated print run. A Hobby Case option also needs how many boxes are in one case, so &quot;Boxes Won in EQL&quot; can be counted correctly.
+          Add every option this drop offers (e.g. Hobby Box, Hobby Case, Jumbo Case), each option&apos;s own max quantity per entry, and an optional estimated print run. A case option also needs how many boxes are in one case, so &quot;Boxes Won in EQL&quot; can be counted correctly.
         </p>
 
         {loading ? (
@@ -220,9 +220,9 @@ export default function AdminEqlSetModal({ target, onClose, onSubmit }: AdminEql
                     </div>
                   </div>
 
-                  {row.productType === "CASE" && (
+                  {CASE_PRODUCT_TYPES.includes(row.productType) && (
                     <div>
-                      <Label>Boxes in 1 Hobby Case</Label>
+                      <Label>Boxes in 1 {getProductLabel(row.productType, null)}</Label>
                       <Input
                         type="number"
                         min={1}

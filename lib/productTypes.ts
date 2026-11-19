@@ -40,6 +40,12 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   PRODUCT_TYPE_OPTIONS.map((o) => [o.value, o.label])
 );
 
+// Product types that bundle multiple boxes into one unit — the EQL
+// Tracker needs to know how many boxes are in one of these before it can
+// count "Boxes Won in EQL" correctly (see boxesPerCase in
+// lib/data/eqlTracker.ts and AdminEqlSetModal.tsx).
+export const CASE_PRODUCT_TYPES: string[] = ["CASE", "JUMBO_CASE"];
+
 // A SetProduct's display label — the custom text for an "Other" entry, or
 // the standard label for everything else.
 export function getProductLabel(
