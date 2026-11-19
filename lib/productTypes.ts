@@ -10,6 +10,7 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "BLASTER_BOX", label: "Blaster Box" },
   { value: "BLASTER_PACK", label: "Blaster Pack" },
   { value: "JUMBO_BOX", label: "Jumbo Box" },
+  { value: "JUMBO_CASE", label: "Jumbo Case" },
   { value: "MEGA_BOX", label: "Mega Box" },
   { value: "BREAKERS_DELIGHT_BOX", label: "Breakers Delight Box" },
   { value: "HANGER_BOX", label: "Hanger Box" },
