@@ -25,6 +25,7 @@ export const PRODUCT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "TROVE", label: "Trove" },
   { value: "FDI", label: "FDI" },
   { value: "FANATICS_FEST", label: "Fanatics Fest" },
+  { value: "NYCC_EXCLUSIVE", label: "NYCC Exclusive" },
   { value: "HONG_BAO_BOX", label: "Hong Bao Box" },
   { value: "LOGOFRACTOR", label: "Logofractor" },
   { value: "PRE_RIFT_KIT", label: "Pre-Rift Kit" },
