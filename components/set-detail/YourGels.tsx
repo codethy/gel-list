@@ -254,6 +254,7 @@ export function GelCard({
                 productType: gel.productType ?? null,
                 productTypeOther: gel.productTypeOther ?? null,
                 seller: gel.seller ?? null,
+                purchaseLocation: gel.purchaseLocation ?? null,
                 breakerName: gel.breakerName ?? null,
                 influencerHandle: gel.influencerHandle ?? null,
                 notes: gel.notes ?? null,
@@ -430,6 +431,15 @@ export function GelCard({
           {productLabel && (
             <p className="text-[11px] text-slate-500">
               <span className="font-bold text-white">Product:</span> {productLabel}
+            </p>
+          )}
+          {/* "Where did you/they buy the product?" — own gel (Pulled) or
+              someone else's gel (Social Media/Other) — see AddGelModal's
+              purchaseLocationApplies. Sits between Product and Where to
+              match that field's position in the form. */}
+          {gel.purchaseLocation && (
+            <p className="text-[11px] text-slate-500">
+              <span className="font-bold text-white">Source:</span> {gel.purchaseLocation}
             </p>
           )}
           {/* "Someone Else's Gel" — labeled "Where:" (where the sighting was

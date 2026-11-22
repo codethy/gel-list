@@ -94,6 +94,7 @@ export async function getChecklistRowExtras(
         productType:       true,
         productTypeOther:  true,
         seller:            true,
+        purchaseLocation:  true,
         breakerName:       true,
         influencerHandle:  true,
         user:              { select: userSelect },
@@ -191,6 +192,7 @@ export async function getChecklistRowExtras(
         note:       pc.notes,
         location:   locationParts.length > 0 ? locationParts.join(", ") : null,
         product:    pc.productType ? getProductLabel(String(pc.productType), pc.productTypeOther) : null,
+        purchaseLocation: pc.purchaseLocation ?? null,
         breakerName: pc.breakerName ?? null,
         influencerHandle: pc.influencerHandle ?? null,
       });
@@ -290,6 +292,7 @@ export async function getChecklistRowExtras(
         productType:       card.productType != null ? String(card.productType) : null,
         productTypeOther:  card.productTypeOther ?? null,
         seller:            card.seller     ?? null,
+        purchaseLocation:  card.purchaseLocation ?? null,
         breakerName:       card.breakerName ?? null,
         influencerHandle:  card.influencerHandle ?? null,
         notes:             card.notes ?? null,

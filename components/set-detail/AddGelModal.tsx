@@ -856,6 +856,16 @@ export default function AddGelModal({
   // optional whenever the source is a breaker.
   const productRequired = form.acquisitionMethod === "PULLED";
 
+  // "Where did you buy the product?" (own gel) / "Where did they buy the
+  // product?" (someone else's gel) — own-gel only for "Pulled"; for someone
+  // else's gel, only when the source itself doesn't already say where
+  // (Social Media or Other — Breaker/eBay/Marketing Promotion/Influencer
+  // already answer "where" implicitly). Shared by both render blocks and
+  // buildBody/handleMultiSubmit below.
+  const purchaseLocationApplies =
+    (!isOther && form.acquisitionMethod === "PULLED") ||
+    (isOther && (form.acquisitionMethod === "SOCIAL_MEDIA" || form.acquisitionMethod === "OTHER"));
+
   // "Year Pulled" options — from the set's release year through the
   // current year, newest first (a card is almost always pulled the year
   // it released or more recently).
@@ -1106,7 +1116,7 @@ export default function AddGelModal({
       cardFrontImageUrl: form.cardFrontImageUrl || null,
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
-      purchaseLocation:  !isOther && form.acquisitionMethod === "PULLED" ? (form.purchaseLocation || null) : null,
+      purchaseLocation:  purchaseLocationApplies ? (form.purchaseLocation || null) : null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
       breakerProfileId:  form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
       influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
@@ -1390,7 +1400,7 @@ export default function AddGelModal({
           hitCity:    form.hitCity   || null,
           hitCountry: form.hitCountry || null,
           seller:     form.seller || null,
-          purchaseLocation: !isOther && form.acquisitionMethod === "PULLED" ? (form.purchaseLocation || null) : null,
+          purchaseLocation: purchaseLocationApplies ? (form.purchaseLocation || null) : null,
           breakerName: form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
           breakerProfileId: form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
           influencerHandle: form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
@@ -1756,10 +1766,14 @@ export default function AddGelModal({
                           // for "Pulled"/"Breaker" — clear a selection made
                           // while it was briefly enabled if switching away.
                           productOptionId: isOther || value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
-                          // "Where did you buy the product?" only ever
-                          // shows for "my own gel" + "Pulled" — clear it if
-                          // switching away.
-                          purchaseLocation: !isOther && value === "PULLED" ? prev.purchaseLocation : "",
+                          // "Where did you (buy)/they (did they buy)" only
+                          // ever shows for "my own gel" + Pulled, or
+                          // "someone else's gel" + Social Media/Other —
+                          // clear it if switching away.
+                          purchaseLocation:
+                            (!isOther && value === "PULLED") || (isOther && (value === "SOCIAL_MEDIA" || value === "OTHER"))
+                              ? prev.purchaseLocation
+                              : "",
                         }));
                       }}
                     >
@@ -1866,10 +1880,11 @@ export default function AddGelModal({
                     </Select>
                   </div>
 
-                  {/* ── Where did you buy the product? — "my own gel" flow
-                      only, enabled once "Pulled" is selected ────────────── */}
+                  {/* ── Where did you/they buy the product? — "my own gel"
+                      once "Pulled" is selected, or "someone else's gel"
+                      once "Social Media"/"Other" is selected ───────────── */}
                   <AnimatePresence>
-                    {!isOther && form.acquisitionMethod === "PULLED" && (
+                    {purchaseLocationApplies && (
                       <motion.div
                         key="purchaseLocation"
                         initial={{ opacity: 0, height: 0 }}
@@ -1878,7 +1893,7 @@ export default function AddGelModal({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <Label>Where did you buy the product?</Label>
+                        <Label>{isOther ? "Where did they buy the product?" : "Where did you buy the product?"}</Label>
                         <Select value={form.purchaseLocation} onChange={setField("purchaseLocation")}>
                           <option value="" className="bg-slate-900">Select...</option>
                           {purchaseLocations.map((loc) => (
@@ -1994,7 +2009,10 @@ export default function AddGelModal({
                           ...prev,
                           acquisitionMethod: value,
                           productOptionId: value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
-                          purchaseLocation: !isOther && value === "PULLED" ? prev.purchaseLocation : "",
+                          purchaseLocation:
+                            (!isOther && value === "PULLED") || (isOther && (value === "SOCIAL_MEDIA" || value === "OTHER"))
+                              ? prev.purchaseLocation
+                              : "",
                         }));
                       }}
                     >
@@ -2096,7 +2114,7 @@ export default function AddGelModal({
                   </div>
 
                   <AnimatePresence>
-                    {!isOther && form.acquisitionMethod === "PULLED" && (
+                    {purchaseLocationApplies && (
                       <motion.div
                         key="purchaseLocation"
                         initial={{ opacity: 0, height: 0 }}
@@ -2105,7 +2123,7 @@ export default function AddGelModal({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <Label>Where did you buy the product?</Label>
+                        <Label>{isOther ? "Where did they buy the product?" : "Where did you buy the product?"}</Label>
                         <Select value={form.purchaseLocation} onChange={setField("purchaseLocation")}>
                           <option value="" className="bg-slate-900">Select...</option>
                           {purchaseLocations.map((loc) => (

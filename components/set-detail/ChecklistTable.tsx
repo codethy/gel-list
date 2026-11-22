@@ -65,6 +65,10 @@ export interface CardHistoryEvent {
   // transfer and ownership events have no hit-context data to show.
   location?: string | null;
   product?: string | null;
+  // "Where did you/they buy the product?" — see AddGelModal's
+  // purchaseLocationApplies. Only ever populated alongside product, never
+  // on its own.
+  purchaseLocation?: string | null;
   // Only meaningful when the acquisition was via a breaker (BREAKER/
   // BREAKER_OWNED) — who the breaker was.
   breakerName?: string | null;
@@ -110,6 +114,7 @@ export interface LoggedGel {
   productType: string | null;
   productTypeOther: string | null;
   seller: string | null;
+  purchaseLocation: string | null;
   breakerName: string | null;
   influencerHandle: string | null;
   notes: string | null;
@@ -446,6 +451,11 @@ function CardHistoryDrawer({ history }: { history: CardHistoryEvent[] }) {
                           <span className="font-bold text-white">Product:</span> {event.product}
                         </p>
                       )}
+                      {event.purchaseLocation && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          <span className="font-bold text-white">Source:</span> {event.purchaseLocation}
+                        </p>
+                      )}
                       {event.breakerName && (
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           <span className="font-bold text-white">Breaker:</span> {event.breakerName}
@@ -610,6 +620,7 @@ function LoggedGelsModal({
                                     productType: gel.productType,
                                     productTypeOther: gel.productTypeOther,
                                     seller: gel.seller,
+                                    purchaseLocation: gel.purchaseLocation,
                                     breakerName: gel.breakerName,
                                     influencerHandle: gel.influencerHandle,
                                     notes: gel.notes,
@@ -752,6 +763,7 @@ export interface CardImageTarget {
   productType?: string | null;
   productTypeOther?: string | null;
   seller?: string | null;
+  purchaseLocation?: string | null;
   breakerName?: string | null;
   influencerHandle?: string | null;
   notes?: string | null;
@@ -1013,7 +1025,7 @@ export function CardImageModal({
                 </div>
               </div>
 
-              {(hitDate || hitLocation || hitProductLabel || target.acquisitionMethod || target.notes) && (
+              {(hitDate || hitLocation || hitProductLabel || target.purchaseLocation || target.acquisitionMethod || target.notes) && (
                 <div className="space-y-1 pb-3 border-b border-slate-700/50">
                   {hitDate && (
                     <p className="text-[11px] text-slate-500">
@@ -1028,6 +1040,11 @@ export function CardImageModal({
                   {hitProductLabel && (
                     <p className="text-[11px] text-slate-500">
                       <span className="font-bold text-white">Product:</span> {hitProductLabel}
+                    </p>
+                  )}
+                  {target.purchaseLocation && (
+                    <p className="text-[11px] text-slate-500">
+                      <span className="font-bold text-white">Source:</span> {target.purchaseLocation}
                     </p>
                   )}
                   {/* "Someone Else's Gel" — labeled "Where:" (where the

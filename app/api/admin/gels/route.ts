@@ -3,7 +3,8 @@
 // GET — one page of the Gel Review Queue (see components/admin/
 // AdminGelsClient.tsx) — a flat, oldest-first list split by verification
 // status, filterable by set, player/character name, variation name,
-// parallel, print run, username, who pulled it, location, and product.
+// parallel, print run, username, who pulled it, location, product, where
+// it was bought, and notes.
 // Admin-only (see lib/admin.ts).
 //
 // Query params: status ("UNVERIFIED" | "VERIFIED", default "UNVERIFIED"),
@@ -15,7 +16,7 @@ import { getReviewQueueGels, type AdminGelFilters } from "@/lib/data/adminGels";
 
 const FILTER_PARAMS: (keyof AdminGelFilters)[] = [
   "setName", "playerName", "variationName", "parallel", "printRun",
-  "username", "pulledBy", "location", "product",
+  "username", "pulledBy", "location", "product", "purchaseLocation", "notes",
 ];
 
 export async function GET(req: NextRequest) {
