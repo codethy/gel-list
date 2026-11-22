@@ -41,6 +41,10 @@ import { findDuplicateMatch, shapeDuplicateResponse, createGelRow, openDuplicate
 //   cardFrontImageUrl  — required (every logged gel needs a front image)
 //   cardBackImageUrl   — optional string
 //   seller             — optional string
+//   purchaseLocation   — optional string, only meaningful for loggedFor
+//                        "SELF" with acquisitionMethod "PULLED" — a free-
+//                        text label from the set's SetPurchaseLocation
+//                        options (see lib/data/purchaseLocations.ts).
 //   breakerName        — required when acquisitionMethod is "BREAKER"
 //                        (either loggedFor), otherwise ignored.
 //   influencerHandle   — required when acquisitionMethod is "INFLUENCER"
@@ -118,6 +122,7 @@ export async function POST(
     cardFrontImageUrl,
     cardBackImageUrl,
     seller,
+    purchaseLocation,
     breakerName,
     breakerProfileId,
     influencerHandle,
@@ -289,6 +294,7 @@ export async function POST(
     cardFrontImageUrl: typeof cardFrontImageUrl === "string" ? cardFrontImageUrl : null,
     cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
     seller:            typeof seller === "string" ? seller : null,
+    purchaseLocation:  typeof purchaseLocation === "string" ? purchaseLocation : null,
     breakerName:       typeof breakerName === "string" ? breakerName : null,
     breakerProfileId:  resolvedBreakerProfileId,
     influencerHandle:  typeof influencerHandle === "string" ? influencerHandle : null,

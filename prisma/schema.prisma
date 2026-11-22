@@ -202,14 +202,15 @@ model CardSet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  checklistCards  ChecklistCard[]
-  portfolioCards  PortfolioCard[]
-  ripSessions     RipSession[]
-  products        SetProduct[]
-  featuredOn      HomepageFeaturedSet[]
-  productOpenings ProductOpening[]
-  yourGelsPins    YourGelsPin[]
-  eqlSet          EqlSet?
+  checklistCards    ChecklistCard[]
+  portfolioCards    PortfolioCard[]
+  ripSessions       RipSession[]
+  products          SetProduct[]
+  featuredOn        HomepageFeaturedSet[]
+  productOpenings   ProductOpening[]
+  yourGelsPins      YourGelsPin[]
+  eqlSet            EqlSet?
+  purchaseLocations SetPurchaseLocation[]
 }
 
 // Admin-curated selection of sets shown on the home page for each category
@@ -416,6 +417,28 @@ model SetProduct {
   @@index([cardSetId])
 }
 
+// ─── SET PURCHASE LOCATION ────────────────────────────────────────────────────
+// The admin-curated catalog of "Where did you buy the product?" options for
+// a given set — powers that dropdown in the Log a Gel form (only enabled for
+// the logging user's own gel, when acquisitionMethod is PULLED). Unlike
+// SetProduct this isn't backed by an enum — labels are free text — and
+// isn't empty by default: see ensureDefaultPurchaseLocations in
+// lib/data/purchaseLocations.ts, which auto-seeds a brand-dependent base
+// list (plus retail-chain options once certain product types are in the
+// set's catalog) the first time a set's list is needed, after which the
+// admin's own add/remove actions are the only thing that changes it.
+model SetPurchaseLocation {
+  id        String   @id @default(cuid())
+  cardSetId String
+  label     String   @db.VarChar(100)
+  createdAt DateTime @default(now())
+
+  cardSet CardSet @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+
+  @@unique([cardSetId, label])
+  @@index([cardSetId])
+}
+
 // An admin's profile for a breaker, created so box openings attributed to
 // them (via the "+" opened-quantity adjustment on an admin set's Products
 // table) and gels logged against them (via the searchable "Breaker's Name"
@@ -592,6 +615,14 @@ model PortfolioCard {
 
   // ✅ NEW: Seller field — required by "Your Card" modal path
   seller String? @db.VarChar(255)
+
+  // Only meaningful when acquisitionMethod is PULLED and this is the
+  // logging user's own gel — "Where did you buy the product?" in the Log
+  // a Gel form, a free-text value picked from that set's admin-curated
+  // SetPurchaseLocation options (see below). Stored as plain text rather
+  // than a foreign key so the gel keeps its answer even if the admin later
+  // removes that option from the set's list.
+  purchaseLocation String? @db.VarChar(255)
 
   // Who the breaker was — only meaningful when acquisitionMethod is
   // BREAKER. Shown in this gel's card history and its own display card

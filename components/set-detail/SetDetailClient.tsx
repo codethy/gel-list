@@ -63,6 +63,9 @@ interface SetDetailClientProps {
   // This set's admin-curated product catalog — powers "Which Product"
   products: ProductOption[];
 
+  // This set's admin-curated "Where did you buy the product?" options
+  purchaseLocations: string[];
+
   // Breaker profiles with >=1 attributed opening in this set — powers the
   // searchable "Breaker's Name" dropdown in Log a Gel.
   breakers: { id: string; name: string; country: string }[];
@@ -106,6 +109,7 @@ export default function SetDetailClient({
   availableCategories,   // ✅ NEW
   availableTiers,
   products,
+  purchaseLocations,
   breakers,
   initialPacksOpened,
   userLastGelCity: initialUserLastGelCity,
@@ -539,9 +543,11 @@ export default function SetDetailClient({
         category={category}
         setYear={year}
         products={products}
+        purchaseLocations={purchaseLocations}
         breakers={breakers}
         preselectedCardOption={preselectedCardOption}
         editingGel={editingGel}
+        allowCardChange
         claimPrefill={claimPrefill}
         coOwnPrefill={coOwnPrefill}
         defaultHitCity={lastGelCity}

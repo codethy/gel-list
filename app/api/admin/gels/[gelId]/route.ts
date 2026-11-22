@@ -6,8 +6,12 @@
 //          field set a user editing their own gel would see — so this
 //          route accepts and validates the same body shape
 //          app/api/sets/[id]/gels/[gelId]/route.ts does, no ownership
-//          check (that's the point of this being admin-only). Doesn't
-//          touch isVerified — verifying/rejecting is a separate action,
+//          check (that's the point of this being admin-only). Unlike that
+//          route, this one DOES honor cardTemplateId — the admin can
+//          reassign a gel to a different existing card in the same set
+//          (AddGelModal's `allowCardChange`, set only from the admin edit
+//          path). Doesn't touch isVerified — verifying/rejecting is a
+//          separate action,
 //          see app/api/admin/gels/[gelId]/verify/route.ts, and an admin
 //          correcting a typo shouldn't silently flip a gel's review state
 //          either way.
@@ -21,6 +25,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { prepareGelDeletionCleanup } from "@/lib/data/gels";
 import { cleanupSupersededFile } from "@/lib/uploadthingCleanup";
+import { revalidateSetDetailCache } from "@/lib/data/sets";
 
 export async function PATCH(
   req: NextRequest,
@@ -37,6 +42,8 @@ export async function PATCH(
     where:  { id: gelId },
     select: {
       id: true,
+      cardSetId: true,
+      checklistCardId: true,
       cardFrontImageUrl: true,
       cardBackImageUrl: true,
       checklistCard: { select: { cardTier: true } },
@@ -54,6 +61,7 @@ export async function PATCH(
   }
 
   const {
+    cardTemplateId,
     loggedFor,
     acquisitionMethod,
     productType,
@@ -66,12 +74,31 @@ export async function PATCH(
     cardFrontImageUrl,
     cardBackImageUrl,
     seller,
+    purchaseLocation,
     breakerName,
     influencerHandle,
     notes,
   } = body;
 
   const isInHand = loggedFor !== "OTHER";
+
+  // Reassigning to a different existing card in the same set — the
+  // Review Queue's "Edit" action can change which ChecklistCard this gel
+  // points to (components/set-detail/AddGelModal.tsx's `allowCardChange`,
+  // only ever set true from the admin edit path). Scoped to this gel's own
+  // set so a typo'd/foreign id can't silently move a gel into another set.
+  let newChecklistCard: { id: string; cardTier: string } | null = null;
+  if (typeof cardTemplateId === "string" && cardTemplateId && cardTemplateId !== existing.checklistCardId) {
+    const match = await prisma.checklistCard.findFirst({
+      where:  { id: cardTemplateId, cardSetId: existing.cardSetId },
+      select: { id: true, cardTier: true },
+    });
+    if (!match) {
+      return NextResponse.json({ error: "That card doesn't belong to this set" }, { status: 400 });
+    }
+    newChecklistCard = { id: match.id, cardTier: String(match.cardTier) };
+  }
+  const effectiveCardTier = newChecklistCard?.cardTier ?? existing.checklistCard.cardTier;
 
   // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
   // flow) — same derivation as the user-facing edit route.
@@ -107,7 +134,7 @@ export async function PATCH(
   }
 
   const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
-  if (existing.checklistCard.cardTier === "NUMBERED" && validSerialNumber === null) {
+  if (effectiveCardTier === "NUMBERED" && validSerialNumber === null) {
     return NextResponse.json(
       { error: "This card is numbered — please fill in the serial number" },
       { status: 400 }
@@ -118,6 +145,7 @@ export async function PATCH(
     where: { id: gelId },
     data: {
       isInHand,
+      ...(newChecklistCard ? { checklistCardId: newChecklistCard.id } : {}),
       acquisitionMethod:
         typeof acquisitionMethod === "string" ? (acquisitionMethod as never) : null,
       productType:
@@ -132,6 +160,7 @@ export async function PATCH(
       cardFrontImageUrl: typeof cardFrontImageUrl === "string" ? cardFrontImageUrl : null,
       cardBackImageUrl:  typeof cardBackImageUrl  === "string" ? cardBackImageUrl  : null,
       seller:      typeof seller      === "string" ? seller      : null,
+      purchaseLocation: typeof purchaseLocation === "string" ? purchaseLocation : null,
       breakerName: typeof breakerName === "string" ? breakerName : null,
       influencerHandle: typeof influencerHandle === "string" ? influencerHandle : null,
       notes:       typeof notes       === "string" ? notes       : null,
@@ -153,6 +182,7 @@ export async function PATCH(
       cardFrontImageUrl: true,
       cardBackImageUrl:  true,
       seller:            true,
+      purchaseLocation:  true,
       breakerName:       true,
       influencerHandle:  true,
       notes:             true,
@@ -177,6 +207,13 @@ export async function PATCH(
     cleanupSupersededFile(existing.cardBackImageUrl, portfolioCard.cardBackImageUrl),
   ]);
 
+  // Only needed when the card actually changed — the cached per-card
+  // gel-count aggregate (lib/data/sets.ts's firstPageGelsCountByCardId)
+  // depends on which checklistCardId this gel points to.
+  if (newChecklistCard) {
+    revalidateSetDetailCache(existing.cardSetId);
+  }
+
   // Same field-name compatibility shape as the user-facing edit route
   // (app/api/sets/[id]/gels/[gelId]/route.ts) — AddGelModal's onSuccess
   // expects a GelEntry, regardless of which route produced it.
@@ -197,6 +234,7 @@ export async function PATCH(
     cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
+    purchaseLocation:  portfolioCard.purchaseLocation  ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
     influencerHandle:  portfolioCard.influencerHandle   ?? null,
     notes:             portfolioCard.notes             ?? null,

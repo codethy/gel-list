@@ -37,6 +37,10 @@ export interface GelEntry {
   cardBackImageUrl?: string | null;
   acquisitionMethod?: string | null;
   seller?: string | null;
+  // Only meaningful when acquisitionMethod is "PULLED" and this is the
+  // user's own gel — "Where did you buy the product?" in the Log a Gel
+  // form, a free-text label from that set's purchaseLocations options.
+  purchaseLocation?: string | null;
   // Only meaningful when acquisitionMethod is "BREAKER" — who the breaker
   // was, shown alongside seller in the acquisition line below.
   breakerName?: string | null;

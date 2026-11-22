@@ -14,7 +14,14 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { rememberGelLocationDefaults, rememberSightingDefaults } from "@/lib/data/userGelDefaults";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
-import { prepareGelDeletionCleanup } from "@/lib/data/gels";
+import {
+  prepareGelDeletionCleanup,
+  findDuplicateMatch,
+  shapeDuplicateResponse,
+  openDuplicateFile,
+  isGelAlreadyFiled,
+  GelAlreadyFiledError,
+} from "@/lib/data/gels";
 import { maybeSendPendingCoOwnershipNotifications } from "@/lib/data/notifications";
 import { cleanupSupersededFile } from "@/lib/uploadthingCleanup";
 
@@ -23,6 +30,7 @@ async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
     where:  { id: gelId, cardSetId: setId, userId },
     select: {
       id: true,
+      checklistCardId: true,
       cardFrontImageUrl: true,
       cardBackImageUrl: true,
       checklistCard: { select: { cardTier: true } },
@@ -31,14 +39,27 @@ async function resolveOwnedGel(setId: string, gelId: string, userId: string) {
 }
 
 // ─── PATCH /api/sets/[id]/gels/[gelId] ─────────────────────────────────────────
-// Body fields (same shape as POST /api/sets/[id]/gels, minus cardTemplateId:
-// editing a gel doesn't let you reassign it to a different checklist card):
+// Body fields (same shape as POST /api/sets/[id]/gels):
+//   cardTemplateId     — optional. Reassigns this gel to a different
+//                        existing ChecklistCard in the same set (e.g. the
+//                        user picked the wrong card name originally) — see
+//                        AddGelModal's `allowCardChange`. Omitted/unchanged
+//                        means "keep the current card." Re-runs this card's
+//                        NUMBERED/serial-number requirement and the usual
+//                        duplicate/claim check against the new card+serial,
+//                        exactly as if this were a fresh log of that card.
 //   loggedFor, acquisitionMethod, serialNumber, hitYear, hitMonth, hitCity,
 //   hitCountry, cardFrontImageUrl (required), cardBackImageUrl, seller,
 //   breakerName (required when acquisitionMethod is "BREAKER"),
 //   influencerHandle (required when acquisitionMethod is "INFLUENCER"),
 //   notes (required for loggedFor "OTHER" unless acquisitionMethod is
 //   "BREAKER" or "INFLUENCER"; always optional for loggedFor "SELF")
+//   acknowledgeDuplicate — optional boolean, same meaning as the create
+//                        route: set once the user has seen the "someone
+//                        else already logged/reported this" warning and
+//                        chosen to proceed anyway. A collision with the
+//                        user's OWN other gel is never offered this
+//                        bypass — see the 409 handling below.
 
 export async function PATCH(
   req: NextRequest,
@@ -65,6 +86,7 @@ export async function PATCH(
   }
 
   const {
+    cardTemplateId,
     loggedFor,
     acquisitionMethod,
     productType,
@@ -77,13 +99,32 @@ export async function PATCH(
     cardFrontImageUrl,
     cardBackImageUrl,
     seller,
+    purchaseLocation,
     breakerName,
     breakerProfileId,
     influencerHandle,
     notes,
+    acknowledgeDuplicate,
   } = body;
 
   const isInHand = loggedFor !== "OTHER";
+
+  // Reassigning to a different existing card in the same set — e.g. the
+  // user picked the wrong card originally. Scoped to this gel's own set so
+  // a typo'd/foreign id can't move a gel into another set.
+  let newChecklistCard: { id: string; cardTier: string } | null = null;
+  if (typeof cardTemplateId === "string" && cardTemplateId && cardTemplateId !== owned.checklistCardId) {
+    const match = await prisma.checklistCard.findFirst({
+      where:  { id: cardTemplateId, cardSetId: setId },
+      select: { id: true, cardTier: true },
+    });
+    if (!match) {
+      return NextResponse.json({ error: "That card doesn't belong to this set" }, { status: 400 });
+    }
+    newChecklistCard = { id: match.id, cardTier: String(match.cardTier) };
+  }
+  const effectiveChecklistCardId = newChecklistCard?.id ?? owned.checklistCardId;
+  const effectiveCardTier = newChecklistCard?.cardTier ?? owned.checklistCard.cardTier;
 
   // "Which Product" applies to "Pulled" (SELF only) and "Breaker" (either
   // flow) — re-derived server-side rather than trusting the client honored
@@ -138,21 +179,58 @@ export async function PATCH(
   }
 
   const validSerialNumber = typeof serialNumber === "number" ? serialNumber : null;
-  if (owned.checklistCard.cardTier === "NUMBERED" && validSerialNumber === null) {
+  if (effectiveCardTier === "NUMBERED" && validSerialNumber === null) {
     return NextResponse.json(
       { error: "This card is numbered — please fill in the serial number" },
       { status: 400 }
     );
   }
 
+  // ── Duplicate check (serialized cards only) — same rule as the create
+  // route, re-run against the (possibly just-changed) card+serial. Excludes
+  // this gel itself, since it already legitimately "matches" its own
+  // current checklistCardId+serialNumber. ───────────────────────────────────
+  const duplicateMatch = await findDuplicateMatch(effectiveChecklistCardId, validSerialNumber, gelId);
+
+  if (duplicateMatch && duplicateMatch.userId === userId) {
+    // Never offered a merge/replace here — see AddGelModal's duplicatePrompt
+    // UI, which shows an acknowledge-only dialog for this case on edit.
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId, isInHand);
+    return NextResponse.json(
+      { error: "You've already logged this exact gel.", duplicateKind, existingGel },
+      { status: 409 }
+    );
+  }
+
+  if (duplicateMatch && duplicateMatch.userId !== userId && acknowledgeDuplicate !== true) {
+    const { duplicateKind, existingGel } = shapeDuplicateResponse(duplicateMatch, userId, isInHand);
+    const error =
+      duplicateKind === "CLAIM"
+        ? "Someone else has reported seeing this exact card."
+        : "Someone else has already logged this exact card.";
+    return NextResponse.json({ error, duplicateKind, existingGel }, { status: 409 });
+  }
+
+  const isFilingDuplicate = duplicateMatch !== null && duplicateMatch.userId !== userId && acknowledgeDuplicate === true;
+  const isClaim = isFilingDuplicate && isInHand && duplicateMatch !== null && !duplicateMatch.isInHand;
+
+  if (isFilingDuplicate && duplicateMatch && await isGelAlreadyFiled(duplicateMatch.id)) {
+    return NextResponse.json(
+      { error: "This card is already part of an open review." },
+      { status: 409 }
+    );
+  }
+
   // Editing changes what the developer would be verifying, so it goes back
   // into the review queue — unless the user is already trusted, in which
   // case it stays auto-verified just like a fresh gel from them would.
+  // Filing a duplicate always forces unverified regardless of trust level,
+  // same rule as the create route.
   const loggingUser = await prisma.user.findUnique({
     where:  { id: userId },
     select: { isVerifiedUser: true },
   });
-  const isVerified = loggingUser?.isVerifiedUser ?? false;
+  const isVerified = isFilingDuplicate ? false : (loggingUser?.isVerifiedUser ?? false);
 
   // Re-derived server-side, same rule as the create route.
   const resolvedBreakerProfileId =
@@ -168,6 +246,8 @@ export async function PATCH(
     data: {
       isInHand,
       isVerified,
+      ...(newChecklistCard ? { checklistCardId: newChecklistCard.id } : {}),
+      ...(isFilingDuplicate ? { duplicateFlag: isClaim ? "CLAIMING" : "PENDING" } : {}),
       acquisitionMethod:
         typeof acquisitionMethod === "string"
           ? (acquisitionMethod as never)
@@ -195,6 +275,8 @@ export async function PATCH(
         typeof cardBackImageUrl === "string" ? cardBackImageUrl : null,
       seller:
         typeof seller === "string" ? seller : null,
+      purchaseLocation:
+        typeof purchaseLocation === "string" ? purchaseLocation : null,
       breakerName:
         typeof breakerName === "string" ? breakerName : null,
       breakerProfileId: resolvedBreakerProfileId,
@@ -221,6 +303,7 @@ export async function PATCH(
       cardFrontImageUrl: true,
       cardBackImageUrl:  true,
       seller:            true,
+      purchaseLocation:  true,
       breakerName:       true,
       breakerProfileId:  true,
       influencerHandle:  true,
@@ -243,6 +326,21 @@ export async function PATCH(
     await rememberGelLocationDefaults(userId, hitCity, hitCountry);
   } else {
     await rememberSightingDefaults(userId, acquisitionMethod, hitMonth, hitYear, hitCountry);
+  }
+
+  // Filing a duplicate or claim (only reachable with acknowledgeDuplicate,
+  // which only ever applies to someone else's gel, never the user's own —
+  // see the 409 handling above): flag the other gel too and open the case
+  // file for the developer to review, same as the create route.
+  if (isFilingDuplicate && duplicateMatch) {
+    try {
+      await openDuplicateFile(effectiveChecklistCardId, userId, gelId, duplicateMatch.id, isClaim ? "CLAIM" : "DUPLICATE");
+    } catch (error) {
+      if (error instanceof GelAlreadyFiledError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+      throw error;
+    }
   }
 
   // A CO_OWNERSHIP file may have been waiting on exactly this gel to be
@@ -283,6 +381,7 @@ export async function PATCH(
     cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
+    purchaseLocation:  portfolioCard.purchaseLocation  ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
     breakerProfileId:  portfolioCard.breakerProfileId   ?? null,
     influencerHandle:  portfolioCard.influencerHandle   ?? null,

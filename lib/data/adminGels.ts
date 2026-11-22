@@ -34,6 +34,7 @@ export interface AdminGelEntry {
   cardFrontImageUrl:   string | null;
   cardBackImageUrl:    string | null;
   seller:              string | null;
+  purchaseLocation:    string | null;
   breakerName:         string | null;
   breakerProfileId:    string | null;
   influencerHandle:    string | null;
@@ -70,6 +71,7 @@ const adminGelSelect = {
   cardFrontImageUrl: true,
   cardBackImageUrl:  true,
   seller:            true,
+  purchaseLocation:  true,
   breakerName:       true,
   breakerProfileId:  true,
   influencerHandle:  true,
@@ -119,6 +121,7 @@ function shapeAdminGel(pc: RawAdminGel): AdminGelEntry {
     cardFrontImageUrl:   pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:    pc.cardBackImageUrl  ?? null,
     seller:              pc.seller            ?? null,
+    purchaseLocation:    pc.purchaseLocation  ?? null,
     breakerName:         pc.breakerName        ?? null,
     breakerProfileId:    pc.breakerProfileId   ?? null,
     influencerHandle:    pc.influencerHandle   ?? null,
@@ -165,6 +168,8 @@ export interface AdminGelFilters {
   pulledBy?:      string; // breakerName or influencerHandle — whoever physically pulled it
   location?:      string; // hitCity or hitCountry
   product?:       string; // matched against PRODUCT_TYPE_OPTIONS labels, or productTypeOther
+  purchaseLocation?: string; // "Where did you buy the product?" free text
+  notes?:         string; // free text keyword search over PortfolioCard.notes
 }
 
 function stringFilter(value: string | undefined): Prisma.StringFilter | undefined {
@@ -204,6 +209,8 @@ export async function getReviewQueueGels(params: {
   const usernameFilter   = stringFilter(filters.username);
   const pulledByFilter   = stringFilter(filters.pulledBy);
   const locationFilter   = stringFilter(filters.location);
+  const purchaseLocationFilter = stringFilter(filters.purchaseLocation);
+  const notesFilter      = stringFilter(filters.notes);
 
   if (setNameFilter)    and.push({ cardSet: { name: setNameFilter } });
   if (playerNameFilter) and.push({ checklistCard: { playerName: playerNameFilter } });
@@ -213,6 +220,8 @@ export async function getReviewQueueGels(params: {
   if (usernameFilter)   and.push({ user: { OR: [{ username: usernameFilter }, { name: usernameFilter }] } });
   if (pulledByFilter)   and.push({ OR: [{ breakerName: pulledByFilter }, { influencerHandle: pulledByFilter }] });
   if (locationFilter)   and.push({ OR: [{ hitCity: locationFilter }, { hitCountry: locationFilter }] });
+  if (purchaseLocationFilter) and.push({ purchaseLocation: purchaseLocationFilter });
+  if (notesFilter)      and.push({ notes: notesFilter });
   if (productSearch) {
     and.push({
       OR: [

@@ -29,12 +29,18 @@ export interface DuplicateMatch {
 
 export async function findDuplicateMatch(
   checklistCardId: string,
-  serialNumber:    number | null
+  serialNumber:    number | null,
+  // Excludes this gel's own id from the match — needed when editing an
+  // existing gel (see app/api/sets/[id]/gels/[gelId]/route.ts), since that
+  // gel already has whatever checklistCardId+serialNumber it's being
+  // compared against and would otherwise always "match" itself. Never set
+  // on create, where there's no existing row yet to exclude.
+  excludeId?: string
 ): Promise<DuplicateMatch | null> {
   if (serialNumber === null) return null;
 
   return prisma.portfolioCard.findFirst({
-    where:   { checklistCardId, serialNumber },
+    where:   { checklistCardId, serialNumber, ...(excludeId ? { id: { not: excludeId } } : {}) },
     orderBy: { createdAt: "asc" },
     select: {
       id:                true,
@@ -102,6 +108,7 @@ export interface CreateGelRowInput {
   cardFrontImageUrl: string | null;
   cardBackImageUrl:  string | null;
   seller:            string | null;
+  purchaseLocation:  string | null;
   breakerName:       string | null;
   breakerProfileId:  string | null;
   influencerHandle:  string | null;
@@ -126,6 +133,7 @@ export interface ShapedGel {
   cardFrontImageUrl: string | null;
   cardBackImageUrl:  string | null;
   seller:            string | null;
+  purchaseLocation:  string | null;
   breakerName:       string | null;
   breakerProfileId:  string | null;
   influencerHandle:  string | null;
@@ -166,6 +174,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardFrontImageUrl: input.cardFrontImageUrl,
       cardBackImageUrl:  input.cardBackImageUrl,
       seller:            input.seller,
+      purchaseLocation:  input.purchaseLocation,
       breakerName:       input.breakerName,
       breakerProfile:    input.breakerProfileId != null ? { connect: { id: input.breakerProfileId } } : undefined,
       influencerHandle:  input.influencerHandle,
@@ -189,6 +198,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
       cardFrontImageUrl: true,
       cardBackImageUrl:  true,
       seller:            true,
+      purchaseLocation:  true,
       breakerName:       true,
       breakerProfileId:  true,
       influencerHandle:  true,
@@ -225,6 +235,7 @@ export async function createGelRow(input: CreateGelRowInput): Promise<ShapedGel>
     cardFrontImageUrl: portfolioCard.cardFrontImageUrl ?? null,
     cardBackImageUrl:  portfolioCard.cardBackImageUrl  ?? null,
     seller:            portfolioCard.seller            ?? null,
+    purchaseLocation:  portfolioCard.purchaseLocation  ?? null,
     breakerName:       portfolioCard.breakerName        ?? null,
     breakerProfileId:  portfolioCard.breakerProfileId   ?? null,
     influencerHandle:  portfolioCard.influencerHandle   ?? null,

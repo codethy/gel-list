@@ -11,6 +11,7 @@ import { CardCategory, CardTier, Prisma } from "@prisma/client";
 import { getProductLabel } from "@/lib/productTypes";
 import { findMatchingChecklistCardIds } from "@/lib/data/checklistSearch";
 import { getPacksOpenedGlobal } from "@/lib/data/productOpenings";
+import { listPurchaseLocations, type PurchaseLocationRow } from "@/lib/data/purchaseLocations";
 
 export interface AdminChecklistSet {
   id:          string;
@@ -86,6 +87,7 @@ export interface AdminChecklistSetDetail {
   };
   cardsPage: AdminChecklistCardsPage;
   products:  AdminProductRow[];
+  purchaseLocations: PurchaseLocationRow[];
 }
 
 // Every set, newest first, for the /admin/sets picker page.
@@ -123,10 +125,11 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
   });
   if (!cardSet) return null;
 
-  const [cardsPage, products, packsOpenedGlobal] = await Promise.all([
+  const [cardsPage, products, packsOpenedGlobal, purchaseLocations] = await Promise.all([
     getAdminChecklistCardsPage(setId, {}),
     getAdminProducts(setId),
     getPacksOpenedGlobal(setId),
+    listPurchaseLocations(setId),
   ]);
 
   const openedQuantityByProductId = new Map(
@@ -149,6 +152,7 @@ export async function getAdminChecklistForSet(setId: string): Promise<AdminCheck
     },
     cardsPage,
     products: productsWithOpenings,
+    purchaseLocations,
   };
 }
 

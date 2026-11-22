@@ -12,6 +12,7 @@ import {
   type SetPacksOpenedSummary,
 } from "@/lib/data/productOpenings";
 import { getUserGelDefaults, getUserSightingDefaults } from "@/lib/data/userGelDefaults";
+import { listPurchaseLocations } from "@/lib/data/purchaseLocations";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ interface UserGelShape {
   cardFrontImageUrl: string | null;
   cardBackImageUrl:  string | null;
   seller:            string | null;
+  purchaseLocation:  string | null;
   breakerName:       string | null;
   breakerProfileId:  string | null;
   influencerHandle:  string | null;
@@ -93,6 +95,7 @@ export interface SetDetailData {
     cardFrontImageUrl: string | null;
     cardBackImageUrl:  string | null;
     seller:            string | null;
+    purchaseLocation:  string | null;
     breakerName:       string | null;
     influencerHandle:  string | null;
     notes:             string | null;
@@ -165,6 +168,12 @@ export interface SetDetailData {
     productTypeOther: string | null;
     label:            string;
   }[];
+
+  // Admin-curated "Where did you buy the product?" options for this set
+  // (see SetPurchaseLocation in prisma/schema.prisma) — powers that
+  // dropdown in the Log a Gel form, enabled only for the logging user's
+  // own gel when acquisitionMethod is PULLED.
+  purchaseLocations: string[];
 
   // Breaker profiles with at least one admin-attributed opening in this
   // set — the searchable "Breaker's Name" dropdown options in Log a Gel.
@@ -240,6 +249,7 @@ interface CachedSetDetail {
   availableCategories:  string[];
   availableTiers:       string[];
   products:             SetDetailData["products"];
+  purchaseLocations:    SetDetailData["purchaseLocations"];
   breakers:             SetDetailData["breakers"];
   packsOpenedGlobal:    GlobalPacksOpenedSummary;
 }
@@ -355,6 +365,7 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
         unlimitedPrintRunCount,
         chasesPulledInSet,
         setProducts,
+        purchaseLocations,
         breakers,
       ] = await Promise.all([
         // First page — just this page's representative (grouped) cards,
@@ -436,6 +447,11 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
           orderBy: { createdAt: "asc" },
           select:  { id: true, productType: true, productTypeOther: true },
         }),
+
+        // This set's admin-curated "Where did you buy the product?"
+        // options — see lib/data/purchaseLocations.ts. Only the labels
+        // are needed for this dropdown (no admin add/remove happens here).
+        listPurchaseLocations(setId).then((rows) => rows.map((r) => r.label)),
 
         // Breaker profiles with >=1 attributed opening in THIS set — the
         // set-scoped "Breaker's Name" dropdown options in Log a Gel. See
@@ -537,6 +553,7 @@ async function getCachedSetDetail(setId: string): Promise<CachedSetDetail | null
           productTypeOther: p.productTypeOther,
           label:            getProductLabel(String(p.productType), p.productTypeOther),
         })),
+        purchaseLocations,
         breakers,
         packsOpenedGlobal,
       };
@@ -603,6 +620,7 @@ export async function getSetDetail(
         cardFrontImageUrl: true,
         cardBackImageUrl:  true,
         seller:            true,
+        purchaseLocation:  true,
         breakerName:       true,
         breakerProfileId:  true,
         influencerHandle:  true,
@@ -646,6 +664,7 @@ export async function getSetDetail(
         cardFrontImageUrl: true,
         cardBackImageUrl:  true,
         seller:            true,
+        purchaseLocation:  true,
         breakerName:       true,
         breakerProfileId:  true,
         influencerHandle:  true,
@@ -711,6 +730,7 @@ export async function getSetDetail(
     cardFrontImageUrl: pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
+    purchaseLocation:  pc.purchaseLocation  ?? null,
     breakerName:       pc.breakerName        ?? null,
     breakerProfileId:  pc.breakerProfileId   ?? null,
     influencerHandle:  pc.influencerHandle   ?? null,
@@ -746,6 +766,7 @@ export async function getSetDetail(
     cardFrontImageUrl: pc.cardFrontImageUrl ?? null,
     cardBackImageUrl:  pc.cardBackImageUrl  ?? null,
     seller:            pc.seller            ?? null,
+    purchaseLocation:  pc.purchaseLocation  ?? null,
     breakerName:       pc.breakerName        ?? null,
     breakerProfileId:  pc.breakerProfileId   ?? null,
     influencerHandle:  pc.influencerHandle   ?? null,
@@ -807,6 +828,7 @@ export async function getSetDetail(
     availableCategories:  cached.availableCategories,
     availableTiers:       cached.availableTiers,
     products:             cached.products,
+    purchaseLocations:    cached.purchaseLocations,
     breakers:             cached.breakers,
     packsOpened,
     userLastGelCity:    userGelDefaults.lastGelCity,

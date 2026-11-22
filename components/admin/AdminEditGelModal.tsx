@@ -35,6 +35,7 @@ function adaptToGelEntry(gel: AdminGelEntry): GelEntry {
     cardBackImageUrl:  gel.cardBackImageUrl,
     acquisitionMethod: gel.acquisitionMethod,
     seller:            gel.seller,
+    purchaseLocation:  gel.purchaseLocation,
     breakerName:       gel.breakerName,
     breakerProfileId:  gel.breakerProfileId,
     influencerHandle:  gel.influencerHandle,
@@ -59,6 +60,7 @@ interface SetEditContext {
   category: string;
   year:     number;
   products: ProductOption[];
+  purchaseLocations: string[];
   breakers: { id: string; name: string; country: string }[];
 }
 
@@ -86,7 +88,7 @@ export default function AdminEditGelModal({
     fetch(`/api/admin/sets/${gel.setId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data) => {
-        if (!cancelled) setContext({ category: data.category, year: data.year, products: data.products, breakers: data.breakers ?? [] });
+        if (!cancelled) setContext({ category: data.category, year: data.year, products: data.products, purchaseLocations: data.purchaseLocations ?? [], breakers: data.breakers ?? [] });
       })
       .catch(() => {
         if (!cancelled) setLoadError(true);
@@ -133,9 +135,11 @@ export default function AdminEditGelModal({
       category={context.category}
       setYear={context.year}
       products={context.products}
+      purchaseLocations={context.purchaseLocations}
       breakers={context.breakers}
       editingGel={adaptToGelEntry(gel)}
       editSubmitUrl={`/api/admin/gels/${gel.id}`}
+      allowCardChange
     />
   );
 }

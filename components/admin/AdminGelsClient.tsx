@@ -21,6 +21,8 @@ const FILTER_FIELDS: { key: keyof AdminGelFilters; label: string; placeholder: s
   { key: "pulledBy",      label: "Who Pulled It",       placeholder: "Breaker or influencer" },
   { key: "location",      label: "Location",            placeholder: "City or country" },
   { key: "product",       label: "Which Product",       placeholder: "e.g. Blaster Box" },
+  { key: "purchaseLocation", label: "Where was it bought", placeholder: "e.g. Walmart, Topps.com" },
+  { key: "notes",         label: "Notes",                placeholder: "Search notes..." },
 ];
 
 function hasAnyFilter(filters: AdminGelFilters): boolean {

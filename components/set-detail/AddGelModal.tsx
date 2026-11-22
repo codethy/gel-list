@@ -73,6 +73,11 @@ interface AddGelModalProps {
   // range (through the current year).
   setYear: number;
   products: ProductOption[];
+  // This set's admin-curated "Where did you buy the product?" options
+  // (see SetPurchaseLocation in prisma/schema.prisma) — options for that
+  // dropdown, shown only for the logging user's own gel when
+  // acquisitionMethod is "PULLED".
+  purchaseLocations?: string[];
   // Breaker profiles with >=1 attributed opening in this set — the
   // searchable "Breaker's Name" dropdown options (see BreakerSearch).
   breakers?: { id: string; name: string; country: string }[];
@@ -94,6 +99,13 @@ interface AddGelModalProps {
   // going through the admin route's no-ownership-check/no-reverify
   // semantics.
   editSubmitUrl?: string;
+  // When set alongside editingGel, the Card search field stays editable
+  // instead of locking to the gel's existing card — lets the user (or,
+  // from AdminEditGelModal.tsx, the admin Review Queue) fix a wrong card
+  // name on an already-logged gel. Server-side, the edit route re-derives
+  // Serial Number's required-ness from the NEW card's tier and re-runs the
+  // usual duplicate/claim check against the new card+serial.
+  allowCardChange?: boolean;
   // When set (and no editingGel), the modal opens straight into the
   // Single Gel / "My Own Gel" form — skipping the choice/mode screens —
   // prefilled and locked to this specific card+serial. Set from the
@@ -150,6 +162,9 @@ interface FormState {
   cardFrontImageUrl: string;
   cardBackImageUrl: string;
   seller: string;
+  // Only meaningful for "my own gel" (!isOther) when acquisitionMethod is
+  // "PULLED" — one of this set's admin-curated purchaseLocations options.
+  purchaseLocation: string;
   // Only meaningful when acquisitionMethod is "BREAKER" — shared across
   // every card in the Multiple Gels flow, same as acquisitionMethod itself.
   breakerName: string;
@@ -175,6 +190,7 @@ const EMPTY_FORM: FormState = {
   cardFrontImageUrl: "",
   cardBackImageUrl:  "",
   seller:            "",
+  purchaseLocation:  "",
   breakerName:       "",
   breakerProfileId:  "",
   influencerHandle:  "",
@@ -754,10 +770,12 @@ export default function AddGelModal({
   category,
   setYear,
   products,
+  purchaseLocations = [],
   breakers = [],
   preselectedCardOption,
   editingGel,
   editSubmitUrl,
+  allowCardChange,
   claimPrefill,
   coOwnPrefill,
   defaultHitCity,
@@ -882,6 +900,7 @@ export default function AddGelModal({
         cardFrontImageUrl: editingGel.cardFrontImageUrl  ?? "",
         cardBackImageUrl:  editingGel.cardBackImageUrl   ?? "",
         seller:            editingGel.seller             ?? "",
+        purchaseLocation:  editingGel.purchaseLocation   ?? "",
         breakerName:       editingGel.breakerName         ?? "",
         breakerProfileId:  editingGel.breakerProfileId    ?? "",
         influencerHandle:  editingGel.influencerHandle    ?? "",
@@ -1069,8 +1088,10 @@ export default function AddGelModal({
       // Wire field name stays "cardTemplateId" to match what
       // app/api/sets/[id]/gels/route.ts expects — that field name is a
       // leftover from the removed CardTemplate model, kept there
-      // intentionally rather than renamed everywhere. Ignored by the
-      // PATCH route — editing a gel never reassigns its card.
+      // intentionally rather than renamed everywhere. Both the user-facing
+      // and admin PATCH routes honor this on edit (reassigning the gel to a
+      // different existing card in the same set) when allowCardChange let
+      // the Card field stay unlocked.
       cardTemplateId:    form.checklistCardId,
       loggedFor:         loggedFor,
       acquisitionMethod: form.acquisitionMethod || null,
@@ -1085,6 +1106,7 @@ export default function AddGelModal({
       cardFrontImageUrl: form.cardFrontImageUrl || null,
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
+      purchaseLocation:  !isOther && form.acquisitionMethod === "PULLED" ? (form.purchaseLocation || null) : null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
       breakerProfileId:  form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
       influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
@@ -1178,7 +1200,8 @@ export default function AddGelModal({
   // ── Resolve the "you already logged this" prompt: replace the existing
   // gel in place via the same PATCH an edit would use. ──────────────────────
   async function handleReplaceExisting() {
-    if (!duplicatePrompt || duplicatePrompt.kind !== "SELF") return;
+    // Never offered while editing — see the duplicatePrompt UI below.
+    if (!duplicatePrompt || duplicatePrompt.kind !== "SELF" || isEditing) return;
     setIsResolvingDuplicate(true);
     try {
       const res = await fetch(`/api/sets/${setId}/gels/${duplicatePrompt.existingGel.id}`, {
@@ -1205,13 +1228,19 @@ export default function AddGelModal({
   // ── Resolve the "someone else already logged this" or "claim this
   // card" prompt: proceed with logging anyway — the server decides
   // whether this opens a DUPLICATE or CLAIM file from the gels' own
-  // isInHand values, not from anything this function asserts. ───────────
+  // isInHand values, not from anything this function asserts. When
+  // editing (e.g. the user just changed which card this gel is), this
+  // PATCHes the gel being edited instead of creating a new one — same
+  // URL/method handleSubmit's edit path uses. ───────────────────────────
   async function handleFileDuplicate() {
     if (!duplicatePrompt || (duplicatePrompt.kind !== "OTHER" && duplicatePrompt.kind !== "CLAIM")) return;
     setIsResolvingDuplicate(true);
     try {
-      const res = await fetch(`/api/sets/${setId}/gels`, {
-        method: "POST",
+      const url = isEditing
+        ? (editSubmitUrl ?? `/api/sets/${setId}/gels/${editingGel!.id}`)
+        : `/api/sets/${setId}/gels`;
+      const res = await fetch(url, {
+        method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildBody({ acknowledgeDuplicate: true })),
       });
@@ -1251,6 +1280,7 @@ export default function AddGelModal({
       cardFrontImageUrl: form.cardFrontImageUrl || null,
       cardBackImageUrl:  form.cardBackImageUrl  || null,
       seller:            form.seller || null,
+      purchaseLocation:  form.acquisitionMethod === "PULLED" ? (form.purchaseLocation || null) : null,
       breakerName:       form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
       breakerProfileId:  form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
       influencerHandle:  form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
@@ -1360,6 +1390,7 @@ export default function AddGelModal({
           hitCity:    form.hitCity   || null,
           hitCountry: form.hitCountry || null,
           seller:     form.seller || null,
+          purchaseLocation: !isOther && form.acquisitionMethod === "PULLED" ? (form.purchaseLocation || null) : null,
           breakerName: form.acquisitionMethod === "BREAKER" ? (form.breakerName || null) : null,
           breakerProfileId: form.acquisitionMethod === "BREAKER" ? (form.breakerProfileId || null) : null,
           influencerHandle: form.acquisitionMethod === "INFLUENCER" ? (form.influencerHandle || null) : null,
@@ -1682,7 +1713,7 @@ export default function AddGelModal({
                         setForm((prev) => ({ ...prev, checklistCardId: option?.id ?? "" }));
                         setSelectedCardOption(option);
                       }}
-                      isLocked={Boolean(preselectedCardOption) || isEditing || Boolean(claimPrefill) || Boolean(coOwnPrefill)}
+                      isLocked={Boolean(preselectedCardOption) || (isEditing && !allowCardChange) || Boolean(claimPrefill) || Boolean(coOwnPrefill)}
                       category={category}
                     />
                   </div>
@@ -1725,6 +1756,10 @@ export default function AddGelModal({
                           // for "Pulled"/"Breaker" — clear a selection made
                           // while it was briefly enabled if switching away.
                           productOptionId: isOther || value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
+                          // "Where did you buy the product?" only ever
+                          // shows for "my own gel" + "Pulled" — clear it if
+                          // switching away.
+                          purchaseLocation: !isOther && value === "PULLED" ? prev.purchaseLocation : "",
                         }));
                       }}
                     >
@@ -1831,6 +1866,29 @@ export default function AddGelModal({
                     </Select>
                   </div>
 
+                  {/* ── Where did you buy the product? — "my own gel" flow
+                      only, enabled once "Pulled" is selected ────────────── */}
+                  <AnimatePresence>
+                    {!isOther && form.acquisitionMethod === "PULLED" && (
+                      <motion.div
+                        key="purchaseLocation"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Where did you buy the product?</Label>
+                        <Select value={form.purchaseLocation} onChange={setField("purchaseLocation")}>
+                          <option value="" className="bg-slate-900">Select...</option>
+                          {purchaseLocations.map((loc) => (
+                            <option key={loc} value={loc} className="bg-slate-900">{loc}</option>
+                          ))}
+                        </Select>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   {/* ── Seller (conditional on BOUGHT, "my own gel" flow only —
                       the "someone else's gel" flow captures this in Notes instead) ── */}
                   <AnimatePresence>
@@ -1936,6 +1994,7 @@ export default function AddGelModal({
                           ...prev,
                           acquisitionMethod: value,
                           productOptionId: value === "PULLED" || value === "BREAKER" ? prev.productOptionId : "",
+                          purchaseLocation: !isOther && value === "PULLED" ? prev.purchaseLocation : "",
                         }));
                       }}
                     >
@@ -2035,6 +2094,27 @@ export default function AddGelModal({
                       )}
                     </Select>
                   </div>
+
+                  <AnimatePresence>
+                    {!isOther && form.acquisitionMethod === "PULLED" && (
+                      <motion.div
+                        key="purchaseLocation"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <Label>Where did you buy the product?</Label>
+                        <Select value={form.purchaseLocation} onChange={setField("purchaseLocation")}>
+                          <option value="" className="bg-slate-900">Select...</option>
+                          {purchaseLocations.map((loc) => (
+                            <option key={loc} value={loc} className="bg-slate-900">{loc}</option>
+                          ))}
+                        </Select>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <AnimatePresence>
                     {!isOther && form.acquisitionMethod === "BOUGHT" && (
@@ -2206,7 +2286,9 @@ export default function AddGelModal({
                   <p className="text-sm text-slate-400">
                     You logged serial #{duplicatePrompt.existingGel.serialNumber} for this card on{" "}
                     {new Date(duplicatePrompt.existingGel.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
-                    Would you like to replace that entry with these details?
+                    {isEditing
+                      ? " To avoid logging it twice, please pick a different card or serial number — or edit/delete that other entry first."
+                      : " Would you like to replace that entry with these details?"}
                   </p>
                 </>
               ) : duplicatePrompt.kind === "CLAIM" ? (
@@ -2243,36 +2325,51 @@ export default function AddGelModal({
                 </div>
               )}
 
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  type="button"
-                  disabled={isResolvingDuplicate}
-                  onClick={() => setDuplicatePrompt(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 disabled:opacity-40 transition-colors duration-150"
-                >
-                  {duplicatePrompt.kind === "SELF" ? "Cancel" : "Back"}
-                </button>
-                <button
-                  type="button"
-                  disabled={isResolvingDuplicate}
-                  onClick={duplicatePrompt.kind === "SELF" ? handleReplaceExisting : handleFileDuplicate}
-                  className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-40 transition-colors duration-150 shadow-lg ${
-                    duplicatePrompt.kind === "SELF"
-                      ? "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
+              {duplicatePrompt.kind === "SELF" && isEditing ? (
+                // Editing never offers "Replace" (see the Self-dup-on-edit
+                // design decision) — just acknowledge and go back to fix
+                // the card/serial, no destructive merge action available.
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setDuplicatePrompt(null)}
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition-colors duration-150 shadow-lg shadow-blue-900/30"
+                  >
+                    Got it
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    disabled={isResolvingDuplicate}
+                    onClick={() => setDuplicatePrompt(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-700/60 text-slate-300 text-sm font-semibold hover:bg-slate-800/60 disabled:opacity-40 transition-colors duration-150"
+                  >
+                    {duplicatePrompt.kind === "SELF" ? "Cancel" : "Back"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isResolvingDuplicate}
+                    onClick={duplicatePrompt.kind === "SELF" ? handleReplaceExisting : handleFileDuplicate}
+                    className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-40 transition-colors duration-150 shadow-lg ${
+                      duplicatePrompt.kind === "SELF"
+                        ? "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
+                        : duplicatePrompt.kind === "CLAIM"
+                        ? "bg-purple-600 hover:bg-purple-500 shadow-purple-900/30"
+                        : "bg-amber-600 hover:bg-amber-500 shadow-amber-900/30"
+                    }`}
+                  >
+                    {isResolvingDuplicate
+                      ? "Saving..."
+                      : duplicatePrompt.kind === "SELF"
+                      ? "Replace"
                       : duplicatePrompt.kind === "CLAIM"
-                      ? "bg-purple-600 hover:bg-purple-500 shadow-purple-900/30"
-                      : "bg-amber-600 hover:bg-amber-500 shadow-amber-900/30"
-                  }`}
-                >
-                  {isResolvingDuplicate
-                    ? "Saving..."
-                    : duplicatePrompt.kind === "SELF"
-                    ? "Replace"
-                    : duplicatePrompt.kind === "CLAIM"
-                    ? "Claim this Card"
-                    : "File a Duplicate"}
-                </button>
-              </div>
+                      ? "Claim this Card"
+                      : "File a Duplicate"}
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         </>

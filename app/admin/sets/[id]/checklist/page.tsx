@@ -15,6 +15,7 @@ import {
 import AdminSetHeader from "@/components/admin/AdminSetHeader";
 import AdminChecklistClient from "@/components/admin/AdminChecklistClient";
 import AdminProductsClient from "@/components/admin/AdminProductsClient";
+import AdminPurchaseLocationsClient from "@/components/admin/AdminPurchaseLocationsClient";
 import { listBreakerProfiles } from "@/lib/data/breakerProfiles";
 
 interface PageProps {
@@ -53,6 +54,10 @@ export default async function AdminSetChecklistPage({ params }: PageProps) {
           setId={detail.set.id}
           initialProducts={detail.products}
           initialBreakerProfiles={breakerProfiles.map(({ id, name, country }) => ({ id, name, country }))}
+        />
+        <AdminPurchaseLocationsClient
+          setId={detail.set.id}
+          initialLocations={detail.purchaseLocations}
         />
       </div>
     </div>

@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { ProductType } from "@prisma/client";
 import { PRODUCT_TYPE_OPTIONS, getProductLabel } from "@/lib/productTypes";
 import { revalidateSetDetailCache } from "@/lib/data/sets";
+import { addRetailChainLocationsIfTriggered } from "@/lib/data/purchaseLocations";
 
 const VALID_VALUES = new Set(PRODUCT_TYPE_OPTIONS.map((o) => o.value));
 
@@ -87,6 +88,7 @@ export async function POST(
     openedQuantity:   0,
   };
 
+  await addRetailChainLocationsIfTriggered(setId, String(validatedType));
   revalidateSetDetailCache(setId);
 
   return NextResponse.json({ product });

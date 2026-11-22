@@ -69,6 +69,7 @@ export default async function SetDetailPage({ params }: PageProps) {
       availableCategories={data.availableCategories}
       availableTiers={data.availableTiers}
       products={data.products}
+      purchaseLocations={data.purchaseLocations}
       breakers={data.breakers}
       initialPacksOpened={data.packsOpened}
       userLastGelCity={data.userLastGelCity}
