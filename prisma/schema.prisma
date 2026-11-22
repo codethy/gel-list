@@ -211,6 +211,7 @@ model CardSet {
   yourGelsPins      YourGelsPin[]
   eqlSet            EqlSet?
   purchaseLocations SetPurchaseLocation[]
+  missingChecklistCards MissingChecklistCard[]
 }
 
 // Admin-curated selection of sets shown on the home page for each category
@@ -437,6 +438,30 @@ model SetPurchaseLocation {
 
   @@unique([cardSetId, label])
   @@index([cardSetId])
+}
+
+// ─── MISSING CHECKLIST CARD ───────────────────────────────────────────────────
+// A manually-curated backlog of cards the admin knows exist (confirmed
+// pulled/seen) but haven't been added to a set's checklist yet — tracked
+// here on /admin/missing-checklist-cards until someone adds the real
+// ChecklistCard row(s), at which point the admin marks this resolved
+// (isResolved) rather than deleting it, so the page can still show it was
+// found. Deliberately not a ChecklistCard itself — that table is reserved
+// for cards that are actually in the checklist.
+model MissingChecklistCard {
+  id         String   @id @default(cuid())
+  cardSetId  String
+  cardNumber String
+  playerName String
+  team       String?
+  isResolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+
+  cardSet CardSet @relation(fields: [cardSetId], references: [id], onDelete: Cascade)
+
+  @@index([cardSetId])
+  @@index([isResolved])
 }
 
 // An admin's profile for a breaker, created so box openings attributed to
