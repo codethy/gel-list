@@ -17,3 +17,15 @@ declare module "next-auth" {
     } & DefaultSession["user"];
   }
 }
+
+// Same fields, carried on the JWT itself now that sessions use the "jwt"
+// strategy (see app/api/auth/[...nextauth]/route.ts) instead of being
+// looked up from the database on every request.
+declare module "next-auth/jwt" {
+  interface JWT {
+    id: string;
+    handle: string | null;
+    needsName: boolean;
+    profileImage: string | null;
+  }
+}

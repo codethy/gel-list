@@ -22,20 +22,53 @@ export const authOptions: NextAuthOptions = {
   ],
 
   session: {
-    // We use database sessions (stored in your Neon DB via Prisma)
-    strategy: "database",
+    // JWT sessions: the session cookie itself is a signed token, so
+    // reading it (every page load, every API route's getServerSession
+    // call) never touches the database. The adapter above is still used
+    // for Google sign-in itself (creating/finding the User/Account rows),
+    // just not for session lookups anymore — that's what used to hit
+    // Postgres on every single request, which combined with a couple of
+    // 5-30s client-side pollers was keeping Neon's compute endpoint awake
+    // around the clock.
+    strategy: "jwt",
   },
 
   callbacks: {
-    // This callback adds the user's database ID (and handle) to the session
-    // object. Without this, session.user.id would be undefined.
-    async session({ session, user }) {
+    // Runs on sign-in (when `user` — the adapter's DB row — is passed in)
+    // and whenever the client calls useSession().update() (trigger ===
+    // "update", e.g. after changing your name/handle/avatar) to refresh
+    // these fields from the DB without waiting for the token to expire.
+    async jwt({ token, user, trigger }) {
+      if (user) {
+        const dbUser = user as { id: string; handle?: string | null; hasCustomName?: boolean; profileImage?: string | null };
+        token.id = dbUser.id;
+        token.handle = dbUser.handle ?? null;
+        token.needsName = !dbUser.hasCustomName;
+        token.profileImage = dbUser.profileImage ?? null;
+      } else if (trigger === "update" && token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where:  { id: token.id as string },
+          select: { name: true, handle: true, hasCustomName: true, profileImage: true },
+        });
+        if (dbUser) {
+          token.name = dbUser.name;
+          token.handle = dbUser.handle ?? null;
+          token.needsName = !dbUser.hasCustomName;
+          token.profileImage = dbUser.profileImage ?? null;
+        }
+      }
+      return token;
+    },
+    // Copies the token's fields onto the session object returned to the
+    // client/server — mirrors what the old database-session `session`
+    // callback did, just reading from `token` instead of the adapter's
+    // live `user` row.
+    async session({ session, token }) {
       if (session.user) {
-        const dbUser = user as { handle?: string | null; hasCustomName?: boolean; profileImage?: string | null };
-        session.user.id = user.id;
-        session.user.handle = dbUser.handle ?? null;
-        session.user.needsName = !dbUser.hasCustomName;
-        session.user.profileImage = dbUser.profileImage ?? null;
+        session.user.id = token.id as string;
+        session.user.handle = (token.handle as string | null) ?? null;
+        session.user.needsName = Boolean(token.needsName);
+        session.user.profileImage = (token.profileImage as string | null) ?? null;
       }
       return session;
     },

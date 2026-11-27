@@ -63,10 +63,43 @@ export default function NotificationBell() {
     }
   }, []);
 
+  // Paused while the tab isn't visible — a backgrounded/minimized tab has
+  // no reason to keep pinging the server (and, with how many tabs people
+  // leave open indefinitely, was keeping the DB busy around the clock for
+  // no visible benefit). Resumes immediately (not just on the next
+  // interval tick) the moment the tab is foregrounded again.
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    function startPolling() {
+      if (interval) return;
+      interval = setInterval(refreshUnreadCount, 30000);
+    }
+
+    function stopPolling() {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshUnreadCount();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
     refreshUnreadCount();
-    const interval = setInterval(refreshUnreadCount, 30000);
-    return () => clearInterval(interval);
+    if (document.visibilityState === "visible") startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [refreshUnreadCount]);
 
   useEffect(() => {

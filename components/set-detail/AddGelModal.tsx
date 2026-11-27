@@ -279,6 +279,50 @@ export async function convertHeicToJpeg(file: File): Promise<Blob> {
   return Array.isArray(result) ? result[0] : result;
 }
 
+// Phone cameras routinely produce 8-20MB photos, but a card image never
+// renders larger than a few hundred px anywhere in this app — uploading
+// the original wastes UploadThing storage and upload time for zero visible
+// gain. Downscales to a 1600px longest edge and re-encodes as JPEG before
+// upload; images already smaller than that are returned untouched rather
+// than needlessly recompressed. Falls back to the original file on any
+// failure (unsupported format, canvas error, etc.) rather than blocking
+// the upload over an optimization.
+const MAX_IMAGE_DIMENSION = 1600;
+const RESIZED_JPEG_QUALITY = 0.85;
+
+async function resizeImageFile(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    try {
+      if (bitmap.width <= MAX_IMAGE_DIMENSION && bitmap.height <= MAX_IMAGE_DIMENSION) {
+        return file;
+      }
+
+      const scale = MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height);
+      const width = Math.round(bitmap.width * scale);
+      const height = Math.round(bitmap.height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", RESIZED_JPEG_QUALITY)
+      );
+      if (!blob) return file;
+
+      return new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" });
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    return file;
+  }
+}
+
 // Tells the server to delete an UploadThing file this browser uploaded
 // moments ago but is now replacing, removing, or discarding before it
 // was ever saved anywhere — otherwise it sits in storage forever (see
@@ -423,9 +467,12 @@ export function ImageUploadField({
         }
       }
 
+      fileToUpload = await resizeImageFile(fileToUpload);
+
       // 16 MB guard, matching the UploadThing route's own maxFileSize —
       // checked against what's actually about to be uploaded, since a
-      // converted JPEG can end up a different size than the original file.
+      // converted/resized JPEG can end up a different size than the
+      // original file.
       if (fileToUpload.size > 16 * 1024 * 1024) {
         alert("Please choose an image smaller than 16 MB.");
         return;

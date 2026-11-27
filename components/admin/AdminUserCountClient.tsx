@@ -17,6 +17,7 @@ export default function AdminUserCountClient({ initialCount }: { initialCount: n
 
   useEffect(() => {
     let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     async function poll() {
       try {
@@ -32,10 +33,39 @@ export default function AdminUserCountClient({ initialCount }: { initialCount: n
       }
     }
 
-    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    // Paused while the tab isn't visible — this page is left open on a
+    // monitor/second tab more than most, and a 5s interval left running in
+    // the background was enough on its own to keep the DB from ever going
+    // idle. Resumes immediately (not just on the next interval tick) the
+    // moment the tab is foregrounded again.
+    function startPolling() {
+      if (interval) return;
+      interval = setInterval(poll, POLL_INTERVAL_MS);
+    }
+
+    function stopPolling() {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        poll();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    if (document.visibilityState === "visible") startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
